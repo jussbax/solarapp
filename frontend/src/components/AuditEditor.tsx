@@ -274,11 +274,23 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
         <div className="narrow" style={{ width: 220 }}>
           <label>System type</label>
           <select value={audit.system.kind} onChange={(e) => setSystem({ kind: e.target.value as SystemSettings['kind'] })}>
+            <option value="off_grid">Full battery, no grid import (off-grid)</option>
             <option value="net_metering">Net metering</option>
-            <option value="battery_only">Battery only (no export)</option>
             <option value="combination">Net metering + battery</option>
           </select>
         </div>
+        {audit.system.kind === 'off_grid' && (
+          <>
+            <div className="narrow" style={{ width: 120 }}>
+              <label>Autonomy (days)</label>
+              <NumberInput value={audit.system.autonomy_days} onChange={(v) => setSystem({ autonomy_days: v ?? 1 })} min={0} max={5} step={0.5} />
+            </div>
+            <div className="narrow" style={{ width: 130 }}>
+              <label>Worst-month PV margin</label>
+              <NumberInput value={audit.system.offgrid_pv_margin} onChange={(v) => setSystem({ offgrid_pv_margin: v ?? 1.25 })} min={1} max={2} step={0.05} />
+            </div>
+          </>
+        )}
         <div className="narrow" style={{ width: 160 }}>
           <label>Inverter sizes (kW)</label>
           <input

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from solarapp.core.sizing import BatterySpec, InverterRules, balance_day, pick_inverter, size_system
+from solarapp.core.sizing import BatterySpec, InverterRules, OffGridRules, balance_day, pick_inverter, size_system
 
 
 def synthetic_production_per_kwp():
@@ -28,7 +28,7 @@ def test_balance_day_conserves_energy():
     assert np.allclose(b.direct + b.discharge + b.imported, load)
     assert np.allclose(b.direct + b.charge + b.export + b.curtailed, prod)
     assert b.curtailed.sum() == 0
-    b2 = balance_day(load, prod, usable_kwh=10, power_kw=5, kind="battery_only", eff_rt=0.92)
+    b2 = balance_day(load, prod, usable_kwh=10, power_kw=5, kind="off_grid", eff_rt=0.92)
     assert b2.export.sum() == 0 and b2.curtailed.sum() >= 0
 
 
@@ -60,14 +60,32 @@ def test_battery_sizing_shifts_surplus_to_night():
     load = evening_load(11.0)
     per_kwp = synthetic_production_per_kwp()
     combo = size_system(load, per_kwp, 29, 550, "combination", 4.0, 1.5, 3.0)
-    only = size_system(load, per_kwp, 29, 550, "battery_only", 4.0, 1.5, 3.0)
     assert combo["battery"]["modules"] >= 1
     assert combo["coverage_pct"] > 60
-    assert combo["annual_export_kwh"] >= 0 and only["annual_export_kwh"] == 0
-    assert only["annual_curtailed_kwh"] >= 0
+    assert combo["annual_export_kwh"] >= 0 and combo["annual_unserved_kwh"] == 0
     # the battery raises coverage over a plain net-metering system
     nm = size_system(load, per_kwp, 29, 550, "net_metering", 4.0, 1.5, 3.0)
     assert combo["coverage_pct"] > nm["coverage_pct"]
+
+
+def test_off_grid_serves_everything_with_autonomy():
+    load = evening_load(11.0)
+    per_kwp = synthetic_production_per_kwp()
+    og = size_system(load, per_kwp, 29, 550, "off_grid", 4.0, 1.5, 3.0, battery=BatterySpec(max_modules=20), offgrid=OffGridRules(autonomy_days=1.0, pv_margin=1.25))
+    assert og["kind"] == "off_grid" and not og["roof_limited"]
+    assert og["annual_unserved_kwh"] == 0 and og["annual_import_kwh"] == 0 and og["annual_export_kwh"] == 0
+    assert og["coverage_pct"] == pytest.approx(100.0)
+    # worst month produces at least the margin times consumption
+    for m in og["monthly"]:
+        assert m["production_kwh"] >= 1.25 * m["consumption_kwh"] - 1e-6
+    # battery carries a full day of consumption
+    assert og["battery"]["usable_kwh"] >= 11.0 - 1e-6
+    combo = size_system(load, per_kwp, 29, 550, "combination", 4.0, 1.5, 3.0)
+    assert og["kwp"] >= combo["kwp"] and og["battery"]["modules"] >= combo["battery"]["modules"]
+    # roof too small: unserved energy is reported instead of a system that cannot fit
+    small = size_system(load, per_kwp, 3, 550, "off_grid", 4.0, 1.5, 3.0, offgrid=OffGridRules())
+    assert small["roof_limited"] and small["annual_unserved_kwh"] > 0 and small["panels"] == 3
+    assert any(w["code"] == "roof_limited" for w in small["warnings"])
 
 
 def test_inverter_surge_and_pv_constraints():

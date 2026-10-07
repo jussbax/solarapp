@@ -1,13 +1,17 @@
 """System sizing from the reconciled load profile and the roof's production profile.
 
-All systems are hybrid inverters. The owner chooses net metering, battery
-only (no export; surplus beyond the battery is lost), or the combination.
-Target: net-zero annual energy, or whatever the roof can provide.
+All systems are hybrid inverters. The owner chooses off-grid (full battery,
+no grid import; surplus beyond the battery is lost), net metering, or net
+metering with a battery.
 
-* PV: kWp = annual consumption / annual yield per kWp, capped by the roof,
-  rounded to whole panels of the chosen model.
+* PV, grid modes: kWp = annual consumption / annual yield per kWp (net-zero
+  annual energy), capped by the roof, rounded to whole panels.
+* PV, off-grid: the worst month's typical day must produce the day's
+  consumption times a design margin; more panels are added until the hourly
+  balance leaves nothing unserved, up to what the roof holds.
 * Battery: usable capacity equal to the largest daily surplus-to-night shift
-  over the twelve typical days, rounded up to whole modules, within a cap.
+  over the twelve typical days; off-grid also at least the autonomy days
+  times the largest daily consumption. Rounded up to whole modules, capped.
 * Inverter: smallest catalogue size that covers the nameplate coincident
   peak, the surge of the largest motor at the stated surge factor, and the
   PV array at the allowed PV-to-inverter ratio. Parallel units if needed.
@@ -24,7 +28,8 @@ import numpy as np
 
 from .audit import DAYS_IN_MONTH
 
-SYSTEM_KINDS = ("net_metering", "battery_only", "combination")
+SYSTEM_KINDS = ("off_grid", "net_metering", "combination")
+GRID_EXPORT_KINDS = ("net_metering", "combination")
 
 
 @dataclass
@@ -34,6 +39,12 @@ class BatterySpec:
     round_trip_efficiency: float = 0.92
     max_c_rate: float = 0.5          # kW of charge or discharge per kWh installed
     max_modules: int = 8
+
+
+@dataclass
+class OffGridRules:
+    autonomy_days: float = 1.0   # battery carries this many days of consumption without sun
+    pv_margin: float = 1.25      # worst-month production over consumption
 
 
 @dataclass
@@ -74,7 +85,7 @@ def balance_day(load_kw: np.ndarray, prod_kw: np.ndarray, usable_kwh: float, pow
                 discharge = min(deficit, soc * eff, power_kw)
                 soc -= discharge / eff
             rest = surplus - charge
-            export = rest if kind in ("net_metering", "combination") else 0.0
+            export = rest if kind in GRID_EXPORT_KINDS else 0.0
             curtailed = rest - export
             imported = deficit - discharge
             if cycle == 3:
@@ -103,76 +114,104 @@ def size_system(
     largest_motor_multiplier: float,
     battery: BatterySpec | None = None,
     inverter: InverterRules | None = None,
+    offgrid: OffGridRules | None = None,
 ) -> dict:
     battery = battery or BatterySpec()
     inverter = inverter or InverterRules()
+    offgrid = offgrid or OffGridRules()
     if kind not in SYSTEM_KINDS:
         raise ValueError(f"unknown system kind {kind!r}")
     load = np.asarray(load_kw, float)
     per_kwp = np.asarray(prod_per_kwp_kw, float)
     days = np.array(DAYS_IN_MONTH, float)
     warnings: list[dict] = []
+    off_grid = kind == "off_grid"
+    with_battery = kind in ("off_grid", "combination")
 
     annual_consumption = float((load.sum(axis=1) * days).sum())
     yield_per_kwp = float((per_kwp.sum(axis=1) * days).sum())
     roof_max_kwp = roof_max_panels * panel_wp / 1000.0
+    daily_load = load.sum(axis=1)
+    daily_yield = per_kwp.sum(axis=1)
 
-    target_kwp = annual_consumption / yield_per_kwp if yield_per_kwp > 0 else 0.0
+    if off_grid:
+        ratios = [offgrid.pv_margin * dl / dy for dl, dy in zip(daily_load, daily_yield) if dy > 0]
+        target_kwp = max(ratios) if ratios else 0.0
+    else:
+        target_kwp = annual_consumption / yield_per_kwp if yield_per_kwp > 0 else 0.0
     target_panels = int(math.ceil(target_kwp * 1000.0 / panel_wp)) if panel_wp > 0 else 0
     panels = max(min(target_panels, roof_max_panels), 0)
-    roof_limited = target_panels > roof_max_panels
-    kwp = panels * panel_wp / 1000.0
-    if roof_limited:
+    per_module = battery.module_kwh * battery.depth_of_discharge
+    battery_capped = False
+
+    def run(n_panels: int) -> dict:
+        """Battery for this array, then the hourly balance of every month's typical day."""
+        nonlocal battery_capped
+        kwp_ = n_panels * panel_wp / 1000.0
+        prod_ = per_kwp * kwp_
+        modules_ = 0
+        if with_battery and kwp_ > 0:
+            big = 1e6
+            swings = [float((lambda b: b.soc.max() - b.soc.min())(balance_day(load[m], prod_[m], big, big, kind, battery.round_trip_efficiency))) for m in range(12)]
+            need = max(swings) if swings else 0.0
+            if off_grid:
+                need = max(need, offgrid.autonomy_days * float(daily_load.max()))
+            modules_ = int(math.ceil(need / per_module)) if per_module > 0 else 0
+            if modules_ > battery.max_modules:
+                battery_capped = True
+                modules_ = battery.max_modules
+        usable_ = modules_ * per_module
+        power_ = modules_ * battery.module_kwh * battery.max_c_rate
+        monthly_, profiles_ = [], {}
+        tot_ = {k: 0.0 for k in ("consumption", "production", "direct", "charge", "discharge", "export", "curtailed", "imported")}
+        for m in range(12):
+            b = balance_day(load[m], prod_[m], usable_, power_, kind, battery.round_trip_efficiency)
+            row = {
+                "month": m + 1, "days": int(days[m]),
+                "consumption_kwh": float(b.load.sum() * days[m]), "production_kwh": float(b.production.sum() * days[m]),
+                "direct_kwh": float(b.direct.sum() * days[m]), "battery_kwh": float(b.discharge.sum() * days[m]),
+                "export_kwh": float(b.export.sum() * days[m]), "curtailed_kwh": float(b.curtailed.sum() * days[m]),
+                "import_kwh": 0.0 if off_grid else float(b.imported.sum() * days[m]),
+                "unserved_kwh": float(b.imported.sum() * days[m]) if off_grid else 0.0,
+            }
+            monthly_.append(row)
+            for k, key in (("consumption", "consumption_kwh"), ("production", "production_kwh"), ("direct", "direct_kwh"), ("discharge", "battery_kwh"), ("export", "export_kwh"), ("curtailed", "curtailed_kwh")):
+                tot_[k] += row[key]
+            tot_["imported"] += float(b.imported.sum() * days[m])
+            tot_["charge"] += float(b.charge.sum() * days[m])
+            profiles_[m + 1] = {
+                "load": b.load.round(4).tolist(), "production": b.production.round(4).tolist(), "direct": b.direct.round(4).tolist(),
+                "charge": b.charge.round(4).tolist(), "discharge": b.discharge.round(4).tolist(), "soc": b.soc.round(4).tolist(),
+                "export": b.export.round(4).tolist(), "curtailed": b.curtailed.round(4).tolist(), "imported": b.imported.round(4).tolist(),
+            }
+        return {"kwp": kwp_, "modules": modules_, "usable": usable_, "power": power_, "monthly": monthly_, "profiles": profiles_, "tot": tot_}
+
+    r = run(panels)
+    if off_grid:
+        # add panels until the typical days leave nothing unserved, within the roof
+        while r["tot"]["imported"] > 1e-6 and panels < roof_max_panels:
+            panels += 1
+            r = run(panels)
+        roof_limited = r["tot"]["imported"] > 1e-6 or target_panels > roof_max_panels
+    else:
+        roof_limited = target_panels > roof_max_panels
+    kwp = r["kwp"]
+    modules, usable, battery_power = r["modules"], r["usable"], r["power"]
+    monthly, profiles, tot = r["monthly"], r["profiles"], r["tot"]
+
+    if roof_limited and off_grid:
+        warnings.append({"code": "roof_limited", "message": f"Off-grid needs about {max(target_kwp, kwp):.1f} kWp or more but the roof holds {roof_max_kwp:.2f} kWp; about {tot['imported']:,.0f} kWh a year would go unserved."})
+    elif roof_limited:
         warnings.append({"code": "roof_limited", "message": f"Net-zero needs about {target_kwp:.1f} kWp but the roof holds {roof_max_kwp:.2f} kWp; the system is sized to what the roof can provide."})
     if panels == 0:
         warnings.append({"code": "no_pv", "message": "No panels fit or there is no consumption to cover."})
+    if battery_capped:
+        warnings.append({"code": "battery_capped", "message": f"The battery requirement exceeds {battery.max_modules} modules; capped at {battery.max_modules}."})
 
-    prod = per_kwp * kwp
-
-    # --- battery: largest daily swing the surplus-to-night shift needs
-    modules = 0
-    usable = 0.0
-    if kind in ("battery_only", "combination") and kwp > 0:
-        swings = []
-        big = 1e6
-        for m in range(12):
-            b = balance_day(load[m], prod[m], big, big, kind, battery.round_trip_efficiency)
-            swings.append(float(b.soc.max() - b.soc.min()))
-        need = max(swings) if swings else 0.0
-        per_module = battery.module_kwh * battery.depth_of_discharge
-        modules = int(math.ceil(need / per_module)) if per_module > 0 else 0
-        if modules > battery.max_modules:
-            warnings.append({"code": "battery_capped", "message": f"The surplus-to-night shift would need {modules} modules; capped at {battery.max_modules}."})
-            modules = battery.max_modules
-        usable = modules * per_module
-    battery_power = modules * battery.module_kwh * battery.max_c_rate
-
-    # --- hourly balance with the chosen system
-    monthly = []
-    profiles = {}
-    tot = {k: 0.0 for k in ("consumption", "production", "direct", "charge", "discharge", "export", "curtailed", "imported")}
-    for m in range(12):
-        b = balance_day(load[m], prod[m], usable, battery_power, kind, battery.round_trip_efficiency)
-        row = {
-            "month": m + 1, "days": int(days[m]),
-            "consumption_kwh": float(b.load.sum() * days[m]), "production_kwh": float(b.production.sum() * days[m]),
-            "direct_kwh": float(b.direct.sum() * days[m]), "battery_kwh": float(b.discharge.sum() * days[m]),
-            "export_kwh": float(b.export.sum() * days[m]), "curtailed_kwh": float(b.curtailed.sum() * days[m]),
-            "import_kwh": float(b.imported.sum() * days[m]),
-        }
-        monthly.append(row)
-        for k, key in (("consumption", "consumption_kwh"), ("production", "production_kwh"), ("direct", "direct_kwh"), ("discharge", "battery_kwh"), ("export", "export_kwh"), ("curtailed", "curtailed_kwh"), ("imported", "import_kwh")):
-            tot[k] += row[key]
-        tot["charge"] += float(b.charge.sum() * days[m])
-        profiles[m + 1] = {
-            "load": b.load.round(4).tolist(), "production": b.production.round(4).tolist(), "direct": b.direct.round(4).tolist(),
-            "charge": b.charge.round(4).tolist(), "discharge": b.discharge.round(4).tolist(), "soc": b.soc.round(4).tolist(),
-            "export": b.export.round(4).tolist(), "curtailed": b.curtailed.round(4).tolist(), "imported": b.imported.round(4).tolist(),
-        }
     served = tot["direct"] + tot["discharge"]
     coverage_pct = served / tot["consumption"] * 100.0 if tot["consumption"] > 0 else 0.0
     self_consumption_pct = (tot["direct"] + tot["charge"]) / tot["production"] * 100.0 if tot["production"] > 0 else 0.0
-    net_kwh = tot["production"] - tot["consumption"] if kind != "battery_only" else served - tot["consumption"]
+    net_kwh = served - tot["consumption"] if off_grid else tot["production"] - tot["consumption"]
 
     # --- inverter
     surge_req = (peak_load_kw + largest_motor_kw * (largest_motor_multiplier - 1.0)) / inverter.surge_factor if inverter.surge_factor > 0 else peak_load_kw
@@ -201,8 +240,10 @@ def size_system(
         "annual_battery_kwh": tot["discharge"],
         "annual_export_kwh": tot["export"],
         "annual_curtailed_kwh": tot["curtailed"],
-        "annual_import_kwh": tot["imported"],
+        "annual_import_kwh": 0.0 if off_grid else tot["imported"],
+        "annual_unserved_kwh": tot["imported"] if off_grid else 0.0,
         "net_annual_kwh": net_kwh,
+        "offgrid": {"autonomy_days": offgrid.autonomy_days, "pv_margin": offgrid.pv_margin} if off_grid else None,
         "battery": {
             "modules": modules, "module_kwh": battery.module_kwh, "installed_kwh": modules * battery.module_kwh,
             "usable_kwh": usable, "power_kw": battery_power, "depth_of_discharge": battery.depth_of_discharge,

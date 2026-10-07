@@ -27,9 +27,11 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
 6. Energy audit: appliances with usage windows (start, end, weekdays,
    months), duty factors per type, reconciliation with the latest bill, and
    future additions. Sizing from the hour-by-hour balance of the reconciled
-   load against this roof's production: PV capped by the roof, battery
-   modules, and the inverter size from your catalogue sizes with the 200%
-   surge rule. Every appliance typed is kept in a catalogue for reuse.
+   load against this roof's production for an off-grid system (full
+   battery, no grid import), net metering, or net metering with a battery:
+   PV capped by the roof, battery modules, and the inverter size from your
+   catalogue sizes with the 200% surge rule. Every appliance typed is kept
+   in a catalogue for reuse.
 
 ## Deploy on an Ubuntu server with Docker
 

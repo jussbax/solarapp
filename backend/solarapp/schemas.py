@@ -88,7 +88,9 @@ class BillEntry(BaseModel):
 
 
 class SystemSettings(BaseModel):
-    kind: Literal["net_metering", "battery_only", "combination"] = "combination"
+    kind: Literal["off_grid", "net_metering", "combination"] = "combination"
+    autonomy_days: float = Field(default=1.0, ge=0, le=5)        # off-grid: days of consumption the battery carries without sun
+    offgrid_pv_margin: float = Field(default=1.25, ge=1.0, le=2.0)  # off-grid: worst-month production over consumption
     inverter_sizes_kw: list[float] = Field(default_factory=lambda: [6.0, 8.0, 10.0, 12.0])
     inverter_surge_factor: float = Field(default=2.0, ge=1.0, le=4.0)
     pv_ratio_max: float = Field(default=1.3, ge=1.0, le=2.0)

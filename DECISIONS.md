@@ -140,18 +140,24 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   before reconciliation is flagged. The Tanauan test audit as typed was
   about 1.9 times the bill even after duty factors, so the aircon hit the
   floor and the rest was spread; the reconciled profile matches the bill.
-- All systems are hybrid inverters; the choice is net metering, battery
-  only (no export, surplus beyond the battery is lost) or the combination.
-  Target: net-zero annual energy, or whatever the roof can provide.
-- PV: kWp = annual consumption / annual yield per kWp of this roof's
-  measured simulation, rounded up to whole panels of the chosen model and
-  capped by the panel count the roof holds. Roof-limited systems report the
-  achievable coverage instead of a system the roof cannot hold.
-- Battery (battery only and combination): hour-by-hour balance of each
-  month's typical day; usable capacity = the largest daily surplus-to-night
-  shift over the twelve months, rounded up to whole modules (default
-  5.12 kWh, 90 percent depth of discharge, 92 percent round-trip, 0.5C),
-  capped at a configurable number of modules.
+- All systems are hybrid inverters; the choice, in the owner's order, is
+  off-grid (full battery, no grid import at all; surplus beyond the battery
+  is lost), net metering, or net metering with a battery.
+- PV, grid modes: kWp = annual consumption / annual yield per kWp of this
+  roof's measured simulation (net-zero annual energy), rounded up to whole
+  panels of the chosen model and capped by the panel count the roof holds.
+  Roof-limited systems report the achievable coverage instead of a system
+  the roof cannot hold.
+- PV, off-grid: the worst month's typical day must produce the day's
+  consumption times a design margin (default 1.25); panels are then added
+  until the hourly balance leaves nothing unserved, up to what the roof
+  holds. A roof-limited off-grid system reports the unserved kWh per year.
+- Battery (off-grid and combination): hour-by-hour balance of each month's
+  typical day; usable capacity = the largest daily surplus-to-night shift
+  over the twelve months, and for off-grid at least the autonomy days
+  (default 1) times the largest daily consumption. Rounded up to whole
+  modules (default 5.12 kWh, 90 percent depth of discharge, 92 percent
+  round-trip, 0.5C), capped at a configurable number of modules.
 - Inverter: smallest catalogue size (6, 8, 10, 12 kW by default) that covers
   the nameplate coincident peak, the start of the largest motor load at the
   200 percent surge rating, and the PV array at 1.3 kWp per kW. Parallel

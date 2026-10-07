@@ -64,10 +64,12 @@ export interface BillEntry {
   utility: string
 }
 
-export type SystemKind = 'net_metering' | 'battery_only' | 'combination'
+export type SystemKind = 'off_grid' | 'net_metering' | 'combination'
 
 export interface SystemSettings {
   kind: SystemKind
+  autonomy_days: number
+  offgrid_pv_margin: number
   inverter_sizes_kw: number[]
   inverter_surge_factor: number
   pv_ratio_max: number
@@ -292,10 +294,12 @@ export interface SizingBlock {
   annual_export_kwh: number
   annual_curtailed_kwh: number
   annual_import_kwh: number
+  annual_unserved_kwh: number
   net_annual_kwh: number
+  offgrid: { autonomy_days: number; pv_margin: number } | null
   battery: { modules: number; module_kwh: number; installed_kwh: number; usable_kwh: number; power_kw: number; depth_of_discharge: number; round_trip_efficiency: number }
   inverter: { size_kw: number; units: number; required_kw: number; binding: string; peak_load_kw: number; surge_requirement_kw: number; pv_requirement_kw: number; largest_motor_kw: number; largest_motor_multiplier: number; surge_factor: number; pv_ratio_max: number; sizes_kw: number[] }
-  monthly: { month: number; days: number; consumption_kwh: number; production_kwh: number; direct_kwh: number; battery_kwh: number; export_kwh: number; curtailed_kwh: number; import_kwh: number }[]
+  monthly: { month: number; days: number; consumption_kwh: number; production_kwh: number; direct_kwh: number; battery_kwh: number; export_kwh: number; curtailed_kwh: number; import_kwh: number; unserved_kwh: number }[]
   profiles: Record<string, DayProfile>
   warnings: Warning[]
 }
@@ -385,6 +389,8 @@ export function emptyAudit(): EnergyAudit {
     reconcile: true,
     system: {
       kind: 'combination',
+      autonomy_days: 1.0,
+      offgrid_pv_margin: 1.25,
       inverter_sizes_kw: [6, 8, 10, 12],
       inverter_surge_factor: 2.0,
       pv_ratio_max: 1.3,

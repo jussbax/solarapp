@@ -10,7 +10,7 @@ import numpy as np
 from .core import audit as audit_core
 from .core import kfactor, layout
 from .core.dataset import NasaReference, PvgisDataset
-from .core.sizing import BatterySpec, InverterRules, size_system
+from .core.sizing import BatterySpec, InverterRules, OffGridRules, size_system
 from .core.simulation import FaceSpec, ThermalModel, prepare_sky, simulate, typical_air_temperature
 from .schemas import AssessmentDoc
 
@@ -209,5 +209,6 @@ def compute_audit_and_sizing(doc: AssessmentDoc, production, selected_panel_resu
         peak_load_kw=res.peak_kw, largest_motor_kw=res.largest_motor_kw, largest_motor_multiplier=res.largest_motor_multiplier,
         battery=BatterySpec(s.battery_module_kwh, s.battery_dod, s.battery_efficiency, max_modules=s.battery_max_modules),
         inverter=InverterRules(list(s.inverter_sizes_kw), s.inverter_surge_factor, s.pv_ratio_max),
+        offgrid=OffGridRules(s.autonomy_days, s.offgrid_pv_margin),
     )
     return audit_block, sizing

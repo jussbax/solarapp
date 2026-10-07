@@ -7,21 +7,24 @@ const n0 = (v: number) => Math.round(v).toLocaleString()
 const n1 = (v: number) => v.toFixed(1)
 const n2 = (v: number) => v.toFixed(2)
 const pct = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
-const KIND_LABEL: Record<string, string> = { net_metering: 'Net metering', battery_only: 'Battery only, no export', combination: 'Net metering + battery' }
+const KIND_LABEL: Record<string, string> = { off_grid: 'Off-grid, full battery, no grid import', net_metering: 'Net metering', combination: 'Net metering + battery' }
 
 export default function AuditResults({ audit, sizing, panelName, panelWp }: { audit: AuditBlock; sizing: SizingBlock | null; panelName: string; panelWp: number }) {
   const avb = audit.audit_vs_bill
   const billMonth = avb?.bills[0] ? parseInt(avb.bills[0].billing_month.split('-')[1], 10) : new Date().getMonth() + 1
   const [month, setMonth] = useState(billMonth)
   const prof = sizing?.profiles[String(month)]
+  const offGrid = sizing?.kind === 'off_grid'
+  const deficitLabel = offGrid ? 'Unserved' : 'From grid'
+  const surplusLabel = sizing && sizing.kind !== 'net_metering' && sizing.kind !== 'combination' ? 'Unused surplus' : 'Exported'
   const chart = Array.from({ length: 24 }, (_, h) => ({
     hour: `${h}`,
     Load: +(audit.load_profile_kw[month - 1][h]).toFixed(3),
     Solar: prof ? +prof.production[h].toFixed(3) : 0,
     'From battery': prof ? +prof.discharge[h].toFixed(3) : 0,
-    'From grid': prof ? +prof.imported[h].toFixed(3) : 0,
+    [deficitLabel]: prof ? +prof.imported[h].toFixed(3) : 0,
     'To battery': prof ? +prof.charge[h].toFixed(3) : 0,
-    Exported: prof ? +(prof.export[h] + prof.curtailed[h]).toFixed(3) : 0,
+    [surplusLabel]: prof ? +(prof.export[h] + prof.curtailed[h]).toFixed(3) : 0,
   }))
   const warnings = [...audit.warnings, ...(sizing?.warnings ?? [])]
 
@@ -54,7 +57,10 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
           <div className="kpi">
             <div className="label">Battery</div>
             <div className="value">{sizing.battery.modules > 0 ? `${sizing.battery.modules} x ${sizing.battery.module_kwh} kWh` : 'none'}</div>
-            <div className="sub">{sizing.battery.modules > 0 ? `${n1(sizing.battery.usable_kwh)} kWh usable` : KIND_LABEL[sizing.kind]}</div>
+            <div className="sub">
+              {sizing.battery.modules > 0 ? `${n1(sizing.battery.usable_kwh)} kWh usable` : KIND_LABEL[sizing.kind]}
+              {sizing.offgrid && `, ${sizing.offgrid.autonomy_days} day(s) autonomy`}
+            </div>
           </div>
           <div className="kpi">
             <div className="label">Consumption covered</div>
@@ -64,10 +70,10 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
             </div>
           </div>
           <div className="kpi">
-            <div className="label">Grid</div>
-            <div className="value">{n0(sizing.annual_import_kwh)} kWh</div>
+            <div className="label">{offGrid ? 'Unserved' : 'Grid'}</div>
+            <div className="value">{n0(offGrid ? sizing.annual_unserved_kwh : sizing.annual_import_kwh)} kWh</div>
             <div className="sub">
-              imported per year{sizing.kind !== 'battery_only' ? `, ${n0(sizing.annual_export_kwh)} exported` : `, ${n0(sizing.annual_curtailed_kwh)} unused`}
+              {offGrid ? `per year not covered, ${n0(sizing.annual_curtailed_kwh)} kWh surplus unused` : `imported per year, ${n0(sizing.annual_export_kwh)} exported`}
             </div>
           </div>
         </div>
@@ -93,10 +99,10 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
             <Tooltip />
             <Legend />
             <Area dataKey="Solar" fill="#f3d47a" stroke="#d9b24a" type="monotone" />
-            <Bar dataKey="From grid" stackId="s" fill="#c0392b" />
+            <Bar dataKey={deficitLabel} stackId="s" fill="#c0392b" />
             <Bar dataKey="From battery" stackId="s" fill="#5b8def" />
             <Bar dataKey="To battery" stackId="t" fill="#a9c4f5" />
-            <Bar dataKey="Exported" stackId="t" fill="#cfd8d8" />
+            <Bar dataKey={surplusLabel} stackId="t" fill="#cfd8d8" />
             <Line dataKey="Load" stroke="#1d2b2b" strokeWidth={2} dot={false} type="monotone" />
           </ComposedChart>
         </ResponsiveContainer>
@@ -211,8 +217,8 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
                     ['Solar production kWh', 'production_kwh'],
                     ['Used directly kWh', 'direct_kwh'],
                     ['From battery kWh', 'battery_kwh'],
-                    [sizing.kind === 'battery_only' ? 'Unused surplus kWh' : 'Exported kWh', sizing.kind === 'battery_only' ? 'curtailed_kwh' : 'export_kwh'],
-                    ['From grid kWh', 'import_kwh'],
+                    [offGrid ? 'Unused surplus kWh' : 'Exported kWh', offGrid ? 'curtailed_kwh' : 'export_kwh'],
+                    [offGrid ? 'Unserved kWh' : 'From grid kWh', offGrid ? 'unserved_kwh' : 'import_kwh'],
                   ] as [string, keyof SizingBlock['monthly'][number]][]
                 ).map(([label, key]) => (
                   <tr key={key}>
@@ -229,7 +235,8 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
             </table>
           </div>
           <div className="muted" style={{ marginTop: 6 }}>
-            {KIND_LABEL[sizing.kind]}. Yield {n0(sizing.annual_yield_kwh_per_kwp)} kWh per kWp per year from this roof's measured simulation. Self-consumption {n0(sizing.self_consumption_pct)}% of production.
+            {KIND_LABEL[sizing.kind]}
+            {sizing.offgrid && ` (worst month produces ${sizing.offgrid.pv_margin}x consumption, ${sizing.offgrid.autonomy_days} day(s) of autonomy)`}. Yield {n0(sizing.annual_yield_kwh_per_kwp)} kWh per kWp per year from this roof's measured simulation. Self-consumption {n0(sizing.self_consumption_pct)}% of production.
             Inverter check: peak {n1(sizing.inverter.peak_load_kw)} kW, surge {n1(sizing.inverter.surge_requirement_kw)} kW at {sizing.inverter.surge_factor}x, PV {n1(sizing.inverter.pv_requirement_kw)} kW at {sizing.inverter.pv_ratio_max}x.
           </div>
         </>

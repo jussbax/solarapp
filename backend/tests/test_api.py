@@ -155,6 +155,15 @@ def test_audit_and_sizing_flow(client):
     new = client.post("/api/appliances", json={"name": "Stand fan", "brand": "Asahi", "category": "fan", "input_power_w": 55}).json()
     assert client.delete(f"/api/appliances/{new['id']}").status_code == 204
 
+    # off-grid variant: no import, unserved reported
+    d3 = dict(DOC)
+    d3["audit"] = dict(TANAUAN_AUDIT, system={"kind": "off_grid", "autonomy_days": 1.0})
+    r = client.post(f"/api/assessments/{aid}/compute", json=d3)
+    assert r.status_code == 200, r.text
+    og = r.json()["results"]["sizing"]
+    assert og["kind"] == "off_grid" and og["annual_import_kwh"] == 0 and og["offgrid"]["autonomy_days"] == 1.0
+    assert "unserved_kwh" in og["monthly"][0]
+
     # without appliances the blocks are absent and the roof results unchanged
     doc2 = dict(DOC)
     r = client.post(f"/api/assessments/{aid}/compute", json=doc2)
