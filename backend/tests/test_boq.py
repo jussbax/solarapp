@@ -31,6 +31,23 @@ def test_mounting_matches_sample_job(imported):
     assert q["ac_breaker"] == 4 and q["ac_spd"] == 4 and q["enclosure"] == 2 and q["ground_rod"] == 1 and q["earth_lug"] == 4
 
 
+def test_default_inverter_in_parallel(imported):
+    cat, cfg = imported.catalog, imported.config
+    res = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6), cat, cfg)
+    inv = next(l for l in res.lines if l.role == "inverter")
+    assert inv.code == "FS-INV-008" and inv.qty == 1   # Felicity 6 kW eco-hybrid on every job
+    big = generate_boq(BoqRequest("BC-PNL-001", 20, rows_for(20, 10, 1.134), inverter_kw=8, inverter_required_kw=7.4, battery_kwh=10), cat, cfg)
+    inv2 = next(l for l in big.lines if l.role == "inverter")
+    assert inv2.code == "FS-INV-008" and inv2.qty == 2 and "parallel" in inv2.note
+    assert next(l for l in big.lines if l.role == "thhn").qty == 2 * 35 and next(l for l in big.lines if l.role == "ac_breaker").qty == 8
+    over = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6, inverter_code="BC-INV-002"), cat, cfg)
+    assert next(l for l in over.lines if l.role == "inverter").code == "BC-INV-002"
+    cfg2 = cfg.model_copy(deep=True)
+    cfg2.roles.default_inverter_code = ""
+    cheap = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6), cat, cfg2)
+    assert next(l for l in cheap.lines if l.role == "inverter").code == select_inverter(6, cat, cfg2)[0][0].code
+
+
 def test_cheapest_inverter_and_battery(imported):
     cat, cfg = imported.catalog, imported.config
     inv = select_inverter(6, cat, cfg)

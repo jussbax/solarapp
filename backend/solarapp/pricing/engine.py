@@ -383,10 +383,10 @@ def price_job(bom: list[BomLine], catalog: Catalog, cfg: PricingConfig, job: Job
         "labor": (f"Installation crew: {lb.crew}" if lb.crew else "Installation labour", lb.days, "day"),
         "mobdemob": ("Mobilization and demobilization", lb.days, "day"),
         "ppe": ("Safety equipment (PPE)", lb.person_days, "person-day"),
-        "seal": ("Electrical plans, PEE sign and seal", 1, "lot"),
-        "permit": ("LGU electrical permit and certificate of final electrical inspection", 1, "lot"),
-        "erc": ("ERC certificate of compliance (net metering)", 1, "lot"),
-        "meter": ("Bi-directional meter (net metering)", 1, "lot"),
+        "seal": ("Permits and papers: electrical plans, PEE sign and seal", 1, "lot"),
+        "permit": ("Permits and papers: LGU electrical permit and certificate of final electrical inspection", 1, "lot"),
+        "erc": ("Permits and papers: ERC certificate of compliance (net metering)", 1, "lot"),
+        "meter": ("Permits and papers: bi-directional meter (net metering)", 1, "lot"),
     }
     labor_items = []
     for x in bl[2:]:

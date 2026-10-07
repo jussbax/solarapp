@@ -32,7 +32,7 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
         <div className="narrow" style={{ width: 300 }}>
           <label>Inverter</label>
           <select value={job.inverter_code ?? ''} onChange={(e) => set({ inverter_code: e.target.value || null })}>
-            <option value="">Cheapest hybrid that fits{ch?.inverter_code ? ` (${ch.inverter_code})` : ''}</option>
+            <option value="">Default inverter{ch?.inverter_code ? ` (${ch.inverter_units && ch.inverter_units > 1 ? `${ch.inverter_units} x ` : ''}${ch.inverter_code})` : ''}</option>
             {(ch?.inverter_options ?? []).map((o) => (
               <option key={o.code} value={o.code}>
                 {o.code} {o.name} · {o.rating_kw} kW · {php0(o.landed)}

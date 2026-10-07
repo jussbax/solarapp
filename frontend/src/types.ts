@@ -371,7 +371,7 @@ export interface PricingBlock {
   job_inputs?: Record<string, number | boolean>
   choices?: {
     strings: number; panels_per_string: number; string_current_a: number; string_voltage_v: number; pv_gauge: string; pv_drop: number
-    ac_current_a: number; ac_gauge: string; ac_drop: number; inverter_code: string | null; battery_code: string | null; battery_units: number
+    ac_current_a: number; ac_gauge: string; ac_drop: number; inverter_code: string | null; inverter_units?: number; battery_code: string | null; battery_units: number
     rows: { panels: number; length_m: number }[]
     inverter_options?: { code: string; name: string; rating_kw: number; supplier: string; landed: number }[]
     battery_options?: { code: string; name: string; rating_kwh: number; units: number; total_kwh: number; supplier: string; landed: number }[]

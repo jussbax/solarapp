@@ -201,8 +201,11 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   tools, PPE, seal, LGU permit, ERC and meter pass-throughs for net
   metering; services markup, freight markup, 5 percent commission, VAT,
   rounded up to the hundred; OCM share of the markup.
-- BOQ rules: inverter = cheapest hybrid at or above the sized kW (3-phase
-  and high-voltage units excluded), times the parallel units; battery =
+- BOQ rules: inverter = the default model on every job, the Felicity
+  6 kW eco-hybrid (FS-INV-008), in as many parallel units as the sizing
+  requirement needs, with a per-job override; when no default is set the
+  cheapest hybrid at or above the sized kW is used (3-phase and
+  high-voltage units excluded). Battery =
   cheapest combination at or above the nominal kWh (racks, slave modules,
   12 and 24 V units excluded); both with a per-job override. Mounting per
   row from the roof layout (a row runs along the face length; the panel
@@ -231,7 +234,8 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   wires and terminations, protective devices, enclosures and raceways,
   grounding, consumables as lots; freight spread over the lines by truck
   share), Labor (installation crew by the day, mobilization and
-  demobilization, PPE, plans and PEE seal, LGU permit and CFEI, ERC
+  demobilization, PPE, then the permits and papers: plans and PEE seal,
+  LGU permit and CFEI, ERC
   certificate and bi-directional meter for net metering), Equipment (the
   tool charge for the installation days) and Tax. Commission is spread over
   every line in proportion to direct cost and the rounding pesos sit on the

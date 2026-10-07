@@ -49,6 +49,7 @@ class BoqRequest:
     rows: list[RoofRow]
     inverter_kw: float
     inverter_units: int = 1
+    inverter_required_kw: Optional[float] = None   # the sizing requirement; sets the units of a fixed model
     battery_kwh: float = 0.0
     strings_override: Optional[int] = None
     inverter_code: Optional[str] = None
@@ -136,14 +137,31 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         raise ValueError(f"Panel {req.panel_code} is not in the materials database.")
     lines.append(BomLine(panel.code, req.panel_count, "panel", f"{req.panel_count} x {panel.name}"))
 
-    # inverter
+    # inverter: the per-job override, else the default model, else the cheapest hybrid that fits
     inv_options = select_inverter(req.inverter_kw, catalog, cfg)
-    inverter: Optional[Item] = catalog.get(req.inverter_code) if req.inverter_code else (inv_options[0][0] if inv_options else None)
+    inverter: Optional[Item] = None
+    units = max(req.inverter_units, 1)
+    required = req.inverter_required_kw or req.inverter_kw * units
+    if req.inverter_code:
+        inverter = catalog.get(req.inverter_code)
+    if inverter is None and r.default_inverter_code:
+        inverter = catalog.get(r.default_inverter_code)
+        if inverter is None:
+            warnings.append({"code": "default_inverter", "message": f"Default inverter {r.default_inverter_code} is not in the materials database; the cheapest that fits is used."})
+    if inverter is None and inv_options:
+        inverter = inv_options[0][0]
     if inverter is None:
         warnings.append({"code": "no_inverter", "message": f"No hybrid inverter of {req.inverter_kw:g} kW or more in the materials database."})
     else:
-        lines.append(BomLine(inverter.code, req.inverter_units, "inverter", f"{inverter.rating:g} kW hybrid"))
-    choices["inverter_options"] = [{"code": i.code, "name": i.name, "rating_kw": i.rating, "supplier": i.supplier, "landed": c} for i, n, c in inv_options[:6]]
+        if inverter.rating and (inverter.rating_unit or "").lower() == "kw":
+            units = max(units, int(math.ceil(required / inverter.rating - 1e-9)))
+        note = f"{inverter.rating:g} kW hybrid" + (f", {units} in parallel for {required:g} kW" if units > 1 else "")
+        lines.append(BomLine(inverter.code, units, "inverter", note))
+    opts = [{"code": i.code, "name": i.name, "rating_kw": i.rating, "supplier": i.supplier, "landed": c} for i, n, c in inv_options[:6]]
+    if inverter and inverter.code not in [o["code"] for o in opts]:
+        opts.insert(0, {"code": inverter.code, "name": inverter.name, "rating_kw": inverter.rating, "supplier": inverter.supplier, "landed": landed_cost(inverter, catalog, cfg).landed * units})
+    choices["inverter_options"] = opts
+    choices["inverter_units"] = units
     inv_kw = float(inverter.rating) if inverter and inverter.rating else req.inverter_kw
 
     # battery
@@ -197,7 +215,6 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     ]
 
     # AC wiring and grounding
-    units = max(req.inverter_units, 1)
     i_ac = inv_kw * 1000.0 / w.ac_voltage
     ac_run = req.ac_run_m if req.ac_run_m is not None else w.ac_run_m
     gnd_run = req.grounding_run_m if req.grounding_run_m is not None else w.grounding_run_m

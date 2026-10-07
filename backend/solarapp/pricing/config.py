@@ -237,6 +237,7 @@ class BoqRoles(BaseModel):
     sealant: str = "IAN-CSM-001"
     sealants: int = 2
     max_panels_per_string: int = 10
+    default_inverter_code: str = "FS-INV-008"   # Felicity 6 kW eco-hybrid on every job, in parallel units when more is needed; blank = cheapest that fits
     inverter_exclude_words: list[str] = Field(default_factory=lambda: ["3P", "3-phase", "high-voltage", "HV"])
     battery_exclude_words: list[str] = Field(default_factory=lambda: ["rack", "controller module", "slave", "per kWh", "12V", "24V", "25.6V", "12 V", "24 V"])
 

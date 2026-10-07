@@ -37,8 +37,8 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    which is then the master: edit prices, weights, panel sizes and settings
    in the browser, re-import a newer workbook to update items by code. A
    bill of materials is generated from the sizing and the roof layout
-   (panels from the database, cheapest hybrid inverter at or above the
-   required kW, cheapest battery combination at or above the required kWh,
+   (panels from the database, default inverter model (Felicity 6 kW eco-hybrid) in parallel units
+   as needed, cheapest battery combination at or above the required kWh,
    rails, L-feet, clamps and splices per row, strings, PV and AC cable with
    a voltage-drop gauge check, protection, enclosures, grounding,
    consumables), can be edited line by line, and is priced exactly as the
