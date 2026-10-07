@@ -95,3 +95,65 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
 - Customer PDF contains only what the customer cares about. Readings, k,
   warnings and data details stay on the internal page.
 - English only.
+
+## Energy audit and sizing (module 2)
+
+- Appliances carry nameplate input watts, quantity, brand, model and type.
+  Every appliance typed is added to a shared catalogue for reuse; the
+  catalogue starts empty. The same appliance may appear twice with different
+  quantities when groups run at different hours (lights in different areas).
+- Usage is entered as windows: start time, end time, weekdays, months.
+  Duration is derived. A window whose end is at or before its start crosses
+  midnight; equal start and end is 24 hours. Months default to all twelve;
+  the owner accepted that a year cannot be observed before the proposal.
+- Average draw in a window = nameplate x quantity x duty factor. Duty
+  factors default from the type and can be overridden; the field does not
+  clamp-meter appliances. Defaults and their basis:
+  refrigerator 0.35 and freezer 0.40 (compressor runs 33-40% of the time in
+  a typical kitchen), aircon non-inverter 0.70 (60-80% compressor duty at
+  usual tropical setpoints), aircon inverter 0.55 (full input during
+  pull-down, 30-50% of rated at the setpoint), water dispenser 0.08 over a
+  24 h window (measured units draw 0.7-1.1 kWh per day), kettle 0.35 (full
+  power only for the minutes of each boil), rice cooker 0.50 and iron 0.50
+  (thermostat cycling), coffee maker 0.60, washing machine 0.60, fans 0.80,
+  TV 0.80, laptop and chargers 0.50, lights and network gear 1.00, tankless
+  shower heater 1.00 over the shower window. Sources are listed in
+  README.md. These are engineering defaults to be refined with clamp-meter
+  measurements over time.
+- Nameplate values far outside the type's usual range are flagged; the
+  Tanauan test audit carried a 9014 W washing machine.
+- The instantaneous coincident peak for the inverter uses nameplate watts at
+  minute resolution, without duty factors.
+- Bills: usually only the latest bill exists. Each bill carries its billing
+  month, kWh and period length; the audit's month profile times the period
+  length is compared with it.
+- Reconciliation, the owner asked for the smoother and more accurate option:
+  appliances in uncertain types (aircon, refrigerators, freezers, water
+  dispensers, pumps, storage heaters) are scaled first, between a 15 percent
+  floor and their nameplate ceiling, then any remaining gap is spread
+  proportionally over every existing appliance. Future additions are never
+  scaled and never counted against the bill; appliances marked "to be
+  removed" count against the bill but not in sizing. A gap above 10 percent
+  before reconciliation is flagged. The Tanauan test audit as typed was
+  about 1.9 times the bill even after duty factors, so the aircon hit the
+  floor and the rest was spread; the reconciled profile matches the bill.
+- All systems are hybrid inverters; the choice is net metering, battery
+  only (no export, surplus beyond the battery is lost) or the combination.
+  Target: net-zero annual energy, or whatever the roof can provide.
+- PV: kWp = annual consumption / annual yield per kWp of this roof's
+  measured simulation, rounded up to whole panels of the chosen model and
+  capped by the panel count the roof holds. Roof-limited systems report the
+  achievable coverage instead of a system the roof cannot hold.
+- Battery (battery only and combination): hour-by-hour balance of each
+  month's typical day; usable capacity = the largest daily surplus-to-night
+  shift over the twelve months, rounded up to whole modules (default
+  5.12 kWh, 90 percent depth of discharge, 92 percent round-trip, 0.5C),
+  capped at a configurable number of modules.
+- Inverter: smallest catalogue size (6, 8, 10, 12 kW by default) that covers
+  the nameplate coincident peak, the start of the largest motor load at the
+  200 percent surge rating, and the PV array at 1.3 kWp per kW. Parallel
+  units when the largest size is not enough.
+- Outputs: recommended PV, inverter, battery, coverage of consumption,
+  self-consumption, annual import and export, typical-day chart per month,
+  month-by-month balance. Internal only for now; the customer PDF is
+  unchanged until the pricing module exists.

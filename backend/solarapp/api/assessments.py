@@ -13,6 +13,7 @@ from ..db import get_session
 from ..models import Assessment, utcnow
 from ..reports.customer_pdf import build_customer_pdf
 from ..schemas import AssessmentDoc, AssessmentOut, AssessmentSummary
+from .appliances import remember_appliances
 from .deps import get_nasa, get_pvgis
 from .settings_routes import company_settings
 
@@ -73,6 +74,7 @@ def update_assessment(assessment_id: int, doc: AssessmentDoc, session: Session =
         session.add(a)
         session.commit()
         session.refresh(a)
+        remember_appliances(session, doc)
     return _out(a)
 
 
@@ -107,6 +109,7 @@ def compute_assessment(
     session.add(a)
     session.commit()
     session.refresh(a)
+    remember_appliances(session, parsed)
     return _out(a)
 
 

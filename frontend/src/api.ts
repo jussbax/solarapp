@@ -1,4 +1,4 @@
-import type { AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, DataStatus } from './types'
+import type { ApplianceCategory, AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, CatalogItem, DataStatus } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -53,4 +53,6 @@ export const api = {
   computeAssessment: (id: number, doc: AssessmentDoc) =>
     request<AssessmentOut>(`/api/assessments/${id}/compute`, { method: 'POST', body: JSON.stringify(doc) }),
   reportUrl: (id: number) => `/api/assessments/${id}/report.pdf`,
+  categories: () => request<ApplianceCategory[]>('/api/appliances/categories'),
+  searchAppliances: (q: string) => request<CatalogItem[]>(`/api/appliances?q=${encodeURIComponent(q)}&limit=8`),
 }

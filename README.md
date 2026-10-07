@@ -24,6 +24,12 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    and the owner's original formula for continuity.
 5. Produces a trimmed customer PDF. Readings, k, warnings and dataset details
    stay on the internal page.
+6. Energy audit: appliances with usage windows (start, end, weekdays,
+   months), duty factors per type, reconciliation with the latest bill, and
+   future additions. Sizing from the hour-by-hour balance of the reconciled
+   load against this roof's production: PV capped by the roof, battery
+   modules, and the inverter size from your catalogue sizes with the 200%
+   surge rule. Every appliance typed is kept in a catalogue for reuse.
 
 ## Deploy on an Ubuntu server with Docker
 
@@ -129,6 +135,8 @@ backend/solarapp/core/kfactor.py      k per reading, site factor, thermal rise, 
 backend/solarapp/core/layout.py       panel fitting (rows x columns, both orientations)
 backend/solarapp/core/simulation.py   hourly pvlib simulation and monthly aggregation
 backend/solarapp/core/dataset.py      nearest-cell lookup and TMY loading
+backend/solarapp/core/audit.py        appliance types and duty factors, load profiles, bill reconciliation
+backend/solarapp/core/sizing.py       hourly balance, PV target, battery modules, inverter choice
 backend/solarapp/compute.py           turns an assessment into results
 backend/solarapp/data_download/       one-time PVGIS and NASA download
 backend/solarapp/reports/             customer PDF
@@ -147,3 +155,19 @@ evaluates the sun position at the centre of each hour. For the Philippines
 PVGIS serves its ERA5 database (2005 to 2023) with terrain horizon applied.
 `data/nasa/climatology.json` holds monthly horizontal irradiation per NASA
 POWER grid point (1 degree).
+
+## Duty factor sources
+
+Defaults in `backend/solarapp/core/audit.py` are engineering estimates
+drawn from: refrigerator compressor duty of 33-40% in a typical kitchen
+([Engineer Fix](https://engineerfix.com/what-is-a-normal-duty-cycle-for-a-refrigerator/)),
+inverter aircon running 30-50% of rated input once at the setpoint and
+saving 30-44% over fixed-speed units
+([Cooling Insights](https://coolinginsights.com/guides/inverter-vs-normal-ac-consumption),
+[comparison study](https://www.researchgate.net/publication/336234751_Comparison_of_Energy_Consumption_between_a_Standard_Air_Conditioner_and_an_Inverter-type_Air_Conditioner_Operating_in_an_Office_Building)),
+hot and cold water dispensers measured at 0.66-1.1 kWh per day
+([ENERGY STAR water coolers](https://www.energystar.gov/productfinder/product/certified-water-coolers/),
+[EMSD Hong Kong](https://www.emsd.gov.hk/filemanager/WaterDispenser/en/data.pdf)),
+and typical Philippine appliance wattages from the Meralco appliance
+calculator. Override any factor per appliance when a clamp-meter reading
+exists.

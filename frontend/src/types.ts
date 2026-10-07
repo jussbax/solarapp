@@ -32,6 +32,78 @@ export interface ReadingSet {
   readings: Reading[]
 }
 
+export interface UsageWindow {
+  start: string
+  end: string
+  days: number[]
+  months: number[]
+}
+
+export type ApplianceStatus = 'existing' | 'future' | 'retiring'
+
+export interface ApplianceEntry {
+  id: string
+  name: string
+  brand: string
+  model: string
+  category: string
+  input_power_w: number
+  quantity: number
+  duty_factor: number | null
+  status: ApplianceStatus
+  windows: UsageWindow[]
+  notes: string
+}
+
+export interface BillEntry {
+  id: string
+  billing_month: string
+  kwh: number
+  days: number | null
+  amount_php: number | null
+  utility: string
+}
+
+export type SystemKind = 'net_metering' | 'battery_only' | 'combination'
+
+export interface SystemSettings {
+  kind: SystemKind
+  inverter_sizes_kw: number[]
+  inverter_surge_factor: number
+  pv_ratio_max: number
+  battery_module_kwh: number
+  battery_dod: number
+  battery_efficiency: number
+  battery_max_modules: number
+}
+
+export interface EnergyAudit {
+  appliances: ApplianceEntry[]
+  bills: BillEntry[]
+  reconcile: boolean
+  system: SystemSettings
+}
+
+export interface ApplianceCategory {
+  id: string
+  label: string
+  duty: number
+  uncertain: boolean
+  w_min: number | null
+  w_max: number | null
+  note: string
+}
+
+export interface CatalogItem {
+  id: number
+  name: string
+  brand: string
+  model: string
+  category: string
+  input_power_w: number
+  use_count: number
+}
+
 export interface AssessmentDoc {
   customer_name: string
   address: string
@@ -46,6 +118,7 @@ export interface AssessmentDoc {
   test_panel_calibration: number
   setback_m: number
   gap_m: number
+  audit: EnergyAudit
 }
 
 export interface AssessmentSummary {
@@ -141,6 +214,90 @@ export interface SimulationResult {
   thermal: string
 }
 
+export interface ApplianceResult {
+  id: string
+  name: string
+  category: string
+  category_label: string
+  status: ApplianceStatus
+  quantity: number
+  input_power_w: number
+  duty_factor: number
+  duty_is_default: boolean
+  uncertain: boolean
+  hours_per_day: number
+  kwh_per_day_audit: number
+  kwh_per_day_reconciled: number
+  scale: number
+  share_pct: number
+  warnings: Warning[]
+}
+
+export interface AuditBlock {
+  appliances: ApplianceResult[]
+  daily_kwh_by_month: number[]
+  annual_kwh: number
+  peak_kw: number
+  peak_avg_kw: number
+  largest_motor_kw: number
+  largest_motor_multiplier: number
+  audit_vs_bill: {
+    billed_kwh: number
+    audit_kwh: number
+    gap_pct: number
+    uncertain_kwh: number
+    fixed_kwh: number
+    scale_uncertain: number
+    scale_all: number
+    reconciled: boolean
+    bills: { billing_month: string; kwh: number; days: number; audit_kwh: number; reconciled_kwh: number }[]
+  } | null
+  future_daily_kwh: number
+  load_profile_kw: number[][]
+  load_profile_unreconciled_kw: number[][]
+  weekday_profiles_kw: Record<string, number[][]>
+  warnings: Warning[]
+}
+
+export interface DayProfile {
+  load: number[]
+  production: number[]
+  direct: number[]
+  charge: number[]
+  discharge: number[]
+  soc: number[]
+  export: number[]
+  curtailed: number[]
+  imported: number[]
+}
+
+export interface SizingBlock {
+  kind: SystemKind
+  annual_consumption_kwh: number
+  annual_yield_kwh_per_kwp: number
+  target_kwp: number
+  target_panels: number
+  roof_max_panels: number
+  roof_max_kwp: number
+  roof_limited: boolean
+  panels: number
+  kwp: number
+  annual_production_kwh: number
+  coverage_pct: number
+  self_consumption_pct: number
+  annual_direct_kwh: number
+  annual_battery_kwh: number
+  annual_export_kwh: number
+  annual_curtailed_kwh: number
+  annual_import_kwh: number
+  net_annual_kwh: number
+  battery: { modules: number; module_kwh: number; installed_kwh: number; usable_kwh: number; power_kw: number; depth_of_discharge: number; round_trip_efficiency: number }
+  inverter: { size_kw: number; units: number; required_kw: number; binding: string; peak_load_kw: number; surge_requirement_kw: number; pv_requirement_kw: number; largest_motor_kw: number; largest_motor_multiplier: number; surge_factor: number; pv_ratio_max: number; sizes_kw: number[] }
+  monthly: { month: number; days: number; consumption_kwh: number; production_kwh: number; direct_kwh: number; battery_kwh: number; export_kwh: number; curtailed_kwh: number; import_kwh: number }[]
+  profiles: Record<string, DayProfile>
+  warnings: Warning[]
+}
+
 export interface Results {
   computed_at: string
   months: string[]
@@ -161,6 +318,8 @@ export interface Results {
   reference: SimulationResult
   comparison: { deviation_pct: number; monthly_deviation_pct: number[]; description: string }
   legacy_method: { monthly_kwh: number; annual_kwh: number; formula: string }
+  audit: AuditBlock | null
+  sizing: SizingBlock | null
   nasa_reference: {
     point: { lat: number; lon: number; distance_km: number }
     nasa_ghi_psh: (number | null)[]
@@ -213,7 +372,49 @@ export function emptyDoc(): AssessmentDoc {
     test_panel_calibration: 1.0,
     setback_m: 0.6,
     gap_m: 0,
+    audit: emptyAudit(),
   }
+}
+
+export function emptyAudit(): EnergyAudit {
+  return {
+    appliances: [],
+    bills: [],
+    reconcile: true,
+    system: {
+      kind: 'combination',
+      inverter_sizes_kw: [6, 8, 10, 12],
+      inverter_surge_factor: 2.0,
+      pv_ratio_max: 1.3,
+      battery_module_kwh: 5.12,
+      battery_dod: 0.9,
+      battery_efficiency: 0.92,
+      battery_max_modules: 8,
+    },
+  }
+}
+
+export function newAppliance(): ApplianceEntry {
+  return { id: newId(), name: '', brand: '', model: '', category: 'other', input_power_w: 0, quantity: 1, duty_factor: null, status: 'existing', windows: [newWindow()], notes: '' }
+}
+
+export function newWindow(): UsageWindow {
+  return { start: '18:00', end: '22:00', days: [0, 1, 2, 3, 4, 5, 6], months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }
+}
+
+export function newBill(): BillEntry {
+  const d = new Date()
+  d.setMonth(d.getMonth() - 1)
+  return { id: newId(), billing_month: d.toISOString().slice(0, 7), kwh: 0, days: null, amount_php: null, utility: '' }
+}
+
+export function windowHours(w: UsageWindow): number {
+  const [sh, sm] = w.start.split(':').map(Number)
+  const [eh, em] = w.end.split(':').map(Number)
+  const s = sh * 60 + sm
+  const e = eh * 60 + em
+  if (s === e) return 24
+  return (((e - s) % 1440) + 1440) % 1440 / 60
 }
 
 export function newReadingSet(faceId: string | null): ReadingSet {

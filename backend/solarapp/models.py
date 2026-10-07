@@ -24,6 +24,22 @@ class Assessment(SQLModel, table=True):
     results_stale: bool = False
 
 
+class ApplianceCatalog(SQLModel, table=True):
+    """Every appliance ever entered in an audit, for reuse. Keyed by name, brand and model."""
+
+    __tablename__ = "appliance_catalog"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    brand: str = ""
+    model: str = ""
+    category: str = "other"
+    input_power_w: float = 0.0
+    use_count: int = 0
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
 class AppSetting(SQLModel, table=True):
     __tablename__ = "app_settings"
 

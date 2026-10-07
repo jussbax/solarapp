@@ -52,6 +52,7 @@ class SkyContext:
     """Solar geometry for one TMY, independent of roof faces. Reusable."""
     index_utc: pd.DatetimeIndex
     month: np.ndarray
+    hour: np.ndarray  # local hour of the interval centre
     days_in_month: list[int]
     zenith: pd.Series
     apparent_zenith: pd.Series
@@ -79,7 +80,7 @@ def prepare_sky(tmy: pd.DataFrame, lat: float, lon: float, elevation_m: float, t
     monthday = pd.Series(local.strftime("%m-%d"), index=idx)
     days = [int(monthday[month == m].nunique()) for m in range(1, 13)]
     return SkyContext(
-        index_utc=idx, month=month, days_in_month=days,
+        index_utc=idx, month=month, hour=local.hour.values, days_in_month=days,
         zenith=solpos["zenith"], apparent_zenith=solpos["apparent_zenith"], azimuth=solpos["azimuth"],
         dni_extra=pd.Series(np.asarray(dni_extra), index=idx), airmass=airmass,
     )
@@ -105,6 +106,7 @@ class FaceSimulation:
     annual_poa_kwh_m2: float
     avg_psh_per_day: float
     specific_yield_kwh_per_kwp: float
+    hourly_profile_kw: list[list[float]]  # [12][24] average kW by local hour
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -124,10 +126,23 @@ class SimulationResult:
     system_kwp: float
     k_site: float
     thermal: str
+    hourly_profile_kw: list[list[float]]  # [12][24] average kW by local hour, all faces
 
     def to_dict(self) -> dict:
         d = asdict(self)
         return d
+
+
+def hourly_profile(values_w: pd.Series, month: np.ndarray, hour: np.ndarray) -> list[list[float]]:
+    """Average kW by (month, local hour) over the typical year."""
+    arr = np.asarray(values_w, dtype=float)
+    out = np.zeros((12, 24))
+    for m in range(12):
+        sel = month == m + 1
+        for h in range(24):
+            cell = arr[sel & (hour == h)]
+            out[m, h] = cell.mean() / 1000.0 if cell.size else 0.0
+    return out.round(5).tolist()
 
 
 def _diffuse_iam(tilt: float) -> tuple[float, float]:
@@ -178,6 +193,7 @@ def simulate_face(tmy: pd.DataFrame, sky: SkyContext, face: FaceSpec, panel_wp: 
         monthly_poa_kwh_m2=monthly_poa, psh_per_day=psh, annual_poa_kwh_m2=annual_poa,
         avg_psh_per_day=annual_poa / max(sum(sky.days_in_month), 1),
         specific_yield_kwh_per_kwp=(annual / kwp) if kwp > 0 else 0.0,
+        hourly_profile_kw=hourly_profile(power_w, sky.month, sky.hour),
     )
 
 
@@ -199,6 +215,9 @@ def simulate(
     annual = float(sum(monthly))
     ghi_monthly = [v / 1000.0 for v in _monthly_sum(tmy["ghi"].clip(lower=0), sky.month)]
     total_panels = sum(f.panel_count for f in faces)
+    profile = np.zeros((12, 24))
+    for f in face_results:
+        profile += np.array(f.hourly_profile_kw)
     return SimulationResult(
         faces=face_results,
         monthly_kwh=monthly,
@@ -212,6 +231,7 @@ def simulate(
         system_kwp=total_panels * panel_wp / 1000.0,
         k_site=k_site,
         thermal=thermal.describe(),
+        hourly_profile_kw=profile.round(5).tolist(),
     )
 
 

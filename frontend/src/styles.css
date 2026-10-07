@@ -72,3 +72,21 @@ ul.warnings li { margin: 2px 0; }
   .card { padding: 12px; }
   .kpi .value { font-size: 18px; }
 }
+
+/* energy audit */
+table.appliances td { padding: 4px 4px; }
+table.appliances input, table.appliances select { padding: 5px 6px; }
+button.small { padding: 3px 8px; font-size: 13px; }
+.toggle { padding: 2px 6px; font-size: 12px; min-width: 22px; border-radius: 4px; background: #f3f5f5; color: var(--muted); }
+.toggle.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.toggle.link { background: transparent; border-color: transparent; color: var(--accent); min-width: auto; }
+.toggles { display: inline-flex; gap: 2px; flex-wrap: wrap; align-items: center; margin-right: 10px; }
+.window-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.window-row input[type='time'] { width: 110px; }
+.window-row .hours { min-width: 56px; }
+.window-editor td { background: #fafcfc; }
+.suggest { position: relative; }
+.suggest-list { position: absolute; z-index: 50; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); max-height: 220px; overflow-y: auto; }
+.suggest-item { padding: 6px 8px; cursor: pointer; font-size: 13px; }
+.suggest-item:hover { background: #eef5f5; }
+.month-picker { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0; }

@@ -8,6 +8,8 @@ import PanelsEditor from '../components/PanelsEditor'
 import ReadingsEditor from '../components/ReadingsEditor'
 import ResultsView from '../components/ResultsView'
 import NumberInput from '../components/NumberInput'
+import AuditEditor from '../components/AuditEditor'
+import AuditResults from '../components/AuditResults'
 
 export default function AssessmentPage({ status }: { status: DataStatus | null }) {
   const { id } = useParams()
@@ -147,6 +149,11 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
           />
       </div>
 
+      <div className="card">
+        <h2>Energy audit</h2>
+        <AuditEditor audit={doc.audit} onChange={(audit) => patch({ audit })} />
+      </div>
+
       {error && <div className="banner bad">{error}</div>}
       <div className="actions">
         <button onClick={save} disabled={!!busy || !dirty}>
@@ -172,6 +179,17 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         <div className="card" id="results">
           <h2>Results</h2>
           <ResultsView doc={a.doc} results={results} stale={a.results_stale || dirty} />
+        </div>
+      )}
+      {results && results.audit && (
+        <div className="card" id="sizing">
+          <h2>Energy audit and system sizing</h2>
+          <AuditResults
+            audit={results.audit}
+            sizing={results.sizing}
+            panelName={results.panels.find((p) => p.panel.id === results.selected_panel_id)?.panel.name || ''}
+            panelWp={results.panels.find((p) => p.panel.id === results.selected_panel_id)?.panel.watt_peak || 0}
+          />
         </div>
       )}
     </div>

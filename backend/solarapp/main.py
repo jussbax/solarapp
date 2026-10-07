@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import assessments, auth_routes, data_routes, settings_routes
+from .api import appliances, assessments, auth_routes, data_routes, settings_routes
 from .config import Settings, get_settings
 from .core.dataset import NasaReference, PvgisDataset
 from .db import init_engine
@@ -30,6 +30,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(assessments.router)
     app.include_router(settings_routes.router)
     app.include_router(data_routes.router)
+    app.include_router(appliances.router)
 
     @app.get("/api/health")
     def health() -> dict:

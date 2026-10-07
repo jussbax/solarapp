@@ -5,8 +5,12 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
 
+import numpy as np
+
+from .core import audit as audit_core
 from .core import kfactor, layout
 from .core.dataset import NasaReference, PvgisDataset
+from .core.sizing import BatterySpec, InverterRules, size_system
 from .core.simulation import FaceSpec, ThermalModel, prepare_sky, simulate, typical_air_temperature
 from .schemas import AssessmentDoc
 
@@ -120,6 +124,8 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
             "annual_diff_pct": ((na_ann - pv_ann) / pv_ann * 100.0) if (na_ann and pv_ann) else None,
         }
 
+    audit_block, sizing_block = compute_audit_and_sizing(doc, measured, selected, selected_panel.watt_peak)
+
     def set_to_dict(r: kfactor.ReadingSetResult) -> dict:
         d = asdict(r)
         d["warnings"] = [asdict(w) for w in r.warnings]
@@ -157,5 +163,51 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
             "formula": "panels x Wp x k x average in-plane sun hours x 30",
         },
         "nasa_reference": nasa_block,
+        "audit": audit_block,
+        "sizing": sizing_block,
         "warnings": warnings,
     }
+
+
+def compute_audit_and_sizing(doc: AssessmentDoc, production, selected_panel_result: dict, panel_wp: float) -> tuple[Optional[dict], Optional[dict]]:
+    """Energy audit and system sizing, when the document carries appliances."""
+    a = doc.audit
+    if not a.appliances:
+        return None, None
+    appliances = [
+        audit_core.Appliance(
+            id=e.id, name=e.name or e.category, category=e.category, input_power_w=e.input_power_w, quantity=e.quantity,
+            duty_factor=e.duty_factor, status=e.status,
+            windows=[audit_core.Window(w.start, w.end, list(w.days), list(w.months)) for w in e.windows],
+        )
+        for e in a.appliances
+    ]
+    bills = [audit_core.Bill(b.id, b.billing_month, b.kwh, b.days, b.amount_php, b.utility) for b in a.bills if b.billing_month and b.kwh > 0]
+    res = audit_core.run_audit(appliances, bills, reconcile=a.reconcile)
+    audit_block = {
+        "appliances": res.appliances,
+        "daily_kwh_by_month": res.daily_kwh_by_month,
+        "annual_kwh": res.annual_kwh,
+        "peak_kw": res.peak_kw,
+        "peak_avg_kw": res.peak_avg_kw,
+        "largest_motor_kw": res.largest_motor_kw,
+        "largest_motor_multiplier": res.largest_motor_multiplier,
+        "audit_vs_bill": res.audit_vs_bill,
+        "future_daily_kwh": res.future_daily_kwh,
+        "load_profile_kw": np.asarray(res.load_kw).round(4).tolist(),
+        "load_profile_unreconciled_kw": np.asarray(res.load_kw_unreconciled).round(4).tolist(),
+        "weekday_profiles_kw": res.weekday_profiles_kw,
+        "warnings": res.warnings,
+    }
+    kwp = production.system_kwp
+    if kwp <= 0:
+        return audit_block, None
+    per_kwp = np.array(production.hourly_profile_kw) / kwp
+    s = a.system
+    sizing = size_system(
+        np.asarray(res.load_kw), per_kwp, roof_max_panels=int(selected_panel_result["total_count"]), panel_wp=panel_wp, kind=s.kind,
+        peak_load_kw=res.peak_kw, largest_motor_kw=res.largest_motor_kw, largest_motor_multiplier=res.largest_motor_multiplier,
+        battery=BatterySpec(s.battery_module_kwh, s.battery_dod, s.battery_efficiency, max_modules=s.battery_max_modules),
+        inverter=InverterRules(list(s.inverter_sizes_kw), s.inverter_surge_factor, s.pv_ratio_max),
+    )
+    return audit_block, sizing

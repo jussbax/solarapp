@@ -103,3 +103,54 @@ def test_pdf_builds_from_results(client):
     res = client.post(f"/api/assessments/{aid}/compute").json()
     pdf = build_customer_pdf(AssessmentDoc.model_validate(res["doc"]), res["results"], {"company_name": "Test Solar", "company_contact": "x"})
     assert pdf[:4] == b"%PDF" and len(pdf) > 10000
+
+
+TANAUAN_AUDIT = {
+    "appliances": [
+        {"id": "ref", "name": "Refrigerator", "brand": "Samsung", "model": "RT20", "category": "refrigerator", "input_power_w": 150, "quantity": 1, "windows": [{"start": "06:00", "end": "06:00"}]},
+        {"id": "ac", "name": "Split inverter AC 2.5HP", "brand": "Carrier", "model": "XP", "category": "aircon_inverter", "input_power_w": 2100, "quantity": 2, "windows": [{"start": "08:00", "end": "01:00"}]},
+        {"id": "led", "name": "LED bulb", "category": "lighting", "input_power_w": 9, "quantity": 9, "windows": [{"start": "18:00", "end": "06:00"}]},
+        {"id": "wash", "name": "Top load washer", "category": "washing_machine", "input_power_w": 9014, "quantity": 1, "windows": [{"start": "06:00", "end": "07:30", "days": [5, 6]}]},
+        {"id": "ev", "name": "EV charger", "category": "ev_charger", "input_power_w": 3500, "status": "future", "windows": [{"start": "22:00", "end": "02:00"}]},
+    ],
+    "bills": [{"id": "b1", "billing_month": "2026-08", "kwh": 338, "days": 31, "amount_php": 3987.17, "utility": "BATELEC II"}],
+    "reconcile": True,
+    "system": {"kind": "combination"},
+}
+
+
+def test_audit_and_sizing_flow(client):
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    cats = client.get("/api/appliances/categories").json()
+    assert any(c["id"] == "aircon_inverter" and c["uncertain"] for c in cats)
+
+    doc = dict(DOC)
+    doc["audit"] = TANAUAN_AUDIT
+    aid = client.post("/api/assessments", json=doc).json()["id"]
+    r = client.post(f"/api/assessments/{aid}/compute")
+    assert r.status_code == 200, r.text
+    res = r.json()["results"]
+    audit, sizing = res["audit"], res["sizing"]
+    assert audit["audit_vs_bill"]["reconciled"]
+    assert abs(audit["audit_vs_bill"]["bills"][0]["reconciled_kwh"] - 338) < 0.01
+    assert any(w["code"] == "nameplate_out_of_range" for a in audit["appliances"] for w in a["warnings"])
+    assert sizing["kind"] == "combination"
+    assert sizing["panels"] >= 1 and sizing["inverter"]["size_kw"] in (6.0, 8.0, 10.0, 12.0)
+    assert sizing["battery"]["modules"] >= 1
+    assert len(sizing["monthly"]) == 12 and "8" in sizing["profiles"]
+    # future EV load is included in sizing but not in the bill comparison
+    assert audit["future_daily_kwh"] > 0
+
+    # appliances were remembered in the catalogue
+    found = client.get("/api/appliances", params={"q": "carrier"}).json()
+    assert len(found) == 1 and found[0]["input_power_w"] == 2100 and found[0]["use_count"] == 1
+    client.post(f"/api/assessments/{aid}/compute")
+    assert client.get("/api/appliances", params={"q": "carrier"}).json()[0]["use_count"] == 2
+    # manual add and delete
+    new = client.post("/api/appliances", json={"name": "Stand fan", "brand": "Asahi", "category": "fan", "input_power_w": 55}).json()
+    assert client.delete(f"/api/appliances/{new['id']}").status_code == 204
+
+    # without appliances the blocks are absent and the roof results unchanged
+    doc2 = dict(DOC)
+    r = client.post(f"/api/assessments/{aid}/compute", json=doc2)
+    assert r.json()["results"]["audit"] is None and r.json()["results"]["sizing"] is None
