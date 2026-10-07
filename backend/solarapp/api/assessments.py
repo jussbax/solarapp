@@ -1,0 +1,143 @@
+from __future__ import annotations
+
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlmodel import Session, select
+
+from ..auth import require_user
+from ..compute import ComputeError, compute_results
+from ..config import Settings, get_settings
+from ..core.dataset import NasaReference, PvgisDataset
+from ..db import get_session
+from ..models import Assessment, utcnow
+from ..reports.customer_pdf import build_customer_pdf
+from ..schemas import AssessmentDoc, AssessmentOut, AssessmentSummary
+from .deps import get_nasa, get_pvgis
+from .settings_routes import company_settings
+
+router = APIRouter(prefix="/api/assessments", tags=["assessments"], dependencies=[Depends(require_user)])
+
+
+def _get(session: Session, assessment_id: int) -> Assessment:
+    a = session.get(Assessment, assessment_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    return a
+
+
+def _out(a: Assessment) -> AssessmentOut:
+    return AssessmentOut(
+        id=a.id, created_at=a.created_at, updated_at=a.updated_at,
+        doc=AssessmentDoc.model_validate(a.doc), results=a.results, results_stale=a.results_stale,
+    )
+
+
+def average_measured_k_site(session: Session, exclude_id: Optional[int] = None) -> tuple[Optional[float], int]:
+    """Average k_site over saved assessments computed from readings (for desk estimates)."""
+    values = []
+    for a in session.exec(select(Assessment)):
+        if exclude_id is not None and a.id == exclude_id:
+            continue
+        r = a.results or {}
+        k = r.get("k") or {}
+        if k.get("source") == "measured" and isinstance(k.get("k_site"), (int, float)):
+            values.append(float(k["k_site"]))
+    if not values:
+        return None, 0
+    return sum(values) / len(values), len(values)
+
+
+@router.get("", response_model=list[AssessmentSummary])
+def list_assessments(session: Session = Depends(get_session)) -> list[AssessmentSummary]:
+    rows = session.exec(select(Assessment).order_by(Assessment.updated_at.desc())).all()
+    out = []
+    for a in rows:
+        prod = (a.results or {}).get("production") or {}
+        out.append(AssessmentSummary(
+            id=a.id, created_at=a.created_at, updated_at=a.updated_at, customer_name=a.customer_name,
+            address=a.address, mode=a.mode, has_results=a.results is not None, results_stale=a.results_stale,
+            system_kwp=prod.get("system_kwp"), annual_kwh=prod.get("annual_kwh"), panel_count=prod.get("total_panels"),
+        ))
+    return out
+
+
+@router.post("", response_model=AssessmentOut, status_code=201)
+def create_assessment(doc: AssessmentDoc, session: Session = Depends(get_session)) -> AssessmentOut:
+    a = Assessment(customer_name=doc.customer_name, address=doc.address, mode=doc.mode, doc=doc.model_dump(mode="json"))
+    session.add(a)
+    session.commit()
+    session.refresh(a)
+    return _out(a)
+
+
+@router.get("/{assessment_id}", response_model=AssessmentOut)
+def get_assessment(assessment_id: int, session: Session = Depends(get_session)) -> AssessmentOut:
+    return _out(_get(session, assessment_id))
+
+
+@router.put("/{assessment_id}", response_model=AssessmentOut)
+def update_assessment(assessment_id: int, doc: AssessmentDoc, session: Session = Depends(get_session)) -> AssessmentOut:
+    a = _get(session, assessment_id)
+    new_doc = doc.model_dump(mode="json")
+    if new_doc != a.doc:
+        a.doc = new_doc
+        a.customer_name, a.address, a.mode = doc.customer_name, doc.address, doc.mode
+        a.results_stale = a.results is not None
+        a.updated_at = utcnow()
+        session.add(a)
+        session.commit()
+        session.refresh(a)
+    return _out(a)
+
+
+@router.delete("/{assessment_id}", status_code=204)
+def delete_assessment(assessment_id: int, session: Session = Depends(get_session)) -> Response:
+    a = _get(session, assessment_id)
+    session.delete(a)
+    session.commit()
+    return Response(status_code=204)
+
+
+@router.post("/{assessment_id}/compute", response_model=AssessmentOut)
+def compute_assessment(
+    assessment_id: int,
+    doc: Optional[AssessmentDoc] = None,
+    session: Session = Depends(get_session),
+    pvgis: PvgisDataset = Depends(get_pvgis),
+    nasa: NasaReference = Depends(get_nasa),
+) -> AssessmentOut:
+    """Save the document (if sent) and compute results."""
+    a = _get(session, assessment_id)
+    if doc is not None:
+        a.doc = doc.model_dump(mode="json")
+        a.customer_name, a.address, a.mode = doc.customer_name, doc.address, doc.mode
+    parsed = AssessmentDoc.model_validate(a.doc)
+    default_k, _ = average_measured_k_site(session, exclude_id=a.id)
+    try:
+        a.results = compute_results(parsed, pvgis, nasa, default_k)
+    except ComputeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    a.results_stale = False
+    a.updated_at = utcnow()
+    session.add(a)
+    session.commit()
+    session.refresh(a)
+    return _out(a)
+
+
+@router.get("/{assessment_id}/report.pdf")
+def customer_report(
+    assessment_id: int,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    a = _get(session, assessment_id)
+    if not a.results:
+        raise HTTPException(status_code=409, detail="Compute the assessment first.")
+    if (a.results.get("dataset") or {}).get("synthetic"):
+        raise HTTPException(status_code=409, detail="Customer PDF is disabled while synthetic test data is in use.")
+    company = company_settings(session, settings)
+    pdf = build_customer_pdf(AssessmentDoc.model_validate(a.doc), a.results, company, stale=a.results_stale)
+    name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="solar-assessment-{name}.pdf"'})

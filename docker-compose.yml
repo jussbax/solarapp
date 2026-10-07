@@ -1,0 +1,12 @@
+services:
+  solarapp:
+    build: .
+    image: solarapp:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Only reachable from this machine; the Cloudflare Tunnel connects to it locally.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Weather dataset and the SQLite database live here, outside the image.
+      - ./data:/app/data
