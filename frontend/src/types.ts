@@ -120,6 +120,120 @@ export interface AssessmentDoc {
   gap_m: number
   audit: EnergyAudit
   pricing: PricingJob
+  program: ProgramJob
+}
+
+export type JobStage = 'assessed' | 'quoted' | 'signed' | 'sourcing' | 'installing' | 'commissioned' | 'net_metering' | 'closed'
+export const JOB_STAGES: { id: JobStage; label: string }[] = [
+  { id: 'assessed', label: 'Assessed' }, { id: 'quoted', label: 'Quoted' }, { id: 'signed', label: 'Signed' }, { id: 'sourcing', label: 'Sourcing' },
+  { id: 'installing', label: 'Installing' }, { id: 'commissioned', label: 'Commissioned' }, { id: 'net_metering', label: 'Net metering' }, { id: 'closed', label: 'Closed' },
+]
+
+export interface PaymentMilestone {
+  key: string
+  label: string
+  share: number
+  event: string
+  offset_days: number
+}
+
+export interface PaymentPlan {
+  milestones: PaymentMilestone[]
+  installments: number
+  installment_share: number
+  installment_interval_days: number
+  installment_start_event: string
+  installment_first_offset_days: number
+}
+
+export interface ProgramJob {
+  stage: JobStage
+  signing_date: string | null
+  install_date: string | null
+  depart_time: string | null
+  lunch_start: string | null
+  lunch_minutes: number | null
+  permit_approval_days: number | null
+  netmeter_application_days: number | null
+  netmeter_meter_days: number | null
+  payment: PaymentPlan | null
+}
+
+export function emptyProgramJob(): ProgramJob {
+  return {
+    stage: 'assessed', signing_date: null, install_date: null, depart_time: null, lunch_start: null, lunch_minutes: null,
+    permit_approval_days: null, netmeter_application_days: null, netmeter_meter_days: null, payment: null,
+  }
+}
+
+export interface ProgramEvent {
+  key: string
+  label: string
+  date: string
+  end: string | null
+  kind: 'milestone' | 'task' | 'payment_in'
+  customer: boolean
+  amount?: number
+}
+
+export interface ProgramSegment {
+  day: number
+  stream: 'roof' | 'ground' | 'all'
+  task: string
+  start: number
+  end: number
+  crew: number
+  start_time: string
+  end_time: string
+}
+
+export interface CashFlow {
+  date: string
+  label: string
+  inflow: number
+  outflow: number
+  kind: 'in' | 'out'
+  key: string
+  balance: number
+}
+
+export interface ProgramBlock {
+  available: boolean
+  reason?: string
+  warnings: Warning[]
+  signing_date?: string
+  install_start?: string
+  install_end?: string
+  completion?: string
+  net_metering?: boolean
+  events?: ProgramEvent[]
+  install?: {
+    days: number
+    paid_days: number
+    crew: { persons: number; roof_pairs: number; roof_persons: number; ground_persons: number; description: string }
+    finish_time: string
+    segments: ProgramSegment[]
+    hourly: { day: number; rows: { time: string; roof: string; ground: string }[] }[]
+    frame: Record<string, string | number>
+    warnings: Warning[]
+    man_hours: { roof: number; ground: number; handoff: number; total: number }
+  }
+  payments?: { key: string; label: string; date: string; amount: number; share: number }[]
+  payment_plan?: PaymentPlan
+  outflows?: { key: string; label: string; date: string; amount: number }[]
+  cashflow?: {
+    flows: CashFlow[]
+    weekly: { week: string; inflow: number; outflow: number; balance: number }[]
+    total_in: number
+    total_out: number
+    cash_margin: number
+    lowest_balance: number
+    lowest_balance_date: string
+    noncash: { handling_wastage_storage: number; truck_ownership_maintenance: number; tools: number }
+    contract: number
+  }
+  customer_schedule?: { label: string; date: string; end: string | null }[]
+  assumptions?: string[]
 }
 
 export interface BomEdit {
@@ -274,6 +388,8 @@ export interface AssessmentSummary {
   address: string
   has_results: boolean
   results_stale: boolean
+  stage: JobStage
+  contract_php: number | null
   system_kwp: number | null
   annual_kwh: number | null
   panel_count: number | null
@@ -474,6 +590,7 @@ export interface Results {
   audit: AuditBlock | null
   sizing: SizingBlock | null
   pricing: PricingBlock | null
+  program: ProgramBlock | null
   nasa_reference: {
     point: { lat: number; lon: number; distance_km: number }
     nasa_ghi_psh: (number | null)[]
@@ -528,6 +645,7 @@ export function emptyDoc(): AssessmentDoc {
     gap_m: 0,
     audit: emptyAudit(),
     pricing: emptyPricingJob(),
+    program: emptyProgramJob(),
   }
 }
 

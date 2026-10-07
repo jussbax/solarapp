@@ -59,6 +59,7 @@ export const api = {
   categories: () => request<ApplianceCategory[]>('/api/appliances/categories'),
   searchAppliances: (q: string) => request<CatalogItem[]>(`/api/appliances?q=${encodeURIComponent(q)}&limit=8`),
   quotationUrl: (id: number) => `/api/assessments/${id}/quotation.pdf`,
+  programUrl: (id: number) => `/api/assessments/${id}/program.pdf`,
   pricingStatus: () => request<PricingStatus>('/api/pricing/status'),
   pricingConfig: () => request<PricingConfig>('/api/pricing/config'),
   savePricingConfig: (cfg: PricingConfig) => request<PricingConfig>('/api/pricing/config', { method: 'PUT', body: JSON.stringify(cfg) }),

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { emptyDoc, type AssessmentSummary } from '../types'
+import { emptyDoc, JOB_STAGES, type AssessmentSummary } from '../types'
 
 export default function AssessmentListPage() {
   const [items, setItems] = useState<AssessmentSummary[] | null>(null)
@@ -37,6 +37,7 @@ export default function AssessmentListPage() {
           <Link key={a.id} to={`/assessments/${a.id}`} className="list-item">
             <div className="title">
               {a.customer_name || <span className="muted">(no customer name)</span>}{' '}
+              <span className="badge neutral">{JOB_STAGES.find((s) => s.id === a.stage)?.label ?? a.stage}</span>{' '}
               {a.results_stale && <span className="badge neutral">edited since last compute</span>}
             </div>
             <div className="muted">
@@ -45,6 +46,7 @@ export default function AssessmentListPage() {
                 <>
                   {' '}
                   · {a.panel_count} panels · {a.system_kwp.toFixed(2)} kWp · {Math.round(a.annual_kwh ?? 0).toLocaleString()} kWh/yr
+                  {a.contract_php != null && ` · ₱${Math.round(a.contract_php).toLocaleString()}`}
                 </>
               )}
             </div>

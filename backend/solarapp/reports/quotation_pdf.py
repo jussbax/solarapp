@@ -105,6 +105,36 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict) -> byt
     ]))
     story.append(st)
 
+    prog = results.get("program") or {}
+    if prog.get("available"):
+        story.append(Paragraph("Schedule", h2))
+        rows = [["Date", "Milestone"]]
+        for e in prog["customer_schedule"]:
+            when = datetime.fromisoformat(e["date"]).strftime("%d %b %Y")
+            if e.get("end") and e["end"] != e["date"]:
+                when += " to " + datetime.fromisoformat(e["end"]).strftime("%d %b %Y")
+            rows.append([when, Paragraph(e["label"], cell)])
+        st2 = Table(rows, colWidths=[50 * mm, 120 * mm])
+        st2.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 8.5), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef3f3")),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(st2)
+        if prog.get("assumptions"):
+            story.append(Paragraph("Permit and utility dates are estimates and depend on the local government and the distribution utility.", small))
+        story.append(Paragraph("Payment terms", h2))
+        rows = [["Due", "Payment", "Amount"]]
+        for p in prog["payments"]:
+            rows.append([datetime.fromisoformat(p["date"]).strftime("%d %b %Y"), Paragraph(f"{p['label']} ({p['share'] * 100:.0f}%)", cell), php(p["amount"])])
+        rows.append(["", "Total", php(cust["total"])])
+        pt2 = Table(rows, colWidths=[40 * mm, 90 * mm, 40 * mm])
+        pt2.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 8.5), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef3f3")),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")), ("ALIGN", (2, 0), (2, -1), "RIGHT"),
+            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(pt2)
+
     story.append(Paragraph("Terms", h2))
     for n in [
         "Prices include delivery to site, installation by our crew, testing and commissioning, and the permits listed.",

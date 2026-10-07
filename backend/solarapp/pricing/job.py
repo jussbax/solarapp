@@ -9,7 +9,7 @@ from ..schemas import AssessmentDoc, CandidatePanel
 from .boq import BoqRequest, RoofRow, generate_boq
 from .catalog import Catalog, Item
 from .config import PricingConfig
-from .engine import BomLine, JobInputs, price_job
+from .engine import BomLine, JobInputs, landed_cost, price_job
 
 
 @dataclass
@@ -44,7 +44,6 @@ def resolve_panel(panel: CandidatePanel, catalog: Catalog, cfg: PricingConfig) -
             return it, None
     same = [i for i in catalog.by_category("Solar Panel") if i.rating and (i.rating_unit or "").upper() == "W" and abs(i.rating - panel.watt_peak) < 1.0]
     if same:
-        from .engine import landed_cost
         same.sort(key=lambda i: landed_cost(i, catalog, cfg).landed)
         return same[0], f"Candidate panel '{panel.name or panel.watt_peak}' is not linked to the materials database; priced as {same[0].code} {same[0].name} (cheapest {panel.watt_peak:g} W panel)."
     return None, None
@@ -155,7 +154,15 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
         net_metering=sizing["kind"] != "off_grid",
     )
     priced = price_job(lines, catalog, cfg_job, job)
+    cash_by_supplier: dict[str, float] = {}
+    for l in lines:
+        it = catalog.get(l.code)
+        if it is None:
+            continue
+        lc = landed_cost(it, catalog, cfg_job)
+        cash_by_supplier[it.supplier] = cash_by_supplier.get(it.supplier, 0.0) + (lc.net_price + lc.payment_fee) * l.qty
     priced.update({
+        "cash_by_supplier": cash_by_supplier,
         "available": True,
         "panel": {"code": db_panel.code, "name": db_panel.name, "watt_peak": db_panel.rating},
         "generated_bom": generated,

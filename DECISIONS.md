@@ -231,4 +231,50 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   and materials by truck share, commission in proportion to direct cost,
   and the rounding pesos sit in Labor so the total is the rounded contract
   price. Landed costs, markups, freight and labour detail stay internal.
-- Not yet: close-out actuals and the simplified quick estimate.
+
+## Program of works and cashflow (module 4)
+
+- Built from the priced job, so it needs pricing first. Everything hangs
+  off the signing date (today when blank): plans and PEE seal, LGU permit
+  application and approval, net metering application with the distribution
+  utility (grid modes only), the pickup run the day before installation,
+  installation days, commissioning on the last installation day, CFEI, DU
+  inspection and bi-directional meter. The owner has no data on permit and
+  utility durations, so they are editable assumptions (7, 5, 30 and 15
+  days) flagged on the page and in the PDF. Installation defaults to the
+  day after the expected permit; any weekday is allowed, no holiday
+  calendar. Jobs may overlap; no shared crew calendar.
+- Site day from the labour settings: depart base 06:00 (editable), travel
+  from the mob/demob setting plus the extra km at 40 km/h, half the
+  non-productive hour to set up, 6.5 productive hours, lunch 12 to 1 with
+  no other stops, half an hour to pack up, travel back. Roof pairs and the
+  ground crew work in parallel: rails and L-feet, panels and clamps, roof
+  wiring on the roof; unloading and hand-off, battery hauling, inverter,
+  battery, enclosures, protection, conduit and tray, wires, MC4, ground rod
+  on the ground, then energizing and commissioning once the roof strings
+  are done. The roof crew joins the ground tasks when the roof is finished.
+  Hours per task are the labour calculation's man-hours divided by the
+  persons on that stream, so the plan and the price agree; an early finish
+  or an overrun against the paid days is flagged rather than hidden.
+- Payments: default 50 percent on signing, 40 on delivery to site, 10 on
+  commissioning, editable per job and as the company default, with an
+  optional instalment balance (count, share, interval, start event).
+  Shares that do not add up to 100 percent are scaled and flagged.
+- Cash out, by the owner's practice: cash at every supplier on the pickup
+  day (net price plus payment fee, not the landed cost), the run's driver,
+  helper, diesel and toll the same day, PEE seal on signing, LGU fee at
+  application, ERC and meter fees at the net metering application, crew
+  wages, transport, packaging and PPE after the last installation day,
+  commission (5 percent of direct cost) after commissioning, VAT remitted
+  30 days after completion. Handling, wastage, storage, truck ownership
+  and maintenance and the tool charge are allocations that stay in the
+  company and are listed, not cash. The running balance shows the lowest
+  point and its date.
+- Customer sees milestones and payment dates in the quotation PDF; the
+  hourly plan, the cashflow and the cost lines stay in the internal
+  program of works PDF and page.
+- Each assessment carries a job stage (assessed, quoted, signed, sourcing,
+  installing, commissioned, net metering, closed) shown in the list; the
+  project management dashboard and close-out actuals will build on it.
+- Not yet: close-out actuals, project dashboard, the simplified quick
+  estimate.

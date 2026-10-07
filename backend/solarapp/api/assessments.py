@@ -14,6 +14,7 @@ from ..models import Assessment, utcnow
 from ..pricing.job import PricingContext
 from ..pricing.store import load_catalog, load_config
 from ..reports.customer_pdf import build_customer_pdf
+from ..reports.program_pdf import build_program_pdf
 from ..reports.quotation_pdf import build_quotation_pdf
 from ..schemas import AssessmentDoc, AssessmentOut, AssessmentSummary
 from .appliances import remember_appliances
@@ -43,9 +44,15 @@ def list_assessments(session: Session = Depends(get_session)) -> list[Assessment
     out = []
     for a in rows:
         prod = (a.results or {}).get("production") or {}
+        sizing = (a.results or {}).get("sizing") or {}
+        if sizing:  # the sized system rather than the roof maximum
+            prod = {"system_kwp": sizing.get("kwp"), "annual_kwh": sizing.get("annual_production_kwh"), "total_panels": sizing.get("panels")}
+        pricing = (a.results or {}).get("pricing") or {}
         out.append(AssessmentSummary(
             id=a.id, created_at=a.created_at, updated_at=a.updated_at, customer_name=a.customer_name,
             address=a.address, has_results=a.results is not None, results_stale=a.results_stale,
+            stage=((a.doc or {}).get("program") or {}).get("stage", "assessed"),
+            contract_php=(pricing.get("totals") or {}).get("contract_rounded") if pricing.get("available") else None,
             system_kwp=prod.get("system_kwp"), annual_kwh=prod.get("annual_kwh"), panel_count=prod.get("total_panels"),
         ))
     return out
@@ -150,3 +157,19 @@ def customer_quotation(
     pdf = build_quotation_pdf(AssessmentDoc.model_validate(a.doc), a.results, company)
     name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="solar-quotation-{name}.pdf"'})
+
+
+@router.get("/{assessment_id}/program.pdf")
+def program_of_works(
+    assessment_id: int,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    a = _get(session, assessment_id)
+    program = (a.results or {}).get("program") or {}
+    if not program.get("available"):
+        raise HTTPException(status_code=409, detail="Compute the assessment with pricing first.")
+    company = company_settings(session, settings)
+    pdf = build_program_pdf(AssessmentDoc.model_validate(a.doc), a.results, company)
+    name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="program-of-works-{name}.pdf"'})

@@ -46,6 +46,14 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    crew and days, build-up with markups, commission and VAT, rounded up to
    the hundred. A customer quotation PDF shows Equipment, Materials, Labor
    and Tax only.
+8. Program of works: from the signing date, the schedule of permits, net
+   metering steps, the pickup run, installation days with activities by
+   the hour for the roof pairs and the ground crew, commissioning and the
+   meter change; customer payments on milestones or in instalments; a
+   cashflow with the running balance and the lowest point the company has
+   to carry. The quotation PDF carries the milestone schedule and payment
+   terms; an internal PDF carries the full program and cashflow. Each
+   assessment has a job stage for the project list.
 
 ## Deploy on an Ubuntu server with Docker
 
@@ -133,7 +141,7 @@ Run it under systemd or `nohup` to keep it alive.
 
 ```bash
 cd backend && . .venv/bin/activate && pip install -r requirements-dev.txt
-python -m pytest                                          # 60 tests, no network
+python -m pytest                                          # 64 tests, no network
 python -m solarapp.pricing ../path/to/PLD_Materials_DB.xlsx   # import a materials workbook (the Materials page does this too)
 python -m solarapp.data_download --out ../data --synthetic --bbox 14.25 14.75 120.75 121.25
 SOLARAPP_DATA_DIR=../data uvicorn solarapp.main:app --reload --port 8000
@@ -159,10 +167,11 @@ backend/solarapp/pricing/engine.py    landed cost, freight run, labour calc, bui
 backend/solarapp/pricing/boq.py       bill of materials from the sized system and roof layout
 backend/solarapp/pricing/job.py       prices an assessment: BOQ, manual edits, extra km from the map pin
 backend/solarapp/pricing/store.py     materials tables and pricing settings in SQLite, workbook import
+backend/solarapp/pricing/program.py   program of works: schedule, hourly installation plan, cashflow
 backend/data_seed/                    bundled materials workbook, loaded on first start
 backend/solarapp/compute.py           turns an assessment into results
 backend/solarapp/data_download/       one-time PVGIS and NASA download
-backend/solarapp/reports/             customer PDF and quotation PDF
+backend/solarapp/reports/             customer PDF, quotation PDF, internal program of works PDF
 backend/solarapp/api/                 FastAPI routes
 frontend/src/                         React app (map pin, editors, results)
 data/                                 weather dataset and SQLite database (not in git)

@@ -13,6 +13,7 @@ from .core.dataset import NasaReference, PvgisDataset
 from .core.sizing import BatterySpec, InverterRules, OffGridRules, size_system
 from .core.simulation import FaceSpec, ThermalModel, prepare_sky, simulate, typical_air_temperature
 from .pricing.job import PricingContext, price_assessment
+from .pricing.program import build_program
 from .schemas import AssessmentDoc
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -167,6 +168,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         "audit": audit_block,
         "sizing": sizing_block,
         "pricing": None,
+        "program": None,
         "warnings": warnings,
     }
     if pricing is not None:
@@ -174,6 +176,10 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
             results["pricing"] = price_assessment(doc, results, pricing)
         except Exception as e:  # noqa: BLE001  pricing must never break the simulation
             results["pricing"] = {"available": False, "reason": f"Pricing failed: {e}", "warnings": []}
+        try:
+            results["program"] = build_program(doc, results, pricing.config)
+        except Exception as e:  # noqa: BLE001
+            results["program"] = {"available": False, "reason": f"Program of works failed: {e}", "warnings": []}
     return results
 
 

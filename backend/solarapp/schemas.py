@@ -133,6 +133,40 @@ class PricingJob(BaseModel):
     bom_extra: list[BomEdit] = Field(default_factory=list)     # added lines
 
 
+class PaymentMilestoneIn(BaseModel):
+    key: str
+    label: str
+    share: float = Field(ge=0, le=1)
+    event: str = "signing"
+    offset_days: int = 0
+
+
+class PaymentPlanIn(BaseModel):
+    milestones: list[PaymentMilestoneIn] = Field(default_factory=list)
+    installments: int = Field(default=0, ge=0)
+    installment_share: float = Field(default=0, ge=0, le=1)
+    installment_interval_days: int = Field(default=30, ge=1)
+    installment_start_event: str = "commissioning"
+    installment_first_offset_days: int = Field(default=30, ge=0)
+
+
+JobStage = Literal["assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
+
+
+class ProgramJob(BaseModel):
+    """Program of works inputs; blanks follow the program settings."""
+    stage: JobStage = "assessed"
+    signing_date: Optional[str] = None       # YYYY-MM-DD; blank = today
+    install_date: Optional[str] = None       # blank = after the permit
+    depart_time: Optional[str] = None        # HH:MM
+    lunch_start: Optional[str] = None
+    lunch_minutes: Optional[int] = Field(default=None, ge=0, le=180)
+    permit_approval_days: Optional[int] = Field(default=None, ge=0)
+    netmeter_application_days: Optional[int] = Field(default=None, ge=0)
+    netmeter_meter_days: Optional[int] = Field(default=None, ge=0)
+    payment: Optional[PaymentPlanIn] = None  # blank = company default plan
+
+
 class AssessmentDoc(BaseModel):
     customer_name: str = ""
     address: str = ""
@@ -149,6 +183,7 @@ class AssessmentDoc(BaseModel):
     gap_m: float = Field(default=0.0, ge=0)
     audit: EnergyAudit = Field(default_factory=EnergyAudit)
     pricing: PricingJob = Field(default_factory=PricingJob)
+    program: ProgramJob = Field(default_factory=ProgramJob)
 
 
 class ApplianceCatalogOut(BaseModel):
@@ -177,6 +212,8 @@ class AssessmentSummary(BaseModel):
     address: str
     has_results: bool
     results_stale: bool
+    stage: str = "assessed"
+    contract_php: Optional[float] = None
     system_kwp: Optional[float] = None
     annual_kwh: Optional[float] = None
     panel_count: Optional[int] = None

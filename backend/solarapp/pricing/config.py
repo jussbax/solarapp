@@ -241,6 +241,48 @@ class BoqRoles(BaseModel):
     battery_exclude_words: list[str] = Field(default_factory=lambda: ["rack", "controller module", "slave", "per kWh", "12V", "24V", "25.6V", "12 V", "24 V"])
 
 
+class PaymentMilestone(BaseModel):
+    key: str
+    label: str
+    share: float = Field(ge=0, le=1)
+    event: str = "signing"          # signing, materials_on_site, installation_done, commissioning, meter_installed
+    offset_days: int = 0
+
+
+class PaymentPlan(BaseModel):
+    """Customer payments. Milestone shares plus the instalment share should add up to 1."""
+    milestones: list[PaymentMilestone] = Field(default_factory=lambda: [
+        PaymentMilestone(key="downpayment", label="Downpayment on signing", share=0.5, event="signing"),
+        PaymentMilestone(key="delivery", label="On delivery of materials to site", share=0.4, event="materials_on_site"),
+        PaymentMilestone(key="completion", label="On commissioning", share=0.1, event="commissioning"),
+    ])
+    installments: int = Field(default=0, ge=0)              # number of equal instalments for the balance
+    installment_share: float = Field(default=0, ge=0, le=1)  # share of the contract paid by instalments
+    installment_interval_days: int = Field(default=30, ge=1)
+    installment_start_event: str = "commissioning"
+    installment_first_offset_days: int = Field(default=30, ge=0)
+
+
+class ProgramConfig(BaseModel):
+    """Program of works defaults: site day, durations and cash timing. Durations marked as assumptions have no data yet."""
+    depart_time: str = "06:00"
+    lunch_start: str = "12:00"
+    lunch_minutes: int = 60
+    travel_speed_kmh: float = 40            # for the extra km beyond the route's reference site
+    permit_prep_days: int = 2               # plans, PEE sign and seal
+    permit_approval_days: int = 7           # assumption: LGU electrical permit
+    cfei_days: int = 5                      # assumption: certificate of final electrical inspection after installation
+    netmeter_application_days: int = 30     # assumption: DU evaluation and net metering agreement
+    netmeter_meter_days: int = 15           # assumption: DU inspection and bi-directional meter after commissioning
+    sourcing_days_before_install: int = 1   # pickup run, cash at the suppliers
+    install_gap_after_permit_days: int = 1
+    commissioning_offset_days: int = 0      # 0 = on the last installation day
+    labour_paid_days_after_job: int = 0
+    commission_paid_days_after_job: int = 0
+    vat_remit_days_after_completion: int = 30
+    payment: PaymentPlan = Field(default_factory=PaymentPlan)
+
+
 class PricingConfig(BaseModel):
     company_base: str = "PL Development Inc., Pila, Laguna"
     truck: TruckConfig = Field(default_factory=TruckConfig)
@@ -255,6 +297,7 @@ class PricingConfig(BaseModel):
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     job: JobLevel = Field(default_factory=JobLevel)
     job_defaults: JobDefaults = Field(default_factory=JobDefaults)
+    program: ProgramConfig = Field(default_factory=ProgramConfig)
     wiring: WiringRules = Field(default_factory=WiringRules)
     roles: BoqRoles = Field(default_factory=BoqRoles)
     imported_from: Optional[str] = None

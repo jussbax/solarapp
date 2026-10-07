@@ -11,7 +11,8 @@ import NumberInput from '../components/NumberInput'
 import AuditEditor from '../components/AuditEditor'
 import AuditResults from '../components/AuditResults'
 import { PricingInputs, PricingResults } from '../components/PricingSection'
-import { emptyPricingJob } from '../types'
+import { ProgramInputs, ProgramResults } from '../components/ProgramSection'
+import { emptyPricingJob, emptyProgramJob } from '../types'
 
 export default function AssessmentPage({ status }: { status: DataStatus | null }) {
   const { id } = useParams()
@@ -161,6 +162,11 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         <PricingInputs job={doc.pricing ?? emptyPricingJob()} pricing={results?.pricing ?? null} onChange={(pricing) => patch({ pricing })} />
       </div>
 
+      <div className="card">
+        <h2>Program of works inputs</h2>
+        <ProgramInputs job={doc.program ?? emptyProgramJob()} program={results?.program ?? null} onChange={(program) => patch({ program })} />
+      </div>
+
       {error && <div className="banner bad">{error}</div>}
       <div className="actions">
         <button onClick={save} disabled={!!busy || !dirty}>
@@ -209,6 +215,12 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             quotationUrl={api.quotationUrl(aid)}
             stale={a.results_stale || dirty}
           />
+        </div>
+      )}
+      {results && results.program && (
+        <div className="card" id="program">
+          <h2>Program of works and cashflow</h2>
+          <ProgramResults program={results.program} programUrl={api.programUrl(aid)} stale={a.results_stale || dirty} />
         </div>
       )}
     </div>
