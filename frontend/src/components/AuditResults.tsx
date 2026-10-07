@@ -131,7 +131,7 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
           </table>
           <div className="muted" style={{ marginTop: 6 }}>
             {avb.reconciled
-              ? `Uncertain appliances (aircon, refrigerators, dispensers, pumps, storage heaters) scaled by ${n2(avb.scale_uncertain)}, then everything existing by ${n2(avb.scale_all)}. Future additions are not scaled.`
+              ? `Uncertain appliances (aircon, refrigerators, dispensers, pumps, storage heaters) scaled by ${n2(avb.scale_uncertain)}, then everything existing by ${n2(avb.scale_all)}. A future appliance of a type the house already has inherits that scale; new types are used as typed.`
               : 'Reconciliation is off; the audit is used as typed.'}
           </div>
         </>
