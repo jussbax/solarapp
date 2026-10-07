@@ -19,7 +19,7 @@ export interface CandidatePanel {
 export interface Reading {
   irradiance_wm2: number
   power_w: number
-  module_temp_c: number
+  module_temp_c: number | null
 }
 
 export interface ReadingSet {
@@ -174,6 +174,7 @@ export interface ReadingSetResult {
   avg_irradiance_wm2: number
   irradiance_spread_fraction: number
   avg_module_temp_c: number
+  module_temp_source: string
   ambient_temp_c: number | null
   ambient_source: string
   rise_per_kw_values: number[]
@@ -229,6 +230,7 @@ export interface ApplianceResult {
   kwh_per_day_audit: number
   kwh_per_day_reconciled: number
   scale: number
+  scale_inherited: boolean
   share_pct: number
   warnings: Warning[]
 }
@@ -428,9 +430,9 @@ export function newReadingSet(faceId: string | null): ReadingSet {
     ambient_temp_c: null,
     sky_condition: 'clear',
     readings: [
-      { irradiance_wm2: 0, power_w: 0, module_temp_c: 0 },
-      { irradiance_wm2: 0, power_w: 0, module_temp_c: 0 },
-      { irradiance_wm2: 0, power_w: 0, module_temp_c: 0 },
+      { irradiance_wm2: 0, power_w: 0, module_temp_c: null },
+      { irradiance_wm2: 0, power_w: 0, module_temp_c: null },
+      { irradiance_wm2: 0, power_w: 0, module_temp_c: null },
     ],
   }
 }

@@ -164,7 +164,10 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
                     </div>
                   ))}
                 </td>
-                <td>{a.status === 'existing' ? '' : <span className="badge neutral">{a.status === 'future' ? 'future' : 'removed'}</span>}</td>
+                <td>
+                  {a.status === 'existing' ? '' : <span className="badge neutral">{a.status === 'future' ? 'future' : 'removed'}</span>}
+                  {a.scale_inherited && <span className="muted" title="scaled like the existing appliances of this type"> ~</span>}
+                </td>
                 <td className="num">{a.quantity}</td>
                 <td className="num">{a.input_power_w}</td>
                 <td className="num" style={{ whiteSpace: 'nowrap' }}>
@@ -181,7 +184,7 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
         </table>
       </div>
       <div className="muted" style={{ marginTop: 6 }}>
-        * uncertain type, scaled first during reconciliation. Nameplate coincident peak {n1(audit.peak_kw)} kW, highest hourly average {n2(audit.peak_avg_kw)} kW
+        * uncertain type, scaled first during reconciliation. ~ future appliance scaled like the existing ones of its type. Nameplate coincident peak {n1(audit.peak_kw)} kW, highest hourly average {n2(audit.peak_avg_kw)} kW
         {audit.largest_motor_kw > 0 && `, largest motor ${n1(audit.largest_motor_kw)} kW starting at ${audit.largest_motor_multiplier}x`}.
       </div>
 

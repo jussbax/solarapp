@@ -78,7 +78,7 @@ export default function ReadingsEditor({
                     <th>#</th>
                     <th className="num">Irradiance (W/m2)</th>
                     <th className="num">MPPT power (W)</th>
-                    <th className="num">Panel temp (C, probe)</th>
+                    <th className="num">Panel temp (C, probe, optional)</th>
                     {r && <th className="num">k</th>}
                     {r && <th className="num">k site</th>}
                   </tr>
@@ -94,7 +94,7 @@ export default function ReadingsEditor({
                         <NumberInput value={rd.power_w} onChange={(v) => updateReading(i, k, { power_w: v ?? 0 })} min={0} />
                       </td>
                       <td>
-                        <NumberInput value={rd.module_temp_c} onChange={(v) => updateReading(i, k, { module_temp_c: v ?? 0 })} />
+                        <NumberInput value={rd.module_temp_c} onChange={(v) => updateReading(i, k, { module_temp_c: v })} allowEmpty placeholder="estimate" />
                       </td>
                       {r && <td className="num">{fmt(r.k_raw_values[k])}</td>}
                       {r && <td className="num">{fmt(r.k_site_values[k])}</td>}
@@ -105,7 +105,7 @@ export default function ReadingsEditor({
             </div>
             {r && (
               <div className="muted" style={{ marginTop: 6 }}>
-                k = <b>{fmt(r.k_raw)}</b>, site factor k_site = <b>{fmt(r.k_site)}</b>, avg irradiance {fmt(r.avg_irradiance_wm2, 0)} W/m2, panel {fmt(r.avg_module_temp_c, 1)} C,
+                k = <b>{fmt(r.k_raw)}</b>, site factor k_site = <b>{fmt(r.k_site)}</b>, avg irradiance {fmt(r.avg_irradiance_wm2, 0)} W/m2, panel {fmt(r.avg_module_temp_c, 1)} C{r.module_temp_source !== 'measured' ? ` (${r.module_temp_source})` : ''},
                 ambient {r.ambient_temp_c != null ? `${fmt(r.ambient_temp_c, 1)} C (${r.ambient_source})` : 'n/a'}, rise{' '}
                 {r.rise_per_kw != null ? `${fmt(r.rise_per_kw, 1)} C per kW/m2` : 'n/a'}.{' '}
                 {selectedIndex === i && <span className="badge good">used for the site</span>} {r.low_confidence && <span className="badge bad">low confidence</span>}

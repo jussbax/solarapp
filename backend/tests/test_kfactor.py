@@ -64,3 +64,21 @@ def test_select_highest_k_site():
     empty = evaluate_reading_set(ReadingSetInput(readings=[]))
     assert select_site_set([a, empty, b]) == 2
     assert select_site_set([empty]) is None
+
+
+def test_missing_module_temperature_is_estimated():
+    rows = [ReadingRow(930, 272.6), ReadingRow(1002, 272.6), ReadingRow(949, 272.6)]
+    r = evaluate_reading_set(ReadingSetInput(readings=rows, test_panel_rating_w=350), ambient_estimate_c=29.0)
+    assert r.module_temp_source == "estimated" and r.ambient_source == "estimated"
+    assert 50 < r.avg_module_temp_c < 70  # PVGIS thermal model at ~960 W/m2 and 29 C ambient
+    assert r.rise_per_kw is None and not r.rise_is_plausible
+    codes = {w.code for w in r.warnings}
+    assert "module_temp_estimated" in codes and "no_ambient" not in codes
+    assert abs(r.k_raw - sum(272.6 / (350 * g / 1000) for g in (930, 1002, 949)) / 3) < 1e-9
+    assert r.k_site > r.k_raw
+    # no ambient at all: assumed 30 C, still computes
+    r2 = evaluate_reading_set(ReadingSetInput(readings=rows, test_panel_rating_w=350))
+    assert r2.ambient_source == "assumed" and r2.valid
+    # mixed: one probe reading keeps the rise from that row only
+    r3 = evaluate_reading_set(ReadingSetInput(readings=[ReadingRow(930, 272.6, 58), ReadingRow(1002, 272.6), ReadingRow(949, 272.6)], ambient_temp_c=31, test_panel_rating_w=350))
+    assert r3.module_temp_source == "mixed" and r3.rise_per_kw is not None and len(r3.rise_per_kw_values) == 1

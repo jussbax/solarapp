@@ -15,7 +15,9 @@ Conventions (DECISIONS.md, energy audit section):
 * Reconciliation with the bill: appliances in "uncertain" categories are
   scaled first, within a floor and a nameplate ceiling, then any remaining
   gap is spread proportionally over all existing appliances. Future
-  appliances are never scaled and never counted against the bill.
+  appliances never count against the bill; a future appliance whose type the
+  household already has inherits that type's scale (a planned second aircon
+  behaves like the existing one), otherwise it is used as typed.
 """
 from __future__ import annotations
 
@@ -273,8 +275,13 @@ def run_audit(appliances: list[Appliance], bills: list[Bill], reconcile: bool = 
                 ceiling_hit = wanted > ceiling
             after_u = est_f + s_u * est_u
             s_all = billed / after_u if after_u > 0 else 1.0
+            s_u, s_all = float(s_u), float(s_all)
             for p in existing:
                 scale[p.appliance.id] = s_all * (s_u if p.appliance.uncertain else 1.0)
+            existing_categories = {p.appliance.category for p in existing}
+            for p in profiles:
+                if p.appliance.status == "future" and p.appliance.category in existing_categories:
+                    scale[p.appliance.id] = s_all * (s_u if p.appliance.uncertain else 1.0)
         if abs(gap_pct) > GAP_WARN_PCT:
             direction = "over" if gap_pct > 0 else "under"
             warnings.append({"code": "audit_gap", "message": f"The audit as typed {direction}states the bill by {abs(gap_pct):.0f}% ({audit_total:,.0f} vs {billed:,.0f} kWh)."})
@@ -283,17 +290,17 @@ def run_audit(appliances: list[Appliance], bills: list[Bill], reconcile: bool = 
         if ceiling_hit:
             warnings.append({"code": "reconcile_ceiling", "message": "Uncertain appliances reached nameplate; the remaining gap was spread over every appliance. Something may be missing from the audit."})
         audit_vs_bill = {
-            "billed_kwh": billed,
-            "audit_kwh": audit_total,
-            "gap_pct": gap_pct,
-            "uncertain_kwh": est_u,
-            "fixed_kwh": est_f,
-            "scale_uncertain": s_u,
-            "scale_all": s_all,
+            "billed_kwh": float(billed),
+            "audit_kwh": float(audit_total),
+            "gap_pct": float(gap_pct),
+            "uncertain_kwh": float(est_u),
+            "fixed_kwh": float(est_f),
+            "scale_uncertain": float(s_u),
+            "scale_all": float(s_all),
             "reconciled": bool(reconcile and audit_total > 0),
             "bills": [{"billing_month": b.billing_month, "kwh": b.kwh, "days": b.period_days,
-                       "audit_kwh": sum(_daily_kwh(p.energy_wh)[b.month - 1] * b.period_days for p in existing),
-                       "reconciled_kwh": sum(_daily_kwh(p.energy_wh)[b.month - 1] * b.period_days * scale[p.appliance.id] for p in existing)}
+                       "audit_kwh": float(sum(_daily_kwh(p.energy_wh)[b.month - 1] * b.period_days for p in existing)),
+                       "reconciled_kwh": float(sum(_daily_kwh(p.energy_wh)[b.month - 1] * b.period_days * scale[p.appliance.id] for p in existing))}
                       for b in valid_bills],
         }
 
@@ -331,13 +338,14 @@ def run_audit(appliances: list[Appliance], bills: list[Bill], reconcile: bool = 
             "id": p.appliance.id, "name": p.appliance.name, "category": p.appliance.category, "category_label": p.appliance.cat.label,
             "status": p.appliance.status, "quantity": p.appliance.quantity, "input_power_w": p.appliance.input_power_w,
             "duty_factor": p.appliance.duty, "duty_is_default": p.appliance.duty_factor is None, "uncertain": p.appliance.uncertain,
-            "hours_per_day": p.hours_per_day, "kwh_per_day_audit": kwh_day, "kwh_per_day_reconciled": rec,
-            "scale": scale[p.appliance.id], "warnings": p.warnings,
+            "hours_per_day": float(p.hours_per_day), "kwh_per_day_audit": float(kwh_day), "kwh_per_day_reconciled": float(rec),
+            "scale": float(scale[p.appliance.id]), "scale_inherited": bool(p.appliance.status == "future" and scale[p.appliance.id] != 1.0),
+            "warnings": p.warnings,
         })
     for r in rows:
-        r["share_pct"] = (r["kwh_per_day_reconciled"] / total_rec * 100.0) if (total_rec > 0 and r["status"] in ("existing", "future")) else 0.0
+        r["share_pct"] = float(r["kwh_per_day_reconciled"] / total_rec * 100.0) if (total_rec > 0 and r["status"] in ("existing", "future")) else 0.0
 
-    future_daily = float(sum(_daily_kwh(p.energy_wh).max() for p in profiles if p.appliance.status == "future"))
+    future_daily = float(sum(_daily_kwh(p.energy_wh).max() * scale[p.appliance.id] for p in profiles if p.appliance.status == "future"))
     weekday_profiles = {m + 1: (load_wh[m] / 1000.0).round(4).tolist() for m in range(12)}
 
     return AuditResult(

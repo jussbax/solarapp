@@ -28,7 +28,7 @@ class CandidatePanel(BaseModel):
 class Reading(BaseModel):
     irradiance_wm2: float = Field(ge=0)
     power_w: float = Field(ge=0)
-    module_temp_c: float
+    module_temp_c: Optional[float] = None  # probe reading; blank = estimated
 
 
 class ReadingSet(BaseModel):

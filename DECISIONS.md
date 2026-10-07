@@ -131,9 +131,12 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   appliances in uncertain types (aircon, refrigerators, freezers, water
   dispensers, pumps, storage heaters) are scaled first, between a 15 percent
   floor and their nameplate ceiling, then any remaining gap is spread
-  proportionally over every existing appliance. Future additions are never
-  scaled and never counted against the bill; appliances marked "to be
-  removed" count against the bill but not in sizing. A gap above 10 percent
+  proportionally over every existing appliance. Future additions never
+  count against the bill. A future appliance of a type the household already
+  has inherits that type's scale, so a planned second aircon behaves like the
+  existing one; a future appliance of a new type is used as typed.
+  Appliances marked "to be removed" count against the bill but not in
+  sizing. A gap above 10 percent
   before reconciliation is flagged. The Tanauan test audit as typed was
   about 1.9 times the bill even after duty factors, so the aircon hit the
   floor and the rest was spread; the reconciled profile matches the bill.

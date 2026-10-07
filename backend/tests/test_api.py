@@ -112,6 +112,7 @@ TANAUAN_AUDIT = {
         {"id": "led", "name": "LED bulb", "category": "lighting", "input_power_w": 9, "quantity": 9, "windows": [{"start": "18:00", "end": "06:00"}]},
         {"id": "wash", "name": "Top load washer", "category": "washing_machine", "input_power_w": 9014, "quantity": 1, "windows": [{"start": "06:00", "end": "07:30", "days": [5, 6]}]},
         {"id": "ev", "name": "EV charger", "category": "ev_charger", "input_power_w": 3500, "status": "future", "windows": [{"start": "22:00", "end": "02:00"}]},
+        {"id": "ac2", "name": "Second split AC", "category": "aircon_inverter", "input_power_w": 2100, "status": "future", "windows": [{"start": "08:00", "end": "01:00"}]},
     ],
     "bills": [{"id": "b1", "billing_month": "2026-08", "kwh": 338, "days": 31, "amount_php": 3987.17, "utility": "BATELEC II"}],
     "reconcile": True,
@@ -140,6 +141,10 @@ def test_audit_and_sizing_flow(client):
     assert len(sizing["monthly"]) == 12 and "8" in sizing["profiles"]
     # future EV load is included in sizing but not in the bill comparison
     assert audit["future_daily_kwh"] > 0
+    rows = {a["id"]: a for a in audit["appliances"]}
+    assert rows["ac2"]["scale_inherited"] is True and rows["ev"]["scale_inherited"] is False
+    import json
+    json.dumps(res)  # everything stored must be plain JSON
 
     # appliances were remembered in the catalogue
     found = client.get("/api/appliances", params={"q": "carrier"}).json()

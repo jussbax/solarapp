@@ -93,7 +93,7 @@ def test_future_and_retiring_status():
     ]
     res = run_audit(apps, [Bill("b", "2026-05", 150.0, days=30)])
     rows = {r["id"]: r for r in res.appliances}
-    assert rows["new"]["scale"] == 1.0  # future never scaled
+    assert rows["new"]["scale"] == 1.0  # future of a type the house does not have yet: used as typed
     assert rows["old"]["scale"] != 1.0  # retiring counts against the bill
     # sizing set excludes the retiring unit and includes the future one
     expected_daily = rows["new"]["kwh_per_day_reconciled"] + rows["led"]["kwh_per_day_reconciled"]
@@ -106,3 +106,17 @@ def test_no_bills_keeps_audit_as_typed():
     assert res.audit_vs_bill is None
     assert any(w["code"] == "no_bills" for w in res.warnings)
     assert np.allclose(res.load_kw, res.load_kw_unreconciled)
+
+
+def test_future_copy_of_existing_type_inherits_scale():
+    apps = [
+        Appliance("ac", "Split AC", "aircon_inverter", 2100, windows=[Window("08:00", "01:00")]),
+        Appliance("ac2", "Second split AC (planned)", "aircon_inverter", 2100, status="future", windows=[Window("08:00", "01:00")]),
+        Appliance("led", "LED bulb", "lighting", 9, quantity=9, windows=[Window("18:00", "06:00")]),
+        Appliance("ev", "EV charger (planned)", "ev_charger", 3500, status="future", windows=[Window("22:00", "02:00")]),
+    ]
+    res = run_audit(apps, [Bill("b", "2026-08", 338.0, days=31)])
+    rows = {r["id"]: r for r in res.appliances}
+    assert rows["ac2"]["scale"] == rows["ac"]["scale"] != 1.0 and rows["ac2"]["scale_inherited"]
+    assert rows["ev"]["scale"] == 1.0 and not rows["ev"]["scale_inherited"]
+    assert abs(rows["ac2"]["kwh_per_day_reconciled"] - rows["ac"]["kwh_per_day_reconciled"]) < 1e-9
