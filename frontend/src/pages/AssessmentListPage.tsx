@@ -12,10 +12,8 @@ export default function AssessmentListPage() {
     api.listAssessments().then(setItems).catch((e) => setError(e.message))
   }, [])
 
-  const create = async (mode: 'measured' | 'desk') => {
-    const doc = emptyDoc()
-    doc.mode = mode
-    const a = await api.createAssessment(doc)
+  const create = async () => {
+    const a = await api.createAssessment(emptyDoc())
     navigate(`/assessments/${a.id}`)
   }
 
@@ -24,10 +22,9 @@ export default function AssessmentListPage() {
       <div className="row" style={{ alignItems: 'center', marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>Assessments</h2>
         <div className="narrow inline">
-          <button className="primary" onClick={() => create('measured')}>
+          <button className="primary" onClick={create}>
             New assessment
           </button>
-          <button onClick={() => create('desk')}>New desk estimate</button>
         </div>
       </div>
       {error && <div className="banner bad">{error}</div>}
@@ -40,7 +37,6 @@ export default function AssessmentListPage() {
           <Link key={a.id} to={`/assessments/${a.id}`} className="list-item">
             <div className="title">
               {a.customer_name || <span className="muted">(no customer name)</span>}{' '}
-              {a.mode === 'desk' && <span className="badge neutral">desk estimate</span>}{' '}
               {a.results_stale && <span className="badge neutral">edited since last compute</span>}
             </div>
             <div className="muted">

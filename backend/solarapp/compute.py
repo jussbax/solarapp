@@ -21,7 +21,7 @@ def _warn(code: str, message: str) -> dict:
     return {"code": code, "message": message}
 
 
-def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference, default_desk_k_site: Optional[float]) -> dict:
+def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference) -> dict:
     if doc.lat is None or doc.lon is None:
         raise ComputeError("Set the site location (map pin) first.")
     if not doc.faces:
@@ -64,7 +64,6 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
 
     # k factor
     set_results: list[kfactor.ReadingSetResult] = []
-    k_source = "measured"
     face_names = {f.id: f.name for f in doc.faces}
     for i, s in enumerate(doc.reading_sets):
         label = s.label or (face_names.get(s.face_id) if s.face_id else None) or f"Set {i + 1}"
@@ -79,29 +78,17 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         )
         set_results.append(kfactor.evaluate_reading_set(inp, amb_est))
 
-    selected_set: Optional[int] = kfactor.select_site_set(set_results) if doc.mode == "measured" else None
-    if doc.mode == "measured" and selected_set is None:
-        raise ComputeError("Measured mode needs at least one reading set with readings. Switch to desk estimate if there are none yet.")
-
-    if selected_set is not None:
-        sr = set_results[selected_set]
-        k_site, k_raw = sr.k_site, sr.k_raw
-        if sr.rise_per_kw is not None and sr.rise_is_plausible:
-            thermal = ThermalModel("site_rise", sr.rise_per_kw)
-        else:
-            thermal = ThermalModel()
-        if sr.low_confidence:
-            warnings.append(_warn("low_confidence_k", f"The selected reading set '{sr.label}' is low confidence; see its warnings."))
+    selected_set = kfactor.select_site_set(set_results)
+    if selected_set is None:
+        raise ComputeError("Add at least one reading set with its three readings.")
+    sr = set_results[selected_set]
+    k_site, k_raw = sr.k_site, sr.k_raw
+    if sr.rise_per_kw is not None and sr.rise_is_plausible:
+        thermal = ThermalModel("site_rise", sr.rise_per_kw)
     else:
-        if doc.desk_k_site is not None:
-            k_site, k_source = doc.desk_k_site, "desk_manual"
-        elif default_desk_k_site is not None:
-            k_site, k_source = default_desk_k_site, "desk_average"
-        else:
-            k_site, k_source = 1.0, "desk_default"
-        k_raw = k_site
         thermal = ThermalModel()
-        warnings.append(_warn("desk_estimate", f"Desk estimate without on-site readings; site factor {k_site:.3f} ({k_source.replace('_', ' ')})."))
+    if sr.low_confidence:
+        warnings.append(_warn("low_confidence_k", f"The selected reading set '{sr.label}' is low confidence; see its warnings."))
 
     face_specs = [
         FaceSpec(f.id, f.name, f.tilt_deg, f.azimuth_deg, selected["faces"][f.id]["count"]) for f in doc.faces
@@ -144,8 +131,11 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         "dataset": {**cell.to_dict(), "synthetic": pvgis.synthetic, "source": pvgis.info().get("source")},
         "panels": panel_results,
         "selected_panel_id": selected_panel.id,
+        "best_panel": {
+            "id": doc.panels[best_idx].id, "name": doc.panels[best_idx].name, "watt_peak": doc.panels[best_idx].watt_peak,
+            "count": panel_results[best_idx]["total_count"], "system_kwp": panel_results[best_idx]["system_kwp"],
+        },
         "k": {
-            "source": k_source,
             "sets": [set_to_dict(r) for r in set_results],
             "selected_set_index": selected_set,
             "k_site": k_site,

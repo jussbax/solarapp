@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -54,8 +54,6 @@ class AssessmentDoc(BaseModel):
     notes: str = ""
     lat: Optional[float] = Field(default=None, ge=-90, le=90)
     lon: Optional[float] = Field(default=None, ge=-180, le=180)
-    mode: Literal["measured", "desk"] = "measured"
-    desk_k_site: Optional[float] = Field(default=None, gt=0, le=1.5)
     faces: list[RoofFace] = Field(default_factory=list)
     panels: list[CandidatePanel] = Field(default_factory=list)
     selected_panel_id: Optional[str] = None
@@ -72,7 +70,6 @@ class AssessmentSummary(BaseModel):
     updated_at: datetime
     customer_name: str
     address: str
-    mode: str
     has_results: bool
     results_stale: bool
     system_kwp: Optional[float] = None
@@ -97,8 +94,6 @@ class LoginIn(BaseModel):
 class SettingsOut(BaseModel):
     company_name: str
     company_contact: str
-    default_desk_k_site: Optional[float] = None
-    measured_assessments: int = 0
 
 
 class SettingsIn(BaseModel):

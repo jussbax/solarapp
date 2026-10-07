@@ -33,21 +33,6 @@ def _out(a: Assessment) -> AssessmentOut:
     )
 
 
-def average_measured_k_site(session: Session, exclude_id: Optional[int] = None) -> tuple[Optional[float], int]:
-    """Average k_site over saved assessments computed from readings (for desk estimates)."""
-    values = []
-    for a in session.exec(select(Assessment)):
-        if exclude_id is not None and a.id == exclude_id:
-            continue
-        r = a.results or {}
-        k = r.get("k") or {}
-        if k.get("source") == "measured" and isinstance(k.get("k_site"), (int, float)):
-            values.append(float(k["k_site"]))
-    if not values:
-        return None, 0
-    return sum(values) / len(values), len(values)
-
-
 @router.get("", response_model=list[AssessmentSummary])
 def list_assessments(session: Session = Depends(get_session)) -> list[AssessmentSummary]:
     rows = session.exec(select(Assessment).order_by(Assessment.updated_at.desc())).all()
@@ -56,7 +41,7 @@ def list_assessments(session: Session = Depends(get_session)) -> list[Assessment
         prod = (a.results or {}).get("production") or {}
         out.append(AssessmentSummary(
             id=a.id, created_at=a.created_at, updated_at=a.updated_at, customer_name=a.customer_name,
-            address=a.address, mode=a.mode, has_results=a.results is not None, results_stale=a.results_stale,
+            address=a.address, has_results=a.results is not None, results_stale=a.results_stale,
             system_kwp=prod.get("system_kwp"), annual_kwh=prod.get("annual_kwh"), panel_count=prod.get("total_panels"),
         ))
     return out
@@ -64,7 +49,7 @@ def list_assessments(session: Session = Depends(get_session)) -> list[Assessment
 
 @router.post("", response_model=AssessmentOut, status_code=201)
 def create_assessment(doc: AssessmentDoc, session: Session = Depends(get_session)) -> AssessmentOut:
-    a = Assessment(customer_name=doc.customer_name, address=doc.address, mode=doc.mode, doc=doc.model_dump(mode="json"))
+    a = Assessment(customer_name=doc.customer_name, address=doc.address, doc=doc.model_dump(mode="json"))
     session.add(a)
     session.commit()
     session.refresh(a)
@@ -82,7 +67,7 @@ def update_assessment(assessment_id: int, doc: AssessmentDoc, session: Session =
     new_doc = doc.model_dump(mode="json")
     if new_doc != a.doc:
         a.doc = new_doc
-        a.customer_name, a.address, a.mode = doc.customer_name, doc.address, doc.mode
+        a.customer_name, a.address = doc.customer_name, doc.address
         a.results_stale = a.results is not None
         a.updated_at = utcnow()
         session.add(a)
@@ -111,11 +96,10 @@ def compute_assessment(
     a = _get(session, assessment_id)
     if doc is not None:
         a.doc = doc.model_dump(mode="json")
-        a.customer_name, a.address, a.mode = doc.customer_name, doc.address, doc.mode
+        a.customer_name, a.address = doc.customer_name, doc.address
     parsed = AssessmentDoc.model_validate(a.doc)
-    default_k, _ = average_measured_k_site(session, exclude_id=a.id)
     try:
-        a.results = compute_results(parsed, pvgis, nasa, default_k)
+        a.results = compute_results(parsed, pvgis, nasa)
     except ComputeError as e:
         raise HTTPException(status_code=422, detail=str(e))
     a.results_stale = False

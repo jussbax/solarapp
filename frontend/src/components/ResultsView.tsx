@@ -15,7 +15,7 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
   const dev = results.comparison.deviation_pct
   const chart = results.months.map((m, i) => ({ month: m, 'This roof': Math.round(prod.monthly_kwh[i]), 'PVGIS reference': Math.round(ref.monthly_kwh[i]) }))
   const k = results.k
-  const isDesk = k.source !== 'measured'
+  const best = results.best_panel
 
   return (
     <div>
@@ -32,6 +32,12 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
           <div className="value">{prod.total_panels}</div>
           <div className="sub">
             {selected.panel.name || 'panel'} {selected.panel.watt_peak} W
+            {selected.panel.id !== best.id && (
+              <>
+                <br />
+                most kWp: {best.name || 'panel'} x {best.count} = {n2(best.system_kwp)} kWp
+              </>
+            )}
           </div>
         </div>
         <div className="kpi">
@@ -51,7 +57,7 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
           </div>
         </div>
         <div className="kpi">
-          <div className="label">{isDesk ? 'Estimate vs PVGIS' : 'Measured vs PVGIS'}</div>
+          <div className="label">Measured vs PVGIS</div>
           <div className="value">
             <span className={`badge ${Math.abs(dev) < 10 ? 'good' : 'bad'}`} style={{ fontSize: 18 }}>
               {pct(dev)}
@@ -165,10 +171,6 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
         <table>
           <tbody>
             <tr>
-              <th>Source</th>
-              <td>{k.source.replace('_', ' ')}</td>
-            </tr>
-            <tr>
               <th>k (owner's formula, average of rows)</th>
               <td>{n3(k.k_raw)}</td>
             </tr>
@@ -200,7 +202,6 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
               <th>Usable (m)</th>
               <th className="num">Portrait</th>
               <th className="num">Landscape</th>
-              <th className="num">Rule of thumb</th>
               <th className="num">Used</th>
             </tr>
           </thead>
@@ -222,7 +223,6 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
                   <td className="num">
                     {q.count} ({q.along_length} x {q.along_width})
                   </td>
-                  <td className="num">{l.rule_of_thumb_count}</td>
                   <td className="num">
                     {l.count} {l.override_applied && <span className="badge neutral">override</span>}
                   </td>

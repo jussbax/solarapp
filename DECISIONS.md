@@ -64,9 +64,11 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   (default 0.6 m, editable), then rows x columns. Both panel orientations are
   tried and the larger count wins. Gap between panels is editable, default 0
   to match the current method. A manual count override exists per face.
+  The old rule of thumb is not shown; the count is fully automated.
 - Panels are typed in per assessment (name, Wp, length, width); several
-  candidates can be entered and the one with the most kWp is marked and
-  selected by default. A shared catalogue comes later.
+  candidates can be entered and the app shows the panel and count that give
+  the most kWp, which is used unless another candidate is ticked. A shared
+  catalogue comes later.
 
 ## Simulation
 
@@ -81,8 +83,9 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   `(measured - reference) / reference`, shown as a signed percent.
 - For continuity the owner's current formula is also shown:
   `N x Wp x k_raw x average in-plane sun hours x 30`.
-- Desk estimate mode (no readings yet) uses the average `k_site` of saved
-  measured assessments, or 1.0 when none exist, and is labelled unmeasured.
+- No desk estimate mode: every assessment needs on-site readings. A
+  "simplified quick estimate" from location and monthly kWh consumption is
+  planned once the energy audit and sizing modules exist.
 
 ## Product
 

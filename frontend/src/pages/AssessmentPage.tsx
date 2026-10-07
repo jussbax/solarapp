@@ -92,13 +92,6 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             <label>Address</label>
             <input value={doc.address} onChange={(e) => patch({ address: e.target.value })} />
           </div>
-          <div className="narrow">
-            <label>Mode</label>
-            <select value={doc.mode} onChange={(e) => patch({ mode: e.target.value as AssessmentDoc['mode'] })}>
-              <option value="measured">Measured on site</option>
-              <option value="desk">Desk estimate (no readings yet)</option>
-            </select>
-          </div>
         </div>
         <div className="field">
           <label>Notes (internal)</label>
@@ -133,8 +126,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         />
       </div>
 
-      {doc.mode === 'measured' ? (
-        <div className="card">
+      <div className="card">
           <h2>On-site readings</h2>
           <div className="row" style={{ marginBottom: 10 }}>
             <div className="narrow" style={{ width: 160 }}>
@@ -153,19 +145,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             selectedIndex={results?.k.selected_set_index}
             onChange={(reading_sets) => patch({ reading_sets })}
           />
-        </div>
-      ) : (
-        <div className="card">
-          <h2>Desk estimate</h2>
-          <div className="row">
-            <div className="narrow" style={{ width: 220 }}>
-              <label>Site factor to assume (blank = average of measured sites)</label>
-              <NumberInput value={doc.desk_k_site} onChange={(v) => patch({ desk_k_site: v })} allowEmpty min={0.3} max={1.5} step={0.01} placeholder="average" />
-            </div>
-          </div>
-          <div className="muted">No on-site readings. The PVGIS thermal model is used. Results are labelled as a preliminary estimate.</div>
-        </div>
-      )}
+      </div>
 
       {error && <div className="banner bad">{error}</div>}
       <div className="actions">

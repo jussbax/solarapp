@@ -12,7 +12,7 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
 1. Drop a map pin on the roof. The nearest PVGIS grid cell is used.
 2. Enter roof faces (length, width, tilt, facing) and candidate panels
    (Wp, length, width). The app fits panels in rows and columns, tries both
-   orientations, and marks the panel that gives the most kWp.
+   orientations, and shows the panel and count that give the most kWp.
 3. Enter the on-site readings: three simultaneous rows of irradiance, MPPT
    power and panel surface temperature per roof face. The app computes the
    owner's k per row, removes the heat and low-light effect present at the
@@ -24,9 +24,6 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    and the owner's original formula for continuity.
 5. Produces a trimmed customer PDF. Readings, k, warnings and dataset details
    stay on the internal page.
-
-Desk estimates (no readings yet) use the average site factor of saved
-measured assessments and are labelled as preliminary.
 
 ## Deploy on an Ubuntu server with Docker
 
@@ -129,7 +126,7 @@ customer PDF while synthetic data is in use.
 
 ```
 backend/solarapp/core/kfactor.py      k per reading, site factor, thermal rise, quality checks
-backend/solarapp/core/layout.py       panel fitting (rows x columns, both orientations, rule of thumb)
+backend/solarapp/core/layout.py       panel fitting (rows x columns, both orientations)
 backend/solarapp/core/simulation.py   hourly pvlib simulation and monthly aggregation
 backend/solarapp/core/dataset.py      nearest-cell lookup and TMY loading
 backend/solarapp/compute.py           turns an assessment into results

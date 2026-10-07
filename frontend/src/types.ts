@@ -38,8 +38,6 @@ export interface AssessmentDoc {
   notes: string
   lat: number | null
   lon: number | null
-  mode: 'measured' | 'desk'
-  desk_k_site: number | null
   faces: RoofFace[]
   panels: CandidatePanel[]
   selected_panel_id: string | null
@@ -56,7 +54,6 @@ export interface AssessmentSummary {
   updated_at: string
   customer_name: string
   address: string
-  mode: string
   has_results: boolean
   results_stale: boolean
   system_kwp: number | null
@@ -81,7 +78,6 @@ export interface LayoutResult {
   usable_width_m: number
   options: LayoutOption[]
   best: LayoutOption
-  rule_of_thumb_count: number
   count: number
   override_applied: boolean
 }
@@ -151,8 +147,8 @@ export interface Results {
   dataset: { id: string; lat: number; lon: number; elevation_m: number; radiation_db: string; distance_km: number; synthetic: boolean; source: string | null }
   panels: PanelResult[]
   selected_panel_id: string
+  best_panel: { id: string; name: string; watt_peak: number; count: number; system_kwp: number }
   k: {
-    source: string
     sets: ReadingSetResult[]
     selected_set_index: number | null
     k_site: number
@@ -194,8 +190,6 @@ export interface DataStatus {
 export interface AppSettings {
   company_name: string
   company_contact: string
-  default_desk_k_site: number | null
-  measured_assessments: number
 }
 
 export const SKY_CONDITIONS = ['clear', 'partly cloudy', 'hazy', 'cloudy', 'overcast']
@@ -211,8 +205,6 @@ export function emptyDoc(): AssessmentDoc {
     notes: '',
     lat: null,
     lon: null,
-    mode: 'measured',
-    desk_k_site: null,
     faces: [{ id: newId(), name: 'Roof 1', length_m: 10, width_m: 6, tilt_deg: 15, azimuth_deg: 180, panel_count_override: null }],
     panels: [{ id: newId(), name: '', watt_peak: 550, length_m: 2.278, width_m: 1.134 }],
     selected_panel_id: null,

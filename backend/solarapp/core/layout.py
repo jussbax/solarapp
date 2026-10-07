@@ -1,10 +1,8 @@
 """Panel fitting on a rectangular roof face.
 
-Owner's method: subtract a setback from each dimension, then rows times
-columns. Both panel orientations are tried and the larger count is kept. The
-owner's rule of thumb (longer roof side divided by the shorter panel side) is
-reported alongside for continuity. Gap between panels defaults to zero, which
-matches the current manual method.
+Subtract a setback from each dimension, then rows times columns. Both panel
+orientations are tried and the larger count is kept. Gap between panels
+defaults to zero, which matches the manual method.
 """
 from __future__ import annotations
 
@@ -26,7 +24,6 @@ class LayoutResult:
     usable_width_m: float
     options: list[LayoutOption]
     best: LayoutOption
-    rule_of_thumb_count: int
     count: int
     override_applied: bool
 
@@ -69,10 +66,6 @@ def fit_panels(
     landscape.count = landscape.along_length * landscape.along_width
     best = portrait if portrait.count >= landscape.count else landscape
 
-    big_roof, small_roof = max(usable_l, usable_w), min(usable_l, usable_w)
-    big_panel, small_panel = max(panel_length_m, panel_width_m), min(panel_length_m, panel_width_m)
-    rule = _count_along(big_roof, small_panel, gap_m) * _count_along(small_roof, big_panel, gap_m)
-
     override = count_override is not None and count_override >= 0
     count = int(count_override) if override else best.count
     return LayoutResult(
@@ -80,7 +73,6 @@ def fit_panels(
         usable_width_m=usable_w,
         options=[portrait, landscape],
         best=best,
-        rule_of_thumb_count=rule,
         count=count,
         override_applied=override,
     )

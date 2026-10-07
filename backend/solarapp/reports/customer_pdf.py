@@ -117,10 +117,7 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     notes = [
         "Production is estimated hour by hour over a typical weather year for this location (PVGIS data) and the roof's tilt and facing.",
     ]
-    if results["k"]["source"] == "measured":
-        notes.append("The estimate is adjusted with measurements taken on your roof with a calibrated test panel, irradiance meter and MPPT meter.")
-    else:
-        notes.append("This is a preliminary estimate prepared before on-site measurement. Figures will be refined after the roof visit.")
+    notes.append("The estimate is adjusted with measurements taken on your roof with a calibrated test panel, irradiance meter and MPPT meter.")
     notes.append("Figures are production at the solar panels for a typical year. Actual weather varies from year to year.")
     if stale:
         notes.append("Note: inputs were edited after this calculation.")

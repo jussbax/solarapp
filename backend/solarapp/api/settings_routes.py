@@ -22,10 +22,7 @@ def company_settings(session: Session, settings: Settings) -> dict:
 
 @router.get("", response_model=SettingsOut)
 def read_settings(session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> SettingsOut:
-    from .assessments import average_measured_k_site  # local import avoids a cycle
-
-    avg, n = average_measured_k_site(session)
-    return SettingsOut(**company_settings(session, settings), default_desk_k_site=avg, measured_assessments=n)
+    return SettingsOut(**company_settings(session, settings))
 
 
 @router.put("", response_model=SettingsOut)

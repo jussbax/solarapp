@@ -18,6 +18,7 @@ export default function PanelsEditor({
   const add = () => onChange([...panels, { id: newId(), name: '', watt_peak: 550, length_m: 2.278, width_m: 1.134 }])
   const remove = (i: number) => onChange(panels.filter((_, j) => j !== i))
   const resultFor = (id: string) => results?.find((r) => r.panel.id === id)
+  const best = results?.find((r) => r.best)
 
   return (
     <div className="table-wrap">
@@ -68,12 +69,18 @@ export default function PanelsEditor({
           })}
         </tbody>
       </table>
+      {best && (
+        <div className="banner info" style={{ marginTop: 8 }}>
+          Most kWp: <b>{best.panel.name || 'panel'}</b>, {best.total_count} panels x {best.panel.watt_peak} W = <b>{best.system_kwp.toFixed(2)} kWp</b>
+          {selectedId && selectedId !== best.panel.id && ' (a different panel is ticked under Use)'}
+        </div>
+      )}
       <div style={{ marginTop: 8 }}>
         <button type="button" onClick={add}>
           Add candidate panel
         </button>
         <span className="muted" style={{ marginLeft: 10 }}>
-          Leave "Use" unselected to let the app pick the panel with the most kWp.
+          Leave "Use" unticked to use the panel with the most kWp.
         </span>
       </div>
     </div>

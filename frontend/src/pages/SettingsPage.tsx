@@ -32,10 +32,6 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
               <label>Contact line (address, phone, email)</label>
               <input value={s.company_contact} onChange={(e) => setS({ ...s, company_contact: e.target.value })} />
             </div>
-            <div className="muted" style={{ marginBottom: 10 }}>
-              Desk estimates use the average site factor of saved measured assessments:{' '}
-              {s.default_desk_k_site != null ? `${s.default_desk_k_site.toFixed(3)} from ${s.measured_assessments} assessment(s)` : 'none yet, 1.0 is used'}.
-            </div>
             <button className="primary" type="submit">
               Save
             </button>{' '}

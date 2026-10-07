@@ -19,7 +19,6 @@ class Assessment(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
     customer_name: str = ""
     address: str = ""
-    mode: str = "measured"
     doc: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     results: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
     results_stale: bool = False

@@ -17,7 +17,7 @@ def client(tmp_path_factory):
 
 
 DOC = {
-    "customer_name": "Juan Dela Cruz", "address": "Quezon City", "lat": 14.65, "lon": 121.03, "mode": "measured",
+    "customer_name": "Juan Dela Cruz", "address": "Quezon City", "lat": 14.65, "lon": 121.03,
     "faces": [
         {"id": "f1", "name": "Front", "length_m": 10.1, "width_m": 6.4, "tilt_deg": 15, "azimuth_deg": 180},
         {"id": "f2", "name": "Back", "length_m": 10.1, "width_m": 6.4, "tilt_deg": 15, "azimuth_deg": 0},
@@ -57,12 +57,12 @@ def test_login_and_flow(client):
     r = client.post(f"/api/assessments/{aid}/compute")
     assert r.status_code == 200, r.text
     res = r.json()["results"]
-    assert res["k"]["source"] == "measured"
     assert res["k"]["selected_set_index"] == 0  # front set has the higher k_site
     assert res["k"]["thermal_kind"] == "site_rise"
     assert res["production"]["total_panels"] > 0
     assert res["production"]["annual_kwh"] > 0
     assert res["panels"][0]["best"] is True  # 550 W gives more kWp
+    assert res["best_panel"]["id"] == "p1" and res["best_panel"]["count"] == res["production"]["total_panels"]
     assert abs(res["comparison"]["deviation_pct"]) < 60
     assert res["nasa_reference"] is not None
     # set 2 has no ambient -> estimated from the dataset
@@ -79,18 +79,10 @@ def test_login_and_flow(client):
     assert r.json()["results_stale"] is True
     assert client.get("/api/assessments").json()[0]["customer_name"] == "Edited"
 
-    # desk mode uses the average measured k_site from other assessments
-    desk = dict(DOC)
-    desk.update({"mode": "desk", "reading_sets": [], "customer_name": "Desk"})
-    r = client.post("/api/assessments", json=desk)
-    did = r.json()["id"]
-    r = client.post(f"/api/assessments/{did}/compute")
-    assert r.status_code == 200, r.text
-    assert r.json()["results"]["k"]["source"] == "desk_average"
     s = client.get("/api/settings").json()
-    assert s["measured_assessments"] == 1 and s["default_desk_k_site"] is not None
+    assert "company_name" in s
 
-    # measured mode without readings is rejected clearly
+    # no readings is rejected clearly
     bad = dict(DOC)
     bad["reading_sets"] = []
     r = client.post("/api/assessments", json=bad)
