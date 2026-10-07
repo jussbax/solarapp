@@ -69,7 +69,7 @@ CATEGORIES: dict[str, Category] = {c.id: c for c in [
     _C("water_dispenser", "Hot and cold water dispenser", 0.08, True, 300, 700, 1.0, "Measured units use 0.7-1.1 kWh per day on a 24 hour window, about 8% of a 500 W nameplate."),
     _C("water_heater_tankless", "Shower water heater, tankless", 1.00, False, 3000, 6000, 1.0, "Draws nameplate while the shower runs; enter shower windows."),
     _C("water_heater_storage", "Storage water heater", 0.30, True, 1000, 3000, 1.0, "Thermostat cycling to hold temperature."),
-    _C("washing_machine", "Washing machine", 0.60, False, 250, 800, 2.0, "Motor alternates agitate, pause and spin; no heater."),
+    _C("washing_machine", "Washing machine", 0.60, False, 250, 2500, 2.0, "Motor alternates agitate, pause and spin; models with a water heater carry a 2000 W class nameplate that is only drawn on hot cycles."),
     _C("dryer", "Clothes dryer", 0.80, False, 1500, 3000, 1.0, "Heater cycles near the end of the cycle."),
     _C("steam_iron", "Flat or steam iron", 0.50, False, 1000, 2200, 1.0, "Thermostat cycling, about half the time on."),
     _C("water_pump", "Water pump", 0.60, True, 250, 1500, 3.0, "Pressure pumps cycle; enter the hours water is being used."),
