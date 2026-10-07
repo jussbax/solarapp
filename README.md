@@ -45,7 +45,7 @@ docker compose run --rm solarapp python -m solarapp.data_download --out /app/dat
 
 This fetches the PVGIS typical meteorological year for every 0.25 degree
 cell over the Philippines that contains land (913 cells, about 15 minutes
-with the default 3 parallel requests, about 100 MB on disk) and the NASA
+with the default 3 parallel requests, about 170 MB on disk) and the NASA
 POWER monthly climatology for reference (198 points, under a minute). It is
 resumable: run it again if it stops and it continues where it left off.
 Data lands in `./data/` on the host, outside the image. Options:

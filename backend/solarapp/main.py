@@ -36,9 +36,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True}
 
     static = settings.static_dir or Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
-    if static.exists():
-        app.mount("/assets", StaticFiles(directory=static / "assets"), name="assets")
-        index = static / "index.html"
+    index = static / "index.html"
+    if index.is_file():
+        if (static / "assets").is_dir():
+            app.mount("/assets", StaticFiles(directory=static / "assets"), name="assets")
 
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str, request: Request):

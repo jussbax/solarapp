@@ -23,26 +23,8 @@ from . import grid, nasa, pvgis
 
 
 def write_cell(frame, file: Path) -> None:
-    """Store hourly values as float32 (plenty for W/m2, deg C, m/s); halves the size."""
+    """Store hourly values as float32 (plenty for W/m2, deg C, m/s)."""
     frame.astype("float32").reset_index().to_parquet(file, index=False, compression="zstd")
-
-
-def repack(root: Path) -> None:
-    """Rewrite existing cell files in the current storage format."""
-    import pandas as pd
-
-    cells_dir = root / "pvgis" / "cells"
-    files = sorted(cells_dir.glob("*.parquet"))
-    before = sum(f.stat().st_size for f in files)
-    for i, f in enumerate(files):
-        df = pd.read_parquet(f).set_index("time_utc")
-        tmp = f.with_suffix(".parquet.tmp")
-        write_cell(df, tmp)
-        tmp.replace(f)
-        if (i + 1) % 100 == 0:
-            print(f"  repacked {i + 1}/{len(files)}", flush=True)
-    after = sum(f.stat().st_size for f in files)
-    print(f"Repacked {len(files)} files: {before / 1e6:.0f} MB -> {after / 1e6:.0f} MB", flush=True)
 
 
 def _write_index(root: Path, meta: dict) -> None:
@@ -208,14 +190,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--skip-nasa", action="store_true")
     ap.add_argument("--only-nasa", action="store_true")
     ap.add_argument("--synthetic", action="store_true", help="write a synthetic test dataset instead of downloading")
-    ap.add_argument("--repack", action="store_true", help="rewrite already downloaded cell files in the current storage format")
     args = ap.parse_args(argv)
 
     root = Path(args.out)
     bbox = tuple(args.bbox)
-    if args.repack:
-        repack(root)
-        return 0
     if args.synthetic:
         write_synthetic(root, bbox, args.step)
         return 0
