@@ -17,7 +17,8 @@ def test_profile_energy_and_hours():
     assert abs(p.hours_per_day - 12) < 1e-9
     daily_wh = p.energy_wh[0].sum(axis=1).mean()
     assert abs(daily_wh - 9 * 9 * 12) < 1e-6
-    assert p.nameplate_w.max() == 81
+    assert p.duty_watts == 81 and p.active_hour[0, 0].sum() == 12
+    assert p.days_per_week == 7 and abs(p.hours_per_use_day - 12) < 1e-9
 
 
 def test_days_and_months_filters():
@@ -26,6 +27,7 @@ def test_days_and_months_filters():
     assert p.energy_wh[0, 0].sum() == 0 and p.energy_wh[0, 5].sum() > 0
     assert p.energy_wh[1].sum() == 0
     assert abs(p.hours_per_day - 1.5 * 2 / 7) < 1e-9
+    assert p.days_per_week == 2 and abs(p.hours_per_use_day - 1.5) < 1e-9
 
 
 def test_nameplate_warning():
@@ -66,6 +68,7 @@ def test_tanauan_reconciles_to_bill():
     assert abs(res.daily_kwh_by_month[7] * 31 - 338.0) < 0.01
     assert res.load_kw.shape == (12, 24)
     assert res.peak_kw > res.peak_avg_kw > 0
+    assert len(res.hour_table) == 24
     # fixed appliances keep their relative share: lights scale == scale_all
     led = next(r for r in res.appliances if r["id"] == "led")
     assert led["scale"] == pytest.approx(avb["scale_all"])
@@ -122,11 +125,16 @@ def test_future_copy_of_existing_type_inherits_scale():
     assert abs(rows["ac2"]["kwh_per_day_reconciled"] - rows["ac"]["kwh_per_day_reconciled"]) < 1e-9
 
 
-def test_peak_breakdown_names_the_coincident_loads():
+def test_peak_follows_the_hour_table_with_duty_factors():
     res = run_audit(tanauan_appliances(), [Bill("b1", "2026-08", 338.0, days=31)])
     pd = res.peak_detail
-    assert pd["nameplate_kw"] == res.peak_kw > res.duty_weighted_peak_kw > res.peak_avg_kw
-    # in this fixture both aircons, the rice cooker and the TV coincide in the evening
-    assert pd["contributors"][0]["name"] == "Split inverter AC 2.5HP" and pd["contributors"][0]["watts"] == 4200
-    assert pd["time"] == "19:00" and "Rice cooker" in [c["name"] for c in pd["contributors"]]
+    assert pd["kw"] == res.peak_kw > res.peak_avg_kw
+    # the peak hour sums quantity x watts x duty of every appliance touching that hour
     assert abs(sum(c["watts"] for c in pd["contributors"]) / 1000.0 - res.peak_kw) < 1e-6
+    ac = next(c for c in pd["contributors"] if c["name"] == "Split inverter AC 2.5HP")
+    assert ac["watts"] == pytest.approx(2 * 2100 * 0.55)
+    row = res.hour_table[pd["hour"]]
+    assert row["label"] == pd["label"] and abs(row["total_w"] / 1000.0 - res.peak_kw) < 1e-6
+    # a half-hour appliance counts in full for the hour it touches
+    kettle_hour = res.hour_table[6]
+    assert any(a["name"] == "Kettle" and abs(a["watts"] - 2000 * 0.35) < 1e-6 for a in kettle_hour["appliances"])

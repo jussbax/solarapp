@@ -10,10 +10,10 @@ Conventions (DECISIONS.md, energy audit section):
   factor. The duty factor defaults from the appliance category and is
   editable per appliance. Nameplate without a duty factor overstates
   cycling loads (refrigerators, aircon, thermostat heaters) badly.
-* The instantaneous coincident peak for inverter sizing uses nameplate
-  watts (no duty factor) at minute resolution, with a breakdown of the
-  appliances that form it. A duty-weighted peak is reported alongside for
-  the owner to choose the sizing basis.
+* Peak load for inverter sizing follows the field sheet's hour table: for
+  each hour, every appliance whose window touches that hour is added at
+  quantity x nameplate x duty factor; the peak is the largest hour over the
+  week and the twelve months. The table itself is returned for the peak day.
 * Reconciliation with the bill: appliances in "uncertain" categories are
   scaled first, within a floor and a nameplate ceiling, then any remaining
   gap is spread proportionally over all existing appliances. Future
@@ -153,17 +153,21 @@ class ApplianceProfile:
     """Per-appliance weekly shapes, before any scaling."""
     appliance: Appliance
     energy_wh: np.ndarray        # [12, 7, 24] Wh per hour at duty (zero in months not active)
-    nameplate_w: np.ndarray      # [12, 7, 1440] W nameplate while on
+    active_hour: np.ndarray      # [12, 7, 24] True when the appliance is on at any minute of the hour
     hours_per_day: float         # average over the week, months where active
+    days_per_week: int           # weekdays with any usage
+    hours_per_use_day: float     # average hours on the days it runs
     warnings: list[dict]
+
+    @property
+    def duty_watts(self) -> float:
+        return self.appliance.quantity * self.appliance.input_power_w * self.appliance.duty
 
 
 def build_profile(a: Appliance) -> ApplianceProfile:
     energy = np.zeros((12, 7, 24), dtype=np.float64)
-    nameplate = np.zeros((12, 7, MINUTES), dtype=np.float32)
     warnings: list[dict] = []
     avg_w = a.quantity * a.input_power_w * a.duty
-    name_w = a.quantity * a.input_power_w
     on_minutes = np.zeros((12, 7, MINUTES), dtype=bool)
     for w in a.windows:
         try:
@@ -177,12 +181,16 @@ def build_profile(a: Appliance) -> ApplianceProfile:
                     on_minutes[m - 1, d] |= mask
     if not a.windows:
         warnings.append({"code": "no_windows", "message": f"{a.name}: no usage windows, so it contributes nothing."})
-    nameplate[on_minutes] = name_w
     minutes_per_hour = on_minutes.reshape(12, 7, 24, 60).sum(axis=3)
     energy = minutes_per_hour / 60.0 * avg_w
+    active_hour = minutes_per_hour > 0
     active_months = on_minutes.reshape(12, -1).any(axis=1)
-    hours = (on_minutes.reshape(12, 7, MINUTES).sum(axis=2) / 60.0).mean(axis=1)  # per month, averaged over the week
+    hours_by_day = on_minutes.reshape(12, 7, MINUTES).sum(axis=2) / 60.0           # [12, 7]
+    hours = hours_by_day.mean(axis=1)                                               # per month, averaged over the week
     hours_per_day = float(hours[active_months].mean()) if active_months.any() else 0.0
+    use_days = hours_by_day.max(axis=0) > 0                                         # [7] weekdays with any usage
+    days_per_week = int(use_days.sum())
+    hours_per_use_day = float(hours_by_day[active_months][:, use_days].mean()) if (active_months.any() and days_per_week) else 0.0
     c = a.cat
     if c.w_min is not None and c.w_max is not None and a.input_power_w > 0:
         if a.input_power_w > c.w_max * 1.5 or a.input_power_w < c.w_min / 1.5:
@@ -190,7 +198,7 @@ def build_profile(a: Appliance) -> ApplianceProfile:
                 "code": "nameplate_out_of_range",
                 "message": f"{a.name}: {a.input_power_w:g} W is outside the usual {c.w_min:g}-{c.w_max:g} W for {c.label.lower()}; check the nameplate.",
             })
-    return ApplianceProfile(a, energy, nameplate, hours_per_day, warnings)
+    return ApplianceProfile(a, energy, active_hour, hours_per_day, days_per_week, hours_per_use_day, warnings)
 
 
 @dataclass
@@ -222,10 +230,10 @@ class AuditResult:
     appliances: list[dict]
     load_kw: np.ndarray                 # [12, 24] average kW for sizing (existing + future, reconciled)
     load_kw_unreconciled: np.ndarray    # [12, 24]
-    peak_kw: float                      # nameplate coincident peak for sizing set
-    peak_avg_kw: float                  # highest hourly average
-    duty_weighted_peak_kw: float        # coincident peak with duty factors applied
-    peak_detail: dict                   # when the nameplate peak occurs and which appliances form it
+    peak_kw: float                      # hour-table peak: largest hour of summed duty-weighted draws
+    peak_avg_kw: float                  # highest hourly average of energy (for reference)
+    peak_detail: dict                   # when the peak hour occurs and which appliances form it
+    hour_table: list[dict]              # the peak day's 24 rows: appliances and totals
     largest_motor_kw: float
     largest_motor_multiplier: float
     daily_kwh_by_month: list[float]     # sizing set, reconciled
@@ -311,33 +319,28 @@ def run_audit(appliances: list[Appliance], bills: list[Bill], reconcile: bool = 
     # --- sizing set profiles
     load_wh = np.zeros((12, 7, 24))
     load_wh_raw = np.zeros((12, 7, 24))
-    nameplate = np.zeros((12, 7, MINUTES), dtype=np.float32)
+    hour_table_w = np.zeros((12, 7, 24))   # the field sheet's table: duty-weighted draw of every appliance touching the hour
     for p in sizing_set:
         load_wh += p.energy_wh * scale[p.appliance.id]
         load_wh_raw += p.energy_wh
-        nameplate += p.nameplate_w
+        hour_table_w += p.active_hour * p.duty_watts
     load_kw = load_wh.mean(axis=1) / 1000.0
     load_kw_raw = load_wh_raw.mean(axis=1) / 1000.0
     daily = load_kw.sum(axis=1)
     annual = float(sum(d * n for d, n in zip(daily, DAYS_IN_MONTH)))
-    peak_kw = float(nameplate.max()) / 1000.0 if sizing_set else 0.0
+    peak_kw = float(hour_table_w.max()) / 1000.0 if sizing_set else 0.0
     peak_avg_kw = float(load_kw.max()) if sizing_set else 0.0
-    duty_weighted = np.zeros((12, 7, MINUTES), dtype=np.float32)
-    for p in sizing_set:
-        duty_weighted += p.nameplate_w * np.float32(p.appliance.duty)
-    duty_weighted_peak_kw = float(duty_weighted.max()) / 1000.0 if sizing_set else 0.0
     peak_detail: dict = {}
+    hour_table: list[dict] = []
     if sizing_set and peak_kw > 0:
-        m_i, d_i, t_i = np.unravel_index(int(np.argmax(nameplate)), nameplate.shape)
-        contributors = [
-            {"name": p.appliance.name, "watts": float(p.nameplate_w[m_i, d_i, t_i]), "duty_watts": float(p.nameplate_w[m_i, d_i, t_i] * p.appliance.duty)}
-            for p in sizing_set if p.nameplate_w[m_i, d_i, t_i] > 0
-        ]
-        contributors.sort(key=lambda c: -c["watts"])
+        m_i, d_i, h_i = (int(x) for x in np.unravel_index(int(np.argmax(hour_table_w)), hour_table_w.shape))
+        for h in range(24):
+            apps = [{"name": p.appliance.name, "watts": float(p.duty_watts)} for p in sizing_set if p.active_hour[m_i, d_i, h]]
+            apps.sort(key=lambda c: -c["watts"])
+            hour_table.append({"hour": h, "label": f"{h:02d}:00-{(h + 1) % 24:02d}:00", "total_w": float(hour_table_w[m_i, d_i, h]), "appliances": apps})
         peak_detail = {
-            "month": int(m_i) + 1, "weekday": WEEKDAYS[int(d_i)], "time": f"{int(t_i) // 60:02d}:{int(t_i) % 60:02d}",
-            "nameplate_kw": peak_kw, "duty_weighted_kw_at_peak": float(sum(c["duty_watts"] for c in contributors)) / 1000.0,
-            "contributors": contributors,
+            "month": m_i + 1, "weekday": WEEKDAYS[d_i], "hour": h_i, "label": hour_table[h_i]["label"],
+            "kw": peak_kw, "contributors": hour_table[h_i]["appliances"],
         }
     motors = [(p.appliance.input_power_w * p.appliance.cat.start_multiplier / 1000.0, p.appliance.input_power_w / 1000.0, p.appliance.cat.start_multiplier) for p in sizing_set if p.appliance.cat.start_multiplier > 1.0]
     if motors:
@@ -359,7 +362,8 @@ def run_audit(appliances: list[Appliance], bills: list[Bill], reconcile: bool = 
             "id": p.appliance.id, "name": p.appliance.name, "category": p.appliance.category, "category_label": p.appliance.cat.label,
             "status": p.appliance.status, "quantity": p.appliance.quantity, "input_power_w": p.appliance.input_power_w,
             "duty_factor": p.appliance.duty, "duty_is_default": p.appliance.duty_factor is None, "uncertain": p.appliance.uncertain,
-            "hours_per_day": float(p.hours_per_day), "kwh_per_day_audit": float(kwh_day), "kwh_per_day_reconciled": float(rec),
+            "hours_per_day": float(p.hours_per_day), "days_per_week": p.days_per_week, "hours_per_use_day": float(p.hours_per_use_day),
+            "kwh_per_day_audit": float(kwh_day), "kwh_per_day_reconciled": float(rec),
             "scale": float(scale[p.appliance.id]), "scale_inherited": bool(p.appliance.status == "future" and scale[p.appliance.id] != 1.0),
             "warnings": p.warnings,
         })
@@ -371,7 +375,7 @@ def run_audit(appliances: list[Appliance], bills: list[Bill], reconcile: bool = 
 
     return AuditResult(
         appliances=rows, load_kw=load_kw, load_kw_unreconciled=load_kw_raw, peak_kw=peak_kw, peak_avg_kw=peak_avg_kw,
-        duty_weighted_peak_kw=duty_weighted_peak_kw, peak_detail=peak_detail,
+        peak_detail=peak_detail, hour_table=hour_table,
         largest_motor_kw=largest_kw, largest_motor_multiplier=mult,
         daily_kwh_by_month=[float(x) for x in daily], annual_kwh=annual, audit_vs_bill=audit_vs_bill,
         warnings=warnings, future_daily_kwh=future_daily, weekday_profiles_kw=weekday_profiles,

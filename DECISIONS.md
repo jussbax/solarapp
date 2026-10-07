@@ -122,8 +122,14 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   measurements over time.
 - Nameplate values far outside the type's usual range are flagged; the
   Tanauan test audit carried a 9014 W washing machine.
-- The instantaneous coincident peak for the inverter uses nameplate watts at
-  minute resolution, without duty factors.
+- Peak load for the inverter follows the field sheet's hour table: for each
+  hour, every appliance whose window touches that hour is added at quantity
+  x nameplate x duty factor, and the peak is the largest hour over the week
+  and the twelve months. A half-hour appliance counts in full for the hour
+  it touches. The table for the peak day is shown with the result.
+- Each appliance shows hours per use day and days per week, as on the
+  field sheet; kWh per day is the weekly average, which is what the bill
+  comparison needs.
 - Bills: usually only the latest bill exists. Each bill carries its billing
   month, kWh and period length; the audit's month profile times the period
   length is compared with it.
@@ -158,17 +164,14 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   divided by the one-way efficiency, over the twelve months. It carries
   exactly what solar cannot at that hour, nothing more. No autonomy
   allowance, by the owner's rule: off-grid adds panels until the balance
-  always closes instead. Rounded up to whole
-  modules (default 5.12 kWh, 90 percent depth of discharge, 92 percent
-  round-trip, 0.5C), capped at a configurable number of modules.
+  always closes instead. Reported in kWh, usable and nominal, with no
+  module rounding; 85 percent depth of discharge and 92 percent round-trip
+  by default, 0.5C for the power limit. Products are chosen in the pricing
+  module.
 - Inverter: smallest catalogue size (6, 8, 10, 12 kW by default) that covers
-  the peak load, the start of the largest motor load at the 200 percent
-  surge rating, and the PV array at 1.3 kWp per kW. Parallel units when the
-  largest size is not enough. The peak load basis is the owner's choice per
-  assessment: the worst instant with everything in its usage window on at
-  nameplate (default, matches the field sheet's hour table), or the same
-  instant weighted by duty factors. The app lists the appliances that form
-  the peak and when it occurs, next to the highest hourly average.
+  the hour-table peak, the start of the largest motor load at the 200
+  percent surge rating, and the PV array at 1.3 kWp per kW. Parallel units
+  when the largest size is not enough.
 - Outputs: recommended PV, inverter, battery, coverage of consumption,
   self-consumption, annual import and export, typical-day chart per month,
   month-by-month balance. Internal only for now; the customer PDF is

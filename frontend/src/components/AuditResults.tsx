@@ -56,9 +56,11 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
           </div>
           <div className="kpi">
             <div className="label">Battery</div>
-            <div className="value">{sizing.battery.modules > 0 ? `${sizing.battery.modules} x ${sizing.battery.module_kwh} kWh` : 'none'}</div>
+            <div className="value">{sizing.battery.installed_kwh > 0 ? `${n1(sizing.battery.installed_kwh)} kWh` : 'none'}</div>
             <div className="sub">
-              {sizing.battery.modules > 0 ? `${n1(sizing.battery.usable_kwh)} kWh usable, carries what solar cannot at night` : KIND_LABEL[sizing.kind]}
+              {sizing.battery.installed_kwh > 0
+                ? `${n1(sizing.battery.usable_kwh)} kWh usable at ${Math.round(sizing.battery.depth_of_discharge * 100)}% depth of discharge, carries what solar cannot`
+                : KIND_LABEL[sizing.kind]}
             </div>
           </div>
           <div className="kpi">
@@ -152,7 +154,8 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
               <th className="num">Qty</th>
               <th className="num">W</th>
               <th className="num">Duty</th>
-              <th className="num">h/day</th>
+              <th className="num">h/use day</th>
+              <th className="num">Days/wk</th>
               <th className="num">kWh/day typed</th>
               <th className="num">kWh/day used</th>
               <th className="num">Share</th>
@@ -179,7 +182,8 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
                   {n2(a.duty_factor)}
                   {a.uncertain ? '*' : ''}
                 </td>
-                <td className="num">{n1(a.hours_per_day)}</td>
+                <td className="num">{n1(a.hours_per_use_day)}</td>
+                <td className="num">{a.days_per_week}</td>
                 <td className="num">{n2(a.kwh_per_day_audit)}</td>
                 <td className="num">{a.status === 'retiring' ? '-' : n2(a.kwh_per_day_reconciled)}</td>
                 <td className="num">{a.status === 'retiring' ? '-' : `${a.share_pct.toFixed(0)}%`}</td>
@@ -193,16 +197,40 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
       </div>
       <h3>Peak load</h3>
       <div className="muted">
-        Highest hourly average {n2(audit.peak_avg_kw)} kW. Worst instant with everything in its window on at nameplate: <b>{n1(audit.peak_kw)} kW</b>
-        {audit.peak_detail.time && ` on ${audit.peak_detail.weekday} at ${audit.peak_detail.time} (${MONTHS[audit.peak_detail.month - 1]})`}; the same instant weighted by duty factors{' '}
-        {n1(audit.peak_detail.duty_weighted_kw_at_peak ?? audit.duty_weighted_peak_kw)} kW, highest duty-weighted instant {n1(audit.duty_weighted_peak_kw)} kW
-        {audit.largest_motor_kw > 0 && `, largest motor ${n1(audit.largest_motor_kw)} kW starting at ${audit.largest_motor_multiplier}x`}.
-        {sizing && ` The inverter is sized for the ${sizing.inverter.peak_basis === 'duty_weighted' ? 'duty-weighted' : 'nameplate'} peak.`}
+        Hour table peak: <b>{n2(audit.peak_kw)} kW</b>
+        {audit.peak_detail.label && ` at ${audit.peak_detail.label} on a ${audit.peak_detail.weekday} (${MONTHS[audit.peak_detail.month - 1]})`}, the sum of every appliance touching that hour at quantity x watts x duty.
+        Highest hourly average of energy {n2(audit.peak_avg_kw)} kW
+        {audit.largest_motor_kw > 0 && `; largest motor ${n1(audit.largest_motor_kw)} kW starting at ${audit.largest_motor_multiplier}x for the surge check`}.
       </div>
       {audit.peak_detail.contributors && audit.peak_detail.contributors.length > 0 && (
         <div className="muted" style={{ marginTop: 4 }}>
-          At that instant: {audit.peak_detail.contributors.map((c) => `${c.name} ${Math.round(c.watts).toLocaleString()} W`).join(', ')}.
+          In that hour: {audit.peak_detail.contributors.map((c) => `${c.name} ${Math.round(c.watts).toLocaleString()} W`).join(', ')}.
         </div>
+      )}
+      {audit.hour_table.length > 0 && (
+        <details className="internal" style={{ marginTop: 6 }}>
+          <summary>Hour table for that day</summary>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Hour</th>
+                  <th>Appliances (duty-weighted W)</th>
+                  <th className="num">Total W</th>
+                </tr>
+              </thead>
+              <tbody>
+                {audit.hour_table.map((row) => (
+                  <tr key={row.hour} className={row.hour === audit.peak_detail.hour ? 'peak-row' : ''}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{row.label}</td>
+                    <td>{row.appliances.map((a) => `${a.name} ${Math.round(a.watts)}`).join(' + ') || '-'}</td>
+                    <td className="num">{Math.round(row.total_w).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
       )}
 
       {sizing && (

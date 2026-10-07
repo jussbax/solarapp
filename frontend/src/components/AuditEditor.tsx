@@ -133,7 +133,8 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
             {audit.appliances.map((a, i) => {
               const c = catOf(a.category)
               const open = openId === a.id
-              const hours = a.windows.reduce((s, w) => s + (windowHours(w) * w.days.length) / 7, 0)
+              const useDays = new Set(a.windows.flatMap((w) => w.days)).size
+              const hoursPerUseDay = useDays ? a.windows.reduce((s, w) => s + windowHours(w) * w.days.length, 0) / useDays : 0
               return [
                 <tr key={a.id}>
                   <td style={{ minWidth: 180 }}>
@@ -176,7 +177,7 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
                   </td>
                   <td className="num">
                     <button type="button" className="small" style={{ whiteSpace: 'nowrap' }} onClick={() => setOpenId(open ? null : a.id)}>
-                      {a.windows.length} ({hours.toFixed(1)} h/d) {open ? '▴' : '▾'}
+                      {a.windows.length} ({hoursPerUseDay.toFixed(1)} h x {useDays} d/wk) {open ? '▴' : '▾'}
                     </button>
                   </td>
                   <td>
@@ -285,13 +286,7 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
             <NumberInput value={audit.system.offgrid_pv_margin} onChange={(v) => setSystem({ offgrid_pv_margin: v ?? 1.25 })} min={1} max={2} step={0.05} />
           </div>
         )}
-        <div className="narrow" style={{ width: 230 }}>
-          <label>Inverter sized for</label>
-          <select value={audit.system.inverter_peak_basis} onChange={(e) => setSystem({ inverter_peak_basis: e.target.value as SystemSettings['inverter_peak_basis'] })}>
-            <option value="nameplate">Everything in a window at nameplate</option>
-            <option value="duty_weighted">Same, weighted by duty factor</option>
-          </select>
-        </div>
+
         <div className="narrow" style={{ width: 160 }}>
           <label>Inverter sizes (kW)</label>
           <input
@@ -310,21 +305,13 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
           <label>Max PV / inverter</label>
           <NumberInput value={audit.system.pv_ratio_max} onChange={(v) => setSystem({ pv_ratio_max: v ?? 1.3 })} min={1} max={2} step={0.05} />
         </div>
-        <div className="narrow" style={{ width: 130 }}>
-          <label>Battery module kWh</label>
-          <NumberInput value={audit.system.battery_module_kwh} onChange={(v) => setSystem({ battery_module_kwh: v ?? 5.12 })} min={0.5} step={0.01} />
-        </div>
-        <div className="narrow" style={{ width: 100 }}>
-          <label>Depth of discharge</label>
-          <NumberInput value={audit.system.battery_dod} onChange={(v) => setSystem({ battery_dod: v ?? 0.9 })} min={0.1} max={1} step={0.05} />
+        <div className="narrow" style={{ width: 110 }}>
+          <label>Battery depth of discharge</label>
+          <NumberInput value={audit.system.battery_dod} onChange={(v) => setSystem({ battery_dod: v ?? 0.85 })} min={0.1} max={1} step={0.05} />
         </div>
         <div className="narrow" style={{ width: 100 }}>
           <label>Round-trip eff.</label>
           <NumberInput value={audit.system.battery_efficiency} onChange={(v) => setSystem({ battery_efficiency: v ?? 0.92 })} min={0.5} max={1} step={0.01} />
-        </div>
-        <div className="narrow" style={{ width: 100 }}>
-          <label>Max modules</label>
-          <NumberInput value={audit.system.battery_max_modules} onChange={(v) => setSystem({ battery_max_modules: Math.max(1, Math.round(v ?? 8)) })} min={1} max={40} step={1} />
         </div>
       </div>
     </div>

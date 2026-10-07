@@ -69,14 +69,11 @@ export type SystemKind = 'off_grid' | 'net_metering' | 'combination'
 export interface SystemSettings {
   kind: SystemKind
   offgrid_pv_margin: number
-  inverter_peak_basis: 'nameplate' | 'duty_weighted'
   inverter_sizes_kw: number[]
   inverter_surge_factor: number
   pv_ratio_max: number
-  battery_module_kwh: number
   battery_dod: number
   battery_efficiency: number
-  battery_max_modules: number
 }
 
 export interface EnergyAudit {
@@ -229,6 +226,8 @@ export interface ApplianceResult {
   duty_is_default: boolean
   uncertain: boolean
   hours_per_day: number
+  days_per_week: number
+  hours_per_use_day: number
   kwh_per_day_audit: number
   kwh_per_day_reconciled: number
   scale: number
@@ -243,8 +242,8 @@ export interface AuditBlock {
   annual_kwh: number
   peak_kw: number
   peak_avg_kw: number
-  duty_weighted_peak_kw: number
-  peak_detail: { month: number; weekday: string; time: string; nameplate_kw: number; duty_weighted_kw_at_peak: number; contributors: { name: string; watts: number; duty_watts: number }[] }
+  peak_detail: { month: number; weekday: string; hour: number; label: string; kw: number; contributors: { name: string; watts: number }[] }
+  hour_table: { hour: number; label: string; total_w: number; appliances: { name: string; watts: number }[] }[]
   largest_motor_kw: number
   largest_motor_multiplier: number
   audit_vs_bill: {
@@ -299,8 +298,8 @@ export interface SizingBlock {
   annual_unserved_kwh: number
   net_annual_kwh: number
   offgrid: { pv_margin: number } | null
-  battery: { modules: number; module_kwh: number; installed_kwh: number; usable_kwh: number; power_kw: number; depth_of_discharge: number; round_trip_efficiency: number }
-  inverter: { size_kw: number; units: number; required_kw: number; binding: string; peak_basis?: string; peak_load_kw: number; surge_requirement_kw: number; pv_requirement_kw: number; largest_motor_kw: number; largest_motor_multiplier: number; surge_factor: number; pv_ratio_max: number; sizes_kw: number[] }
+  battery: { usable_kwh: number; installed_kwh: number; power_kw: number; depth_of_discharge: number; round_trip_efficiency: number }
+  inverter: { size_kw: number; units: number; required_kw: number; binding: string; peak_load_kw: number; surge_requirement_kw: number; pv_requirement_kw: number; largest_motor_kw: number; largest_motor_multiplier: number; surge_factor: number; pv_ratio_max: number; sizes_kw: number[] }
   monthly: { month: number; days: number; consumption_kwh: number; production_kwh: number; direct_kwh: number; battery_kwh: number; export_kwh: number; curtailed_kwh: number; import_kwh: number; unserved_kwh: number }[]
   profiles: Record<string, DayProfile>
   warnings: Warning[]
@@ -392,14 +391,11 @@ export function emptyAudit(): EnergyAudit {
     system: {
       kind: 'combination',
       offgrid_pv_margin: 1.25,
-      inverter_peak_basis: 'nameplate',
       inverter_sizes_kw: [6, 8, 10, 12],
       inverter_surge_factor: 2.0,
       pv_ratio_max: 1.3,
-      battery_module_kwh: 5.12,
-      battery_dod: 0.9,
+      battery_dod: 0.85,
       battery_efficiency: 0.92,
-      battery_max_modules: 8,
     },
   }
 }

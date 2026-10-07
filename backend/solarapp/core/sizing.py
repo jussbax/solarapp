@@ -12,8 +12,9 @@ metering with a battery.
 * Battery: usable capacity equal to the energy it must deliver on the
   typical day with the largest unmet load (hours where solar is short),
   divided by the one-way efficiency, over the twelve months. It carries
-  exactly what solar cannot at that hour, nothing more. Rounded up to whole
-  modules, capped. No autonomy allowance, by the owner's rule.
+  exactly what solar cannot at that hour, nothing more, and is reported in
+  kWh (usable, and nominal at the depth of discharge). No autonomy
+  allowance and no module rounding, by the owner's rule.
 * Inverter: smallest catalogue size that covers the nameplate coincident
   peak, the surge of the largest motor at the stated surge factor, and the
   PV array at the allowed PV-to-inverter ratio. Parallel units if needed.
@@ -36,11 +37,9 @@ GRID_EXPORT_KINDS = ("net_metering", "combination")
 
 @dataclass
 class BatterySpec:
-    module_kwh: float = 5.12
-    depth_of_discharge: float = 0.90
+    depth_of_discharge: float = 0.85
     round_trip_efficiency: float = 0.92
     max_c_rate: float = 0.5          # kW of charge or discharge per kWh installed
-    max_modules: int = 8
 
 
 @dataclass
@@ -95,6 +94,11 @@ def balance_day(load_kw: np.ndarray, prod_kw: np.ndarray, usable_kwh: float, pow
     return DayBalance(load=np.asarray(load_kw, float), production=np.asarray(prod_kw, float), **arrays)
 
 
+def _clean(kwh: float) -> float:
+    """Drop floating-point residue so an exactly sized battery reads as zero unserved."""
+    return kwh if kwh > 1e-6 else 0.0
+
+
 def pick_inverter(required_kw: float, rules: InverterRules) -> tuple[float, int]:
     sizes = sorted(rules.sizes_kw)
     for s in sizes:
@@ -142,28 +146,21 @@ def size_system(
         target_kwp = annual_consumption / yield_per_kwp if yield_per_kwp > 0 else 0.0
     target_panels = int(math.ceil(target_kwp * 1000.0 / panel_wp)) if panel_wp > 0 else 0
     panels = max(min(target_panels, roof_max_panels), 0)
-    per_module = battery.module_kwh * battery.depth_of_discharge
-    battery_capped = False
 
     def run(n_panels: int) -> dict:
         """Battery for this array, then the hourly balance of every month's typical day."""
-        nonlocal battery_capped
         kwp_ = n_panels * panel_wp / 1000.0
         prod_ = per_kwp * kwp_
-        modules_ = 0
+        usable_ = 0.0
         if with_battery and kwp_ > 0:
             big = 1e6
             one_way = math.sqrt(max(battery.round_trip_efficiency, 1e-6))
             # with an unlimited battery, the day's discharge is the unmet load solar can shift; the
             # stored energy needed for it is that discharge over the one-way efficiency
             needs = [float(balance_day(load[m], prod_[m], big, big, kind, battery.round_trip_efficiency).discharge.sum()) / one_way for m in range(12)]
-            need = max(needs) if needs else 0.0
-            modules_ = int(math.ceil(need / per_module)) if per_module > 0 else 0
-            if modules_ > battery.max_modules:
-                battery_capped = True
-                modules_ = battery.max_modules
-        usable_ = modules_ * per_module
-        power_ = modules_ * battery.module_kwh * battery.max_c_rate
+            usable_ = max(needs) if needs else 0.0
+        installed_ = usable_ / battery.depth_of_discharge if battery.depth_of_discharge > 0 else usable_
+        power_ = installed_ * battery.max_c_rate
         monthly_, profiles_ = [], {}
         tot_ = {k: 0.0 for k in ("consumption", "production", "direct", "charge", "discharge", "export", "curtailed", "imported")}
         for m in range(12):
@@ -173,20 +170,20 @@ def size_system(
                 "consumption_kwh": float(b.load.sum() * days[m]), "production_kwh": float(b.production.sum() * days[m]),
                 "direct_kwh": float(b.direct.sum() * days[m]), "battery_kwh": float(b.discharge.sum() * days[m]),
                 "export_kwh": float(b.export.sum() * days[m]), "curtailed_kwh": float(b.curtailed.sum() * days[m]),
-                "import_kwh": 0.0 if off_grid else float(b.imported.sum() * days[m]),
-                "unserved_kwh": float(b.imported.sum() * days[m]) if off_grid else 0.0,
+                "import_kwh": 0.0 if off_grid else _clean(float(b.imported.sum() * days[m])),
+                "unserved_kwh": _clean(float(b.imported.sum() * days[m])) if off_grid else 0.0,
             }
             monthly_.append(row)
             for k, key in (("consumption", "consumption_kwh"), ("production", "production_kwh"), ("direct", "direct_kwh"), ("discharge", "battery_kwh"), ("export", "export_kwh"), ("curtailed", "curtailed_kwh")):
                 tot_[k] += row[key]
-            tot_["imported"] += float(b.imported.sum() * days[m])
+            tot_["imported"] += _clean(float(b.imported.sum() * days[m]))
             tot_["charge"] += float(b.charge.sum() * days[m])
             profiles_[m + 1] = {
                 "load": b.load.round(4).tolist(), "production": b.production.round(4).tolist(), "direct": b.direct.round(4).tolist(),
                 "charge": b.charge.round(4).tolist(), "discharge": b.discharge.round(4).tolist(), "soc": b.soc.round(4).tolist(),
                 "export": b.export.round(4).tolist(), "curtailed": b.curtailed.round(4).tolist(), "imported": b.imported.round(4).tolist(),
             }
-        return {"kwp": kwp_, "modules": modules_, "usable": usable_, "power": power_, "monthly": monthly_, "profiles": profiles_, "tot": tot_}
+        return {"kwp": kwp_, "usable": usable_, "installed": installed_, "power": power_, "monthly": monthly_, "profiles": profiles_, "tot": tot_}
 
     r = run(panels)
     if off_grid:
@@ -198,7 +195,7 @@ def size_system(
     else:
         roof_limited = target_panels > roof_max_panels
     kwp = r["kwp"]
-    modules, usable, battery_power = r["modules"], r["usable"], r["power"]
+    usable, installed, battery_power = r["usable"], r["installed"], r["power"]
     monthly, profiles, tot = r["monthly"], r["profiles"], r["tot"]
 
     if roof_limited and off_grid:
@@ -207,8 +204,6 @@ def size_system(
         warnings.append({"code": "roof_limited", "message": f"Net-zero needs about {target_kwp:.1f} kWp but the roof holds {roof_max_kwp:.2f} kWp; the system is sized to what the roof can provide."})
     if panels == 0:
         warnings.append({"code": "no_pv", "message": "No panels fit or there is no consumption to cover."})
-    if battery_capped:
-        warnings.append({"code": "battery_capped", "message": f"The battery requirement exceeds {battery.max_modules} modules; capped at {battery.max_modules}."})
 
     served = tot["direct"] + tot["discharge"]
     coverage_pct = served / tot["consumption"] * 100.0 if tot["consumption"] > 0 else 0.0
@@ -247,9 +242,8 @@ def size_system(
         "net_annual_kwh": net_kwh,
         "offgrid": {"pv_margin": offgrid.pv_margin} if off_grid else None,
         "battery": {
-            "modules": modules, "module_kwh": battery.module_kwh, "installed_kwh": modules * battery.module_kwh,
-            "usable_kwh": usable, "power_kw": battery_power, "depth_of_discharge": battery.depth_of_discharge,
-            "round_trip_efficiency": battery.round_trip_efficiency,
+            "usable_kwh": usable, "installed_kwh": installed, "power_kw": battery_power,
+            "depth_of_discharge": battery.depth_of_discharge, "round_trip_efficiency": battery.round_trip_efficiency,
         },
         "inverter": {
             "size_kw": inv_kw, "units": inv_units, "required_kw": required, "binding": binding,

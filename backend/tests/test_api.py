@@ -137,7 +137,7 @@ def test_audit_and_sizing_flow(client):
     assert any(w["code"] == "nameplate_out_of_range" for a in audit["appliances"] for w in a["warnings"])
     assert sizing["kind"] == "combination"
     assert sizing["panels"] >= 1 and sizing["inverter"]["size_kw"] in (6.0, 8.0, 10.0, 12.0)
-    assert sizing["battery"]["modules"] >= 1
+    assert sizing["battery"]["usable_kwh"] > 0 and "modules" not in sizing["battery"]
     assert len(sizing["monthly"]) == 12 and "8" in sizing["profiles"]
     # future EV load is included in sizing but not in the bill comparison
     assert audit["future_daily_kwh"] > 0
@@ -157,16 +157,16 @@ def test_audit_and_sizing_flow(client):
 
     # off-grid variant: no import, unserved reported
     d3 = dict(DOC)
-    d3["audit"] = dict(TANAUAN_AUDIT, system={"kind": "off_grid", "inverter_peak_basis": "duty_weighted"})
+    d3["audit"] = dict(TANAUAN_AUDIT, system={"kind": "off_grid"})
     r = client.post(f"/api/assessments/{aid}/compute", json=d3)
     assert r.status_code == 200, r.text
     res3 = r.json()["results"]
     og = res3["sizing"]
     assert og["kind"] == "off_grid" and og["annual_import_kwh"] == 0 and og["offgrid"]["pv_margin"] == 1.25
     assert "unserved_kwh" in og["monthly"][0]
-    assert og["inverter"]["peak_basis"] == "duty_weighted" and og["inverter"]["peak_load_kw"] == res3["audit"]["duty_weighted_peak_kw"]
+    assert og["inverter"]["peak_load_kw"] == res3["audit"]["peak_kw"]
     pd = res3["audit"]["peak_detail"]
-    assert pd["nameplate_kw"] == res3["audit"]["peak_kw"] and pd["contributors"] and pd["time"]
+    assert pd["kw"] == res3["audit"]["peak_kw"] and pd["contributors"] and pd["label"] and len(res3["audit"]["hour_table"]) == 24
 
     # without appliances the blocks are absent and the roof results unchanged
     doc2 = dict(DOC)
