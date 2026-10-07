@@ -1,0 +1,271 @@
+"""Pricing configuration: every number the workbook keeps on its DRIVERS, SUPPLIERS,
+ROUTE, LABOR RATES, MOB-DEMOB, TOOLS and JOB sheets, plus the BOQ generator's
+role defaults. Stored as one JSON document in the app; seeded from the workbook
+by the importer and editable in the app (the app is the master)."""
+from __future__ import annotations
+
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+
+class TruckConfig(BaseModel):
+    basis: str = "Isuzu NMR85HS closed van, 14 x 6 x 6 ft box (shadow truck)"
+    payload_kg: float = 3000
+    cargo_volume_m3: float = 14.274143347
+    ownership_per_trip_day: float = 8500
+    driver_per_trip_day: float = 1500
+    helper_per_trip_day: float = 1000
+    diesel_price: float = 100
+    fuel_economy_km_per_l: float = 7
+    maintenance_per_km: float = 3
+    trip_days_per_run: float = 1
+
+    @property
+    def running_cost_per_km(self) -> float:
+        return self.diesel_price / self.fuel_economy_km_per_l + self.maintenance_per_km
+
+
+class HandlingConfig(BaseModel):
+    helper_day_rate: float = 1000
+    typical_job_helper_hours: float = 6
+    typical_fill: float = 0.144482896668418  # share of the truck a typical 6 kW job uses
+
+    @property
+    def typical_job_cost(self) -> float:
+        return self.helper_day_rate / 8.0 * self.typical_job_helper_hours
+
+
+class RouteConfig(BaseModel):
+    """Stops in driving order: base, suppliers (farthest first), site. Matrices are stop x stop."""
+    stops: list[str] = Field(default_factory=lambda: ["Pila base", "IAN Solar", "Felicity Solar", "One Point", "Blue Carbon", "Job site"])
+    km: list[list[float]] = Field(default_factory=lambda: [
+        [0, 110, 90, 70, 55, 10],
+        [110, 0, 22, 40, 60, 115],
+        [90, 22, 0, 18, 35, 90],
+        [70, 40, 18, 0, 20, 70],
+        [55, 60, 35, 20, 0, 55],
+        [10, 115, 90, 70, 55, 0],
+    ])
+    toll: list[list[float]] = Field(default_factory=lambda: [
+        [0, 1110, 582, 253, 104, 0],
+        [1110, 0, 528, 857, 1006, 1110],
+        [582, 528, 0, 329, 478, 582],
+        [253, 857, 329, 0, 149, 253],
+        [104, 1006, 478, 149, 0, 104],
+        [0, 1110, 582, 253, 104, 0],
+    ])
+    base_lat: float = 14.2306   # Pila, Laguna
+    base_lon: float = 121.3647
+    reference_site_km: float = 10  # base to the reference site, one way
+    road_factor: float = 1.3       # straight-line to road km
+
+
+class CategoryRule(BaseModel):
+    name: str
+    markup_tier: float
+    wastage: float = 0.0
+
+
+DEFAULT_CATEGORIES = [
+    CategoryRule(name="Solar Panel", markup_tier=0.10, wastage=0.0),
+    CategoryRule(name="Inverter", markup_tier=0.10, wastage=0.0),
+    CategoryRule(name="Battery", markup_tier=0.15, wastage=0.0),
+    CategoryRule(name="All-in-one System", markup_tier=0.15, wastage=0.0),
+    CategoryRule(name="Mounting", markup_tier=0.30, wastage=0.02),
+    CategoryRule(name="Wires and Terminations", markup_tier=0.30, wastage=0.05),
+    CategoryRule(name="Protective Devices", markup_tier=0.30, wastage=0.0),
+    CategoryRule(name="Enclosures and Raceways", markup_tier=0.30, wastage=0.05),
+    CategoryRule(name="Grounding", markup_tier=0.30, wastage=0.02),
+    CategoryRule(name="Accessories", markup_tier=0.30, wastage=0.0),
+    CategoryRule(name="Consumables", markup_tier=0.30, wastage=0.10),
+]
+
+EQUIPMENT_CATEGORIES = ("Solar Panel", "Inverter", "Battery", "All-in-one System")
+
+
+class LaborRates(BaseModel):
+    team_lead_day: float = 3000
+    skilled_day: float = 1500
+    laborer_day: float = 1000
+    allowance_included: float = 150
+    owner_day: float = 5000
+    paid_hours: float = 8
+    nonproductive_hours: float = 1
+    pay_unit_days: float = 1.0
+
+
+class RoofRates(BaseModel):
+    setup_mh: float = 2
+    mounting_mh_per_panel: float = 0.375
+    wiring_mh_per_panel: float = 0.25
+    simple_roof_factor: float = 0.75
+
+
+class GroundTask(BaseModel):
+    key: str
+    label: str
+    mounting_weight: float
+    wiring_weight: float
+    unit: str
+
+
+class GroundRates(BaseModel):
+    mounting_mh_per_unit: float = 0.893854748603352
+    wiring_mh_per_unit: float = 0.43010752688172
+    hybrid_pace: float = 0.375001547634115
+    tasks: list[GroundTask] = Field(default_factory=lambda: [
+        GroundTask(key="hybrid_inverter", label="Hybrid inverter", mounting_weight=2, wiring_weight=2, unit="per inverter"),
+        GroundTask(key="gridtie_inverter", label="Grid-tie inverter", mounting_weight=1, wiring_weight=1, unit="per inverter"),
+        GroundTask(key="battery_pack", label="Battery pack: anchor and connect", mounting_weight=0.5, wiring_weight=1, unit="per pack"),
+        GroundTask(key="enclosure", label="Enclosure (box, DIN rail, ground bar)", mounting_weight=1, wiring_weight=0, unit="per box"),
+        GroundTask(key="protective", label="Breaker, SPD or ATS", mounting_weight=0.2, wiring_weight=0.3, unit="per device"),
+        GroundTask(key="conduit_m", label="Conduit or cable tray with supports", mounting_weight=0.15, wiring_weight=0, unit="per m"),
+        GroundTask(key="wire_m", label="Wire pull and terminate", mounting_weight=0, wiring_weight=0.02, unit="per m"),
+        GroundTask(key="mc4_pair", label="String home-run MC4", mounting_weight=0, wiring_weight=0.25, unit="per pair"),
+        GroundTask(key="ground_rod", label="Ground rod: drive and bond", mounting_weight=1, wiring_weight=0.5, unit="per rod"),
+        GroundTask(key="energize_job", label="Energize and commission: per job", mounting_weight=0, wiring_weight=3, unit="per job"),
+        GroundTask(key="energize_inverter", label="Energize and commission: per inverter", mounting_weight=0, wiring_weight=1, unit="per inverter"),
+        GroundTask(key="energize_pack", label="Energize and commission: per battery pack", mounting_weight=0, wiring_weight=0.5, unit="per pack"),
+    ])
+
+    def mh(self, key: str) -> float:
+        t = next(x for x in self.tasks if x.key == key)
+        return t.mounting_weight * self.mounting_mh_per_unit + t.wiring_weight * self.wiring_mh_per_unit
+
+
+class HaulingConfig(BaseModel):
+    max_kg_per_person: float = 32
+
+
+class MobDemobConfig(BaseModel):
+    vehicle_ownership_per_day: float = 560
+    running_cost_per_km: float = 12
+    base_to_site_km: float = 10
+    toll_per_round_trip: float = 0
+    one_way_travel_hours: float = 0.25
+    packaging_disposal: float = 500
+
+    @property
+    def crew_transport_per_day(self) -> float:
+        return self.vehicle_ownership_per_day + 2 * self.base_to_site_km * self.running_cost_per_km + self.toll_per_round_trip
+
+
+class ToolsConfig(BaseModel):
+    charge_per_installation_day: float = 905.624978858076
+
+
+class JobLevel(BaseModel):
+    agent_commission: float = 0.05
+    vat: float = 0.12
+    freight_markup: float = 0.15
+    services_markup: float = 0.30
+    ppe_per_person_day: float = 100
+    pee_seal: float = 1000
+    lgu_permit_cfei: float = 5000
+    erc_coc_fee: float = 1500
+    bidirectional_meter_fee: float = 3000
+    ocm_share: float = 0.5
+    round_up_to: float = 100
+    quotation_validity_days: int = 15
+
+
+class JobDefaults(BaseModel):
+    roof_factor: float = 0.75
+    roof_closed_days: int = 1
+    max_days: int = 2
+    max_pairs: int = 2
+    battery_haul_hours: float = 0.5
+    owner_days: float = 0
+    extra_km: float = 0
+    extra_toll: float = 0
+
+
+class WiringRules(BaseModel):
+    pv_run_m: float = 25            # home run per string, each conductor
+    ac_run_m: float = 15            # inverter to distribution board circuits
+    grounding_run_m: float = 20
+    conduit_m: float = 30
+    battery_pairs_per_battery: int = 2
+    dc_drop_limit: float = 0.03
+    ac_drop_limit: float = 0.03
+    ac_voltage: float = 230
+    battery_voltage: float = 51.2
+    panel_vmp_v: float = 42         # typical for 580-630 W modules
+    copper_resistivity: float = 0.0172  # ohm mm2 / m
+    continuous_factor: float = 1.25
+    thhn_ampacity: dict[str, float] = Field(default_factory=lambda: {"3.5": 25, "5.5": 30, "8.0": 40, "14": 55, "22": 70, "30": 85})  # PEC 60 C column
+    battery_cable_ampacity: dict[str, float] = Field(default_factory=lambda: {"16": 100, "25": 140, "35": 170, "50": 210, "70": 270})
+    pv_cable_ampacity: dict[str, float] = Field(default_factory=lambda: {"4": 40, "6": 55})
+
+
+class BoqRoles(BaseModel):
+    """Default item codes per role, resolved from the DB at import; editable."""
+    rail: str = "BC-MNT-001"
+    rail_length_m: float = 2.4
+    l_foot: str = "BC-MNT-006"
+    l_feet_per_rail: int = 3
+    end_clamp: str = "BC-MNT-003"
+    mid_clamp: str = "BC-MNT-004"
+    splice: str = "BC-MNT-005"
+    pv_cable_red: dict[str, str] = Field(default_factory=lambda: {"4": "BC-WIR-001", "6": "BC-WIR-003"})
+    pv_cable_black: dict[str, str] = Field(default_factory=lambda: {"4": "BC-WIR-002", "6": "BC-WIR-004"})
+    thhn: dict[str, str] = Field(default_factory=lambda: {"5.5": "IAN-WIR-002", "8.0": "IAN-WIR-004", "14": "IAN-WIR-005", "22": "IAN-WIR-007", "30": "IAN-WIR-009"})
+    battery_cable_pair: dict[str, str] = Field(default_factory=lambda: {"16": "OP-WIR-005", "25": "OP-WIR-006", "35": "OP-WIR-007", "50": "OP-WIR-008", "70": "OP-WIR-009"})
+    mc4_pair: str = "IAN-WIR-026"
+    mc4_pairs_per_string: int = 2
+    dc_breaker: str = "IAN-PRT-009"
+    dc_spd: str = "IAN-PRT-018"
+    battery_breaker_pattern: str = "BATTERY BREAKER"
+    battery_breaker_fallback: str = "IAN-PRT-003"
+    ats: str = "OP-PRT-035"
+    ats_amps: float = 63
+    ac_breaker: str = "IAN-PRT-027"
+    ac_breaker_amps: float = 63
+    ac_breakers_per_inverter: int = 4
+    ac_spd: str = "IAN-PRT-035"
+    ac_spds_per_inverter: int = 4
+    enclosure: str = "OP-ENC-007"
+    enclosures: int = 2
+    cable_tray: str = "OP-ENC-009"
+    cable_trays: int = 1
+    conduit: str = "IAN-ENC-011"
+    ground_rod: str = "OP-GND-001"
+    ground_rods: int = 1
+    earth_lug: str = "IAN-GND-001"
+    earth_lugs: int = 4
+    sealant: str = "IAN-CSM-001"
+    sealants: int = 2
+    max_panels_per_string: int = 10
+    inverter_exclude_words: list[str] = Field(default_factory=lambda: ["3P", "3-phase", "high-voltage", "HV"])
+    battery_exclude_words: list[str] = Field(default_factory=lambda: ["rack", "controller module", "slave", "per kWh", "12V", "24V", "25.6V", "12 V", "24 V"])
+
+
+class PricingConfig(BaseModel):
+    company_base: str = "PL Development Inc., Pila, Laguna"
+    truck: TruckConfig = Field(default_factory=TruckConfig)
+    handling: HandlingConfig = Field(default_factory=HandlingConfig)
+    route: RouteConfig = Field(default_factory=RouteConfig)
+    categories: list[CategoryRule] = Field(default_factory=lambda: list(DEFAULT_CATEGORIES))
+    labor: LaborRates = Field(default_factory=LaborRates)
+    roof: RoofRates = Field(default_factory=RoofRates)
+    ground: GroundRates = Field(default_factory=GroundRates)
+    hauling: HaulingConfig = Field(default_factory=HaulingConfig)
+    mobdemob: MobDemobConfig = Field(default_factory=MobDemobConfig)
+    tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    job: JobLevel = Field(default_factory=JobLevel)
+    job_defaults: JobDefaults = Field(default_factory=JobDefaults)
+    wiring: WiringRules = Field(default_factory=WiringRules)
+    roles: BoqRoles = Field(default_factory=BoqRoles)
+    imported_from: Optional[str] = None
+    imported_at: Optional[str] = None
+
+    def category(self, name: str) -> CategoryRule:
+        for c in self.categories:
+            if c.name == name:
+                return c
+        return CategoryRule(name=name, markup_tier=0.30, wastage=0.0)
+
+    @property
+    def productive_hours(self) -> float:
+        return self.labor.paid_hours - self.labor.nonproductive_hours - 2 * self.mobdemob.one_way_travel_hours

@@ -45,3 +45,44 @@ class AppSetting(SQLModel, table=True):
 
     key: str = Field(primary_key=True)
     value: str = ""
+
+
+class MaterialSupplier(SQLModel, table=True):
+    __tablename__ = "material_suppliers"
+
+    name: str = Field(primary_key=True)
+    pickup_address: str = ""
+    dealer_discount: float = 0.0
+    payment_fee: float = 0.0
+    delivers_free: bool = False
+    price_list_date: str = ""
+    prices_note: str = ""
+    warranty: str = ""
+    remarks: str = ""
+
+
+class MaterialItem(SQLModel, table=True):
+    """Materials database: one row per supplier item. The app is the master after import."""
+
+    __tablename__ = "material_items"
+
+    code: str = Field(primary_key=True)
+    category: str = Field(index=True)
+    supplier: str = Field(index=True)
+    name: str = Field(index=True)
+    spec: str = ""
+    unit: str = "pc"
+    sold_as: str = "pc"
+    list_price: float = 0.0
+    rating: Optional[float] = None
+    rating_unit: str = ""
+    weight_kg: float = 0.0
+    volume_m3: float = 0.0
+    weight_source: str = ""
+    storage: float = 0.0
+    price_list_date: str = ""
+    remarks: str = ""
+    panel_length_m: Optional[float] = None
+    panel_width_m: Optional[float] = None
+    active: bool = True
+    updated_at: datetime = Field(default_factory=utcnow)

@@ -172,3 +172,60 @@ def test_audit_and_sizing_flow(client):
     doc2 = dict(DOC)
     r = client.post(f"/api/assessments/{aid}/compute", json=doc2)
     assert r.json()["results"]["audit"] is None and r.json()["results"]["sizing"] is None
+
+
+def test_pricing_flow(client):
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    st = client.get("/api/pricing/status").json()
+    assert st["item_count"] == 362 and st["supplier_count"] == 4  # seeded at startup
+    items = client.get("/api/pricing/items", params={"q": "585", "category": "Solar Panel"}).json()
+    assert items and all(i["category"] == "Solar Panel" for i in items)
+    r = client.put("/api/pricing/items/OP-PNL-004", json={"panel_length_m": 2.384, "panel_width_m": 1.134})
+    assert r.status_code == 200 and r.json()["panel_length_m"] == 2.384
+    cfg = client.get("/api/pricing/config").json()
+    assert cfg["roles"]["l_feet_per_rail"] == 3 and cfg["job"]["vat"] == 0.12
+    cfg["job_defaults"]["max_days"] = 3
+    assert client.put("/api/pricing/config", json=cfg).json()["job_defaults"]["max_days"] == 3
+
+    doc = dict(DOC)
+    doc["panels"] = [{"id": "p1", "name": "Blue Carbon 585W", "watt_peak": 585, "length_m": 2.278, "width_m": 1.134, "code": "BC-PNL-001"}]
+    doc["audit"] = dict(TANAUAN_AUDIT, system={"kind": "combination"})
+    aid = client.post("/api/assessments", json=doc).json()["id"]
+    r = client.post(f"/api/assessments/{aid}/compute")
+    assert r.status_code == 200, r.text
+    res = r.json()["results"]
+    pr = res["pricing"]
+    assert pr["available"], pr
+    assert pr["panel"]["code"] == "BC-PNL-001"
+    roles = {l["role"] for l in pr["lines"]}
+    assert {"panel", "inverter", "battery", "rail", "l_foot", "thhn", "ats"} <= roles
+    panel_line = next(l for l in pr["lines"] if l["role"] == "panel")
+    assert panel_line["qty"] == res["sizing"]["panels"]
+    inv_line = next(l for l in pr["lines"] if l["role"] == "inverter")
+    assert inv_line["rating"] >= res["sizing"]["inverter"]["size_kw"]
+    assert pr["totals"]["contract_rounded"] % 100 == 0 and pr["totals"]["contract_rounded"] > 100000
+    secs = [s["key"] for s in pr["customer"]["sections"]]
+    assert secs == ["equipment", "materials", "labor", "tax"]
+    assert abs(sum(s["amount"] for s in pr["customer"]["sections"]) - pr["customer"]["total"]) < 0.01
+    assert pr["pin_distance"]["extra_km"] > 0 and pr["job_inputs"]["extra_km"] == pr["pin_distance"]["extra_km"]
+    assert pr["job_inputs"]["max_days"] == 3  # app pricing settings apply
+    # quotation PDF
+    r = client.get(f"/api/assessments/{aid}/quotation.pdf")
+    assert r.status_code == 200 and r.content[:4] == b"%PDF"
+    assert b"landed" not in r.content.lower()
+    # manual edit: remove the sealant, add a second ground rod, override extra km
+    before = pr["totals"]["contract_rounded"]
+    doc2 = r2 = client.get(f"/api/assessments/{aid}").json()["doc"]
+    doc2["pricing"] = {"bom_edits": [{"code": "IAN-CSM-001", "qty": 0}], "bom_extra": [{"code": "OP-GND-001", "qty": 1, "note": "second rod"}], "extra_km": 0}
+    res2 = client.post(f"/api/assessments/{aid}/compute", json=doc2).json()["results"]["pricing"]
+    codes = {l["code"]: l["qty"] for l in res2["lines"]}
+    assert "IAN-CSM-001" not in codes and codes["OP-GND-001"] == 2
+    assert res2["job_inputs"]["extra_km"] == 0 and res2["totals"]["contract_rounded"] != before
+    # an unlinked panel is matched by wattage with a warning; an unknown wattage is not priced
+    doc3 = dict(doc2)
+    doc3["panels"] = [{"id": "p1", "name": "Some 585W", "watt_peak": 585, "length_m": 2.278, "width_m": 1.134}]
+    res3 = client.post(f"/api/assessments/{aid}/compute", json=doc3).json()["results"]["pricing"]
+    assert res3["available"] and any(w["code"] == "panel_unlinked" for w in res3["warnings"])
+    doc3["panels"] = [{"id": "p1", "name": "Odd 999W", "watt_peak": 999, "length_m": 2.278, "width_m": 1.134}]
+    res4 = client.post(f"/api/assessments/{aid}/compute", json=doc3).json()["results"]["pricing"]
+    assert not res4["available"]

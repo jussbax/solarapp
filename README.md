@@ -32,6 +32,20 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    PV capped by the roof, battery modules, and the inverter size from your
    catalogue sizes with the 200% surge rule. Every appliance typed is kept
    in a catalogue for reuse.
+7. Pricing: the materials workbook (suppliers, 362 items, drivers, route,
+   labour rates, mob/demob, tools, job fees) is imported once into the app,
+   which is then the master: edit prices, weights, panel sizes and settings
+   in the browser, re-import a newer workbook to update items by code. A
+   bill of materials is generated from the sizing and the roof layout
+   (panels from the database, cheapest hybrid inverter at or above the
+   required kW, cheapest battery combination at or above the required kWh,
+   rails, L-feet, clamps and splices per row, strings, PV and AC cable with
+   a voltage-drop gauge check, protection, enclosures, grounding,
+   consumables), can be edited line by line, and is priced exactly as the
+   workbook does it: landed cost, freight run through the suppliers, labour
+   crew and days, build-up with markups, commission and VAT, rounded up to
+   the hundred. A customer quotation PDF shows Equipment, Materials, Labor
+   and Tax only.
 
 ## Deploy on an Ubuntu server with Docker
 
@@ -119,7 +133,8 @@ Run it under systemd or `nohup` to keep it alive.
 
 ```bash
 cd backend && . .venv/bin/activate && pip install -r requirements-dev.txt
-python -m pytest                                          # 27 tests, no network
+python -m pytest                                          # 60 tests, no network
+python -m solarapp.pricing ../path/to/PLD_Materials_DB.xlsx   # import a materials workbook (the Materials page does this too)
 python -m solarapp.data_download --out ../data --synthetic --bbox 14.25 14.75 120.75 121.25
 SOLARAPP_DATA_DIR=../data uvicorn solarapp.main:app --reload --port 8000
 # in another terminal
@@ -139,9 +154,15 @@ backend/solarapp/core/simulation.py   hourly pvlib simulation and monthly aggreg
 backend/solarapp/core/dataset.py      nearest-cell lookup and TMY loading
 backend/solarapp/core/audit.py        appliance types and duty factors, load profiles, bill reconciliation
 backend/solarapp/core/sizing.py       hourly balance, PV target, battery modules, inverter choice
+backend/solarapp/pricing/importer.py  reads the materials workbook (items, suppliers, drivers, route, rates)
+backend/solarapp/pricing/engine.py    landed cost, freight run, labour calc, build-up, customer sections
+backend/solarapp/pricing/boq.py       bill of materials from the sized system and roof layout
+backend/solarapp/pricing/job.py       prices an assessment: BOQ, manual edits, extra km from the map pin
+backend/solarapp/pricing/store.py     materials tables and pricing settings in SQLite, workbook import
+backend/data_seed/                    bundled materials workbook, loaded on first start
 backend/solarapp/compute.py           turns an assessment into results
 backend/solarapp/data_download/       one-time PVGIS and NASA download
-backend/solarapp/reports/             customer PDF
+backend/solarapp/reports/             customer PDF and quotation PDF
 backend/solarapp/api/                 FastAPI routes
 frontend/src/                         React app (map pin, editors, results)
 data/                                 weather dataset and SQLite database (not in git)

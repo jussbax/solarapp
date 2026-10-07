@@ -10,6 +10,8 @@ import ResultsView from '../components/ResultsView'
 import NumberInput from '../components/NumberInput'
 import AuditEditor from '../components/AuditEditor'
 import AuditResults from '../components/AuditResults'
+import { PricingInputs, PricingResults } from '../components/PricingSection'
+import { emptyPricingJob } from '../types'
 
 export default function AssessmentPage({ status }: { status: DataStatus | null }) {
   const { id } = useParams()
@@ -154,6 +156,11 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         <AuditEditor audit={doc.audit} onChange={(audit) => patch({ audit })} />
       </div>
 
+      <div className="card">
+        <h2>Pricing inputs</h2>
+        <PricingInputs job={doc.pricing ?? emptyPricingJob()} pricing={results?.pricing ?? null} onChange={(pricing) => patch({ pricing })} />
+      </div>
+
       {error && <div className="banner bad">{error}</div>}
       <div className="actions">
         <button onClick={save} disabled={!!busy || !dirty}>
@@ -189,6 +196,18 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             sizing={results.sizing}
             panelName={results.panels.find((p) => p.panel.id === results.selected_panel_id)?.panel.name || ''}
             panelWp={results.panels.find((p) => p.panel.id === results.selected_panel_id)?.panel.watt_peak || 0}
+          />
+        </div>
+      )}
+      {results && results.pricing && (
+        <div className="card" id="pricing">
+          <h2>Pricing and bill of materials</h2>
+          <PricingResults
+            pricing={results.pricing}
+            job={doc.pricing ?? emptyPricingJob()}
+            onJobChange={(pricing) => patch({ pricing })}
+            quotationUrl={api.quotationUrl(aid)}
+            stale={a.results_stale || dirty}
           />
         </div>
       )}

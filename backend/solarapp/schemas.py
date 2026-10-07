@@ -23,6 +23,7 @@ class CandidatePanel(BaseModel):
     watt_peak: float = Field(gt=0)
     length_m: float = Field(gt=0)
     width_m: float = Field(gt=0)
+    code: Optional[str] = None  # materials database code, used for pricing
 
 
 class Reading(BaseModel):
@@ -104,6 +105,34 @@ class EnergyAudit(BaseModel):
     system: SystemSettings = Field(default_factory=SystemSettings)
 
 
+class BomEdit(BaseModel):
+    """A manual change to the generated bill of materials: a quantity override (0 removes) or an added item."""
+    code: str
+    qty: float = Field(ge=0)
+    note: str = ""
+
+
+class PricingJob(BaseModel):
+    """Per-job pricing inputs; blanks follow the pricing settings or are prefilled from the assessment."""
+    inverter_code: Optional[str] = None
+    battery_code: Optional[str] = None
+    strings_override: Optional[int] = Field(default=None, ge=1)
+    max_panels_per_string: Optional[int] = Field(default=None, ge=1)
+    roof_factor: Optional[float] = Field(default=None, gt=0, le=1.5)
+    roof_closed_days: Optional[int] = Field(default=None, ge=0)
+    max_days: Optional[int] = Field(default=None, ge=1)
+    max_pairs: Optional[int] = Field(default=None, ge=1)
+    owner_days: Optional[float] = Field(default=None, ge=0)
+    extra_km: Optional[float] = Field(default=None, ge=0)     # blank = from the map pin
+    extra_toll: Optional[float] = Field(default=None, ge=0)
+    pv_run_m: Optional[float] = Field(default=None, gt=0)
+    ac_run_m: Optional[float] = Field(default=None, gt=0)
+    grounding_run_m: Optional[float] = Field(default=None, ge=0)
+    conduit_m: Optional[float] = Field(default=None, ge=0)
+    bom_edits: list[BomEdit] = Field(default_factory=list)     # overrides by code; qty 0 removes
+    bom_extra: list[BomEdit] = Field(default_factory=list)     # added lines
+
+
 class AssessmentDoc(BaseModel):
     customer_name: str = ""
     address: str = ""
@@ -119,6 +148,7 @@ class AssessmentDoc(BaseModel):
     setback_m: float = Field(default=0.6, ge=0)
     gap_m: float = Field(default=0.0, ge=0)
     audit: EnergyAudit = Field(default_factory=EnergyAudit)
+    pricing: PricingJob = Field(default_factory=PricingJob)
 
 
 class ApplianceCatalogOut(BaseModel):
@@ -174,3 +204,46 @@ class SettingsOut(BaseModel):
 class SettingsIn(BaseModel):
     company_name: Optional[str] = None
     company_contact: Optional[str] = None
+
+
+class MaterialItemIn(BaseModel):
+    code: str = Field(min_length=3, max_length=40)
+    category: str
+    supplier: str
+    name: str
+    spec: str = ""
+    unit: str = "pc"
+    sold_as: str = "pc"
+    list_price: float = Field(ge=0)
+    rating: Optional[float] = None
+    rating_unit: str = ""
+    weight_kg: float = Field(default=0, ge=0)
+    volume_m3: float = Field(default=0, ge=0)
+    weight_source: str = ""
+    storage: float = Field(default=0, ge=0)
+    price_list_date: str = ""
+    remarks: str = ""
+    panel_length_m: Optional[float] = Field(default=None, gt=0)
+    panel_width_m: Optional[float] = Field(default=None, gt=0)
+    active: bool = True
+
+
+class MaterialItemPatch(BaseModel):
+    category: Optional[str] = None
+    supplier: Optional[str] = None
+    name: Optional[str] = None
+    spec: Optional[str] = None
+    unit: Optional[str] = None
+    sold_as: Optional[str] = None
+    list_price: Optional[float] = Field(default=None, ge=0)
+    rating: Optional[float] = None
+    rating_unit: Optional[str] = None
+    weight_kg: Optional[float] = Field(default=None, ge=0)
+    volume_m3: Optional[float] = Field(default=None, ge=0)
+    weight_source: Optional[str] = None
+    storage: Optional[float] = Field(default=None, ge=0)
+    price_list_date: Optional[str] = None
+    remarks: Optional[str] = None
+    panel_length_m: Optional[float] = Field(default=None, gt=0)
+    panel_width_m: Optional[float] = Field(default=None, gt=0)
+    active: Optional[bool] = None

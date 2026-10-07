@@ -176,3 +176,59 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   self-consumption, annual import and export, typical-day chart per month,
   month-by-month balance. Internal only for now; the customer PDF is
   unchanged until the pricing module exists.
+
+## Pricing and bill of materials (module 3)
+
+- The owner's workbook (PLD_Materials_DB) is imported once and the app is
+  the master afterwards: items, suppliers and every driver, rate, route and
+  job constant live in the database and are edited in the browser. A newer
+  workbook can be re-imported; items are matched by code, prices and specs
+  follow the workbook, panel dimensions typed in the app are kept, items
+  missing from the workbook stay, and the pricing settings are kept unless
+  the import is told to reload them. The packages workbook is dropped.
+- Panel length and width are stored per material item (parsed from the spec
+  when it carries "LLLLxWWWxDD mm", otherwise typed on the Materials page).
+  A candidate panel can be picked from the database, which links it by
+  code; an unlinked candidate is priced as the cheapest database panel of
+  the same wattage, with a warning.
+- The engine reproduces the workbook's sample job to the peso (329,300 for
+  the 8-panel, 6 kW, 11.7 kWh job): landed cost = net + handling share
+  + wastage + payment fee + storage; truck share = max(kg / 3000, m3 /
+  14.27); markup tiers 10 / 15 / 30 percent; freight = trips x run cost
+  over the loop Pila, suppliers bought from in order, site, Pila; labour
+  from roof and ground man-hours with the carry crew rule, crew options of
+  4, 6 or 8 and the cheapest feasible within the day limits; mob/demob,
+  tools, PPE, seal, LGU permit, ERC and meter pass-throughs for net
+  metering; services markup, freight markup, 5 percent commission, VAT,
+  rounded up to the hundred; OCM share of the markup.
+- BOQ rules: inverter = cheapest hybrid at or above the sized kW (3-phase
+  and high-voltage units excluded), times the parallel units; battery =
+  cheapest combination at or above the nominal kWh (racks, slave modules,
+  12 and 24 V units excluded); both with a per-job override. Mounting per
+  row from the roof layout (a row runs along the face length; the panel
+  dimension along the row follows the chosen orientation): two rail lines,
+  2.4 m rails, three L-feet per rail (owner's correction), four end clamps
+  per row, two mid clamps per gap, one splice per rail joint. Strings =
+  ceil(panels / max per string, default 10) with an override; one DC
+  breaker and two MC4 pairs per string. Wire runs use a fixed allowance
+  (25 m per string each conductor, 15 m AC circuits, 20 m grounding, 30 m
+  conduit) and the gauge is the smallest whose ampacity covers 1.25 times
+  the current and whose drop over that run stays under 3 percent; THHN
+  ampacity uses the 60 degree column (3.5 mm2 25 A ... 30 mm2 85 A) so a
+  6 kW inverter gets 8.0 mm2 as on the sample job. Battery cable: two lug
+  pairs per battery, gauge from 1.25 times the inverter kW at 51.2 V;
+  battery breaker = smallest "BATTERY BREAKER" at or above that current.
+  ATS 63 A, four AC breakers and four AC SPDs per inverter, two
+  enclosures, one tray, one ground rod, four earth lugs, two sealants.
+- Manual edits are stored as quantity overrides by code (zero removes) and
+  added lines, so they survive a recompute; "reset to generated" clears
+  them. Extra one-way km beyond the route's reference site is prefilled
+  from the map pin: straight line to Pila x 1.3 road factor, less the
+  10 km reference; it can be overridden per job.
+- Customer quotation shows four sections only: Equipment (panels,
+  inverter, battery), Materials, Labor (installation, mob/demob, tools,
+  PPE, seal, permits and fees) and Tax. Freight is split between equipment
+  and materials by truck share, commission in proportion to direct cost,
+  and the rounding pesos sit in Labor so the total is the rounded contract
+  price. Landed costs, markups, freight and labour detail stay internal.
+- Not yet: close-out actuals and the simplified quick estimate.

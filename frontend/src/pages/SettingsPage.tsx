@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api'
+import PricingSettings from '../components/PricingSettings'
 import type { AppSettings, DataStatus } from '../types'
 
 export default function SettingsPage({ status, onRefresh }: { status: DataStatus | null; onRefresh: () => void }) {
@@ -39,6 +40,10 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
           </>
         )}
       </form>
+      <div className="card">
+        <h2>Pricing settings</h2>
+        <PricingSettings />
+      </div>
       <div className="card">
         <h2>Weather dataset</h2>
         {status ? (

@@ -12,6 +12,7 @@ from .core import kfactor, layout
 from .core.dataset import NasaReference, PvgisDataset
 from .core.sizing import BatterySpec, InverterRules, OffGridRules, size_system
 from .core.simulation import FaceSpec, ThermalModel, prepare_sky, simulate, typical_air_temperature
+from .pricing.job import PricingContext, price_assessment
 from .schemas import AssessmentDoc
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -25,7 +26,7 @@ def _warn(code: str, message: str) -> dict:
     return {"code": code, "message": message}
 
 
-def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference) -> dict:
+def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference, pricing: Optional[PricingContext] = None) -> dict:
     if doc.lat is None or doc.lon is None:
         raise ComputeError("Set the site location (map pin) first.")
     if not doc.faces:
@@ -131,7 +132,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         d["warnings"] = [asdict(w) for w in r.warnings]
         return d
 
-    return {
+    results = {
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "months": MONTHS,
         "dataset": {**cell.to_dict(), "synthetic": pvgis.synthetic, "source": pvgis.info().get("source")},
@@ -165,8 +166,15 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         "nasa_reference": nasa_block,
         "audit": audit_block,
         "sizing": sizing_block,
+        "pricing": None,
         "warnings": warnings,
     }
+    if pricing is not None:
+        try:
+            results["pricing"] = price_assessment(doc, results, pricing)
+        except Exception as e:  # noqa: BLE001  pricing must never break the simulation
+            results["pricing"] = {"available": False, "reason": f"Pricing failed: {e}", "warnings": []}
+    return results
 
 
 def compute_audit_and_sizing(doc: AssessmentDoc, production, selected_panel_result: dict, panel_wp: float) -> tuple[Optional[dict], Optional[dict]]:

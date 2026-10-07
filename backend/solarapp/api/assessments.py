@@ -11,7 +11,10 @@ from ..config import Settings, get_settings
 from ..core.dataset import NasaReference, PvgisDataset
 from ..db import get_session
 from ..models import Assessment, utcnow
+from ..pricing.job import PricingContext
+from ..pricing.store import load_catalog, load_config
 from ..reports.customer_pdf import build_customer_pdf
+from ..reports.quotation_pdf import build_quotation_pdf
 from ..schemas import AssessmentDoc, AssessmentOut, AssessmentSummary
 from .appliances import remember_appliances
 from .deps import get_nasa, get_pvgis
@@ -100,8 +103,9 @@ def compute_assessment(
         a.doc = doc.model_dump(mode="json")
         a.customer_name, a.address = doc.customer_name, doc.address
     parsed = AssessmentDoc.model_validate(a.doc)
+    ctx = PricingContext(load_catalog(session), load_config(session))
     try:
-        a.results = compute_results(parsed, pvgis, nasa)
+        a.results = compute_results(parsed, pvgis, nasa, ctx)
     except ComputeError as e:
         raise HTTPException(status_code=422, detail=str(e))
     a.results_stale = False
@@ -128,3 +132,21 @@ def customer_report(
     pdf = build_customer_pdf(AssessmentDoc.model_validate(a.doc), a.results, company, stale=a.results_stale)
     name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="solar-assessment-{name}.pdf"'})
+
+
+@router.get("/{assessment_id}/quotation.pdf")
+def customer_quotation(
+    assessment_id: int,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    a = _get(session, assessment_id)
+    pricing = (a.results or {}).get("pricing") or {}
+    if not pricing.get("available"):
+        raise HTTPException(status_code=409, detail="Compute the assessment with pricing first.")
+    if a.results_stale:
+        raise HTTPException(status_code=409, detail="Inputs changed since the last compute. Save and compute again first.")
+    company = company_settings(session, settings)
+    pdf = build_quotation_pdf(AssessmentDoc.model_validate(a.doc), a.results, company)
+    name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="solar-quotation-{name}.pdf"'})

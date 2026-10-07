@@ -14,6 +14,7 @@ export interface CandidatePanel {
   watt_peak: number
   length_m: number
   width_m: number
+  code?: string | null
 }
 
 export interface Reading {
@@ -118,6 +119,151 @@ export interface AssessmentDoc {
   setback_m: number
   gap_m: number
   audit: EnergyAudit
+  pricing: PricingJob
+}
+
+export interface BomEdit {
+  code: string
+  qty: number
+  note: string
+}
+
+export interface PricingJob {
+  inverter_code: string | null
+  battery_code: string | null
+  strings_override: number | null
+  max_panels_per_string: number | null
+  roof_factor: number | null
+  roof_closed_days: number | null
+  max_days: number | null
+  max_pairs: number | null
+  owner_days: number | null
+  extra_km: number | null
+  extra_toll: number | null
+  pv_run_m: number | null
+  ac_run_m: number | null
+  grounding_run_m: number | null
+  conduit_m: number | null
+  bom_edits: BomEdit[]
+  bom_extra: BomEdit[]
+}
+
+export function emptyPricingJob(): PricingJob {
+  return {
+    inverter_code: null, battery_code: null, strings_override: null, max_panels_per_string: null, roof_factor: null, roof_closed_days: null,
+    max_days: null, max_pairs: null, owner_days: null, extra_km: null, extra_toll: null, pv_run_m: null, ac_run_m: null, grounding_run_m: null,
+    conduit_m: null, bom_edits: [], bom_extra: [],
+  }
+}
+
+export interface MaterialItem {
+  code: string
+  category: string
+  supplier: string
+  name: string
+  spec: string
+  unit: string
+  sold_as: string
+  list_price: number
+  rating: number | null
+  rating_unit: string
+  weight_kg: number
+  volume_m3: number
+  weight_source: string
+  storage: number
+  price_list_date: string
+  remarks: string
+  panel_length_m: number | null
+  panel_width_m: number | null
+  active: boolean
+  updated_at?: string
+}
+
+export interface MaterialSupplier {
+  name: string
+  pickup_address: string
+  dealer_discount: number
+  payment_fee: number
+  delivers_free: boolean
+  price_list_date: string
+  prices_note: string
+  warranty: string
+  remarks: string
+}
+
+export interface PricingStatus {
+  item_count: number
+  supplier_count: number
+  imported_from: string | null
+  imported_at: string | null
+  seed_available: boolean
+}
+
+export interface ImportReport {
+  added: number
+  updated: number
+  suppliers: number
+  warnings: string[]
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type PricingConfig = Record<string, any>
+
+export interface PricedLine {
+  code: string
+  qty: number
+  role: string
+  note: string
+  found: boolean
+  name: string
+  category: string
+  supplier: string
+  unit: string
+  rating: number | null
+  rating_unit: string
+  landed_unit: number
+  markup_tier: number
+  landed: number
+  markup: number
+  selling: number
+  truck_share: number
+  weight_kg: number
+}
+
+export interface BuildUpLine {
+  key: string
+  label: string
+  direct: number
+  tier: number
+  markup: number
+  selling: number
+  pass_through: boolean
+}
+
+export interface PricingBlock {
+  available: boolean
+  reason?: string
+  warnings: Warning[]
+  panel?: { code: string; name: string; watt_peak: number }
+  lines?: PricedLine[]
+  generated_bom?: { code: string; qty: number; role: string; note: string }[]
+  missing_codes?: string[]
+  takeoff?: Record<string, number>
+  freight?: { stops_on_run: string[]; legs: { from: string; to: string; km: number; toll: number }[]; loop_km: number; toll: number; run_cost: number; truck_share: number; trips: number; freight: number }
+  labor?: Record<string, number | string | boolean | unknown[]>
+  build_up?: BuildUpLine[]
+  totals?: { direct: number; markup: number; markup_over_direct: number; selling: number; commission: number; contract_ex_vat: number; vat: number; contract: number; contract_rounded: number; ocm: number; op: number; kwp: number; price_per_wp: number | null; materials_landed: number; materials_selling: number }
+  customer?: { sections: { key: string; label: string; amount: number; items?: { name: string; qty: number; unit: string }[] }[]; total: number; subtotal_ex_vat: number; vat: number }
+  job_inputs?: Record<string, number | boolean>
+  choices?: {
+    strings: number; panels_per_string: number; string_current_a: number; string_voltage_v: number; pv_gauge: string; pv_drop: number
+    ac_current_a: number; ac_gauge: string; ac_drop: number; inverter_code: string | null; battery_code: string | null; battery_units: number
+    rows: { panels: number; length_m: number }[]
+    inverter_options?: { code: string; name: string; rating_kw: number; supplier: string; landed: number }[]
+    battery_options?: { code: string; name: string; rating_kwh: number; units: number; total_kwh: number; supplier: string; landed: number }[]
+  }
+  pin_distance?: { straight_km: number; road_km: number; reference_site_km: number; extra_km: number } | null
+  quotation_validity_days?: number
 }
 
 export interface AssessmentSummary {
@@ -327,6 +473,7 @@ export interface Results {
   legacy_method: { monthly_kwh: number; annual_kwh: number; formula: string }
   audit: AuditBlock | null
   sizing: SizingBlock | null
+  pricing: PricingBlock | null
   nasa_reference: {
     point: { lat: number; lon: number; distance_km: number }
     nasa_ghi_psh: (number | null)[]
@@ -380,6 +527,7 @@ export function emptyDoc(): AssessmentDoc {
     setback_m: 0.6,
     gap_m: 0,
     audit: emptyAudit(),
+    pricing: emptyPricingJob(),
   }
 }
 

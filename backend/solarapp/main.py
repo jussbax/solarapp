@@ -7,10 +7,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import appliances, assessments, auth_routes, data_routes, settings_routes
+from sqlmodel import Session
+
+from .api import appliances, assessments, auth_routes, data_routes, pricing_routes, settings_routes
 from .config import Settings, get_settings
 from .core.dataset import NasaReference, PvgisDataset
 from .db import init_engine
+from .pricing.store import ensure_seeded
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -19,7 +22,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         settings.data_dir.mkdir(parents=True, exist_ok=True)
-        init_engine(settings.database_path)
+        engine = init_engine(settings.database_path)
+        with Session(engine) as session:
+            ensure_seeded(session)
         app.state.pvgis = PvgisDataset(settings.data_dir)
         app.state.nasa = NasaReference(settings.data_dir)
         yield
@@ -31,6 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(settings_routes.router)
     app.include_router(data_routes.router)
     app.include_router(appliances.router)
+    app.include_router(pricing_routes.router)
 
     @app.get("/api/health")
     def health() -> dict:

@@ -1,0 +1,103 @@
+"""Persist and load the catalog and pricing configuration (SQLite)."""
+from __future__ import annotations
+
+import json
+from dataclasses import asdict
+from pathlib import Path
+from typing import Optional
+
+from sqlmodel import Session, select
+
+from ..models import AppSetting, MaterialItem, MaterialSupplier, utcnow
+from .catalog import Catalog, Item, Supplier
+from .config import PricingConfig
+from .importer import ImportResult, read_workbook
+
+CONFIG_KEY = "pricing_config"
+SEED_PATH = Path(__file__).resolve().parent.parent.parent / "data_seed" / "PLD_Materials_DB.xlsx"
+
+
+def load_config(session: Session) -> PricingConfig:
+    row = session.get(AppSetting, CONFIG_KEY)
+    if row and row.value:
+        try:
+            return PricingConfig.model_validate_json(row.value)
+        except Exception:  # noqa: BLE001
+            pass
+    return PricingConfig()
+
+
+def save_config(session: Session, cfg: PricingConfig) -> None:
+    row = session.get(AppSetting, CONFIG_KEY) or AppSetting(key=CONFIG_KEY)
+    row.value = cfg.model_dump_json()
+    session.add(row)
+    session.commit()
+
+
+def load_catalog(session: Session, include_inactive: bool = False) -> Catalog:
+    items: dict[str, Item] = {}
+    for r in session.exec(select(MaterialItem)).all():
+        if not include_inactive and not r.active:
+            continue
+        d = r.model_dump()
+        d.pop("updated_at", None)
+        items[r.code] = Item(**d)
+    sups = {r.name: Supplier(**r.model_dump()) for r in session.exec(select(MaterialSupplier)).all()}
+    return Catalog(items, sups)
+
+
+def catalog_status(session: Session) -> dict:
+    n = len(session.exec(select(MaterialItem.code)).all())
+    cfg = load_config(session)
+    return {"item_count": n, "supplier_count": len(session.exec(select(MaterialSupplier.name)).all()),
+            "imported_from": cfg.imported_from, "imported_at": cfg.imported_at, "seed_available": SEED_PATH.exists()}
+
+
+def persist_import(session: Session, result: ImportResult, replace_config: bool = True) -> dict:
+    """Upsert items by code and suppliers by name. Prices and specs follow the workbook; panel
+    dimensions typed in the app are kept when the workbook has none; items absent from the
+    workbook are left untouched."""
+    added = updated = 0
+    for it in result.catalog.items.values():
+        row = session.get(MaterialItem, it.code)
+        data = asdict(it)
+        if row is None:
+            session.add(MaterialItem(**data))
+            added += 1
+        else:
+            for k, v in data.items():
+                if k in ("panel_length_m", "panel_width_m") and v is None:
+                    continue
+                if k == "active":
+                    continue
+                setattr(row, k, v)
+            row.updated_at = utcnow()
+            session.add(row)
+            updated += 1
+    for s in result.catalog.suppliers.values():
+        row = session.get(MaterialSupplier, s.name)
+        if row is None:
+            session.add(MaterialSupplier(**asdict(s)))
+        else:
+            for k, v in asdict(s).items():
+                setattr(row, k, v)
+            session.add(row)
+    session.commit()
+    if replace_config:
+        save_config(session, result.config)
+    else:
+        cfg = load_config(session)
+        cfg.imported_from, cfg.imported_at = result.config.imported_from, result.config.imported_at
+        save_config(session, cfg)
+    return {"added": added, "updated": updated, "suppliers": result.supplier_count, "warnings": result.warnings}
+
+
+def import_workbook(session: Session, path: str | Path, replace_config: bool = True) -> dict:
+    return persist_import(session, read_workbook(path), replace_config)
+
+
+def ensure_seeded(session: Session) -> Optional[dict]:
+    """First run: load the seed workbook when the materials table is empty."""
+    if session.exec(select(MaterialItem.code)).first() is None and SEED_PATH.exists():
+        return import_workbook(session, SEED_PATH)
+    return None

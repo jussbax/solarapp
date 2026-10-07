@@ -1,4 +1,6 @@
-import { newId, type CandidatePanel, type PanelResult } from '../types'
+import { useState } from 'react'
+import { newId, type CandidatePanel, type MaterialItem, type PanelResult } from '../types'
+import MaterialPicker from './MaterialPicker'
 import NumberInput from './NumberInput'
 
 export default function PanelsEditor({
@@ -17,6 +19,15 @@ export default function PanelsEditor({
   const update = (i: number, patch: Partial<CandidatePanel>) => onChange(panels.map((p, j) => (j === i ? { ...p, ...patch } : p)))
   const add = () => onChange([...panels, { id: newId(), name: '', watt_peak: 550, length_m: 2.278, width_m: 1.134 }])
   const remove = (i: number) => onChange(panels.filter((_, j) => j !== i))
+  const [picking, setPicking] = useState(false)
+  const fromDb = (it: MaterialItem) => {
+    const p: CandidatePanel = {
+      id: newId(), code: it.code, name: it.name, watt_peak: it.rating ?? 0,
+      length_m: it.panel_length_m ?? 2.278, width_m: it.panel_width_m ?? 1.134,
+    }
+    onChange([...panels, p])
+    setPicking(false)
+  }
   const resultFor = (id: string) => results?.find((r) => r.panel.id === id)
   const best = results?.find((r) => r.best)
 
@@ -44,7 +55,17 @@ export default function PanelsEditor({
                   <input type="radio" name="selected-panel" checked={selectedId === p.id} onChange={() => onSelect(p.id)} style={{ width: 'auto' }} />
                 </td>
                 <td>
-                  <input value={p.name} onChange={(e) => update(i, { name: e.target.value })} placeholder="e.g. Canadian 550W" />
+                  <input value={p.name} onChange={(e) => update(i, { name: e.target.value, code: p.code ?? null })} placeholder="e.g. Canadian 550W" />
+                  {p.code ? (
+                    <div className="muted" style={{ fontSize: 11 }}>
+                      DB {p.code}{' '}
+                      <button type="button" className="toggle link" onClick={() => update(i, { code: null })}>
+                        unlink
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="muted" style={{ fontSize: 11 }}>not linked to the materials DB (priced by wattage)</div>
+                  )}
                 </td>
                 <td>
                   <NumberInput value={p.watt_peak} onChange={(v) => update(i, { watt_peak: v ?? 0 })} min={1} />
@@ -78,10 +99,19 @@ export default function PanelsEditor({
       <div style={{ marginTop: 8 }}>
         <button type="button" onClick={add}>
           Add candidate panel
+        </button>{' '}
+        <button type="button" onClick={() => setPicking((v) => !v)}>
+          Add from materials DB
         </button>
         <span className="muted" style={{ marginLeft: 10 }}>
           Leave "Use" unticked to use the panel with the most kWp.
         </span>
+        {picking && (
+          <div style={{ marginTop: 8, maxWidth: 520 }}>
+            <MaterialPicker category="Solar Panel" placeholder="Type part of the panel name or code" onPick={fromDb} autoFocus />
+            <div className="muted">Panels without stored dimensions get 2.278 x 1.134 m; set the real size on the Materials page.</div>
+          </div>
+        )}
       </div>
     </div>
   )

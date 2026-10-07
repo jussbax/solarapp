@@ -12,3 +12,4 @@ itsdangerous>=2.2
 python-multipart>=0.0.9
 global-land-mask>=1.0
 pydantic-settings>=2.4
+openpyxl>=3.1
