@@ -205,7 +205,7 @@ def test_pricing_flow(client):
     assert inv_line["rating"] >= res["sizing"]["inverter"]["size_kw"]
     assert pr["totals"]["contract_rounded"] % 100 == 0 and pr["totals"]["contract_rounded"] > 100000
     secs = [s["key"] for s in pr["customer"]["sections"]]
-    assert secs == ["equipment", "materials", "labor", "tax"]
+    assert secs == ["materials", "labor", "equipment", "tax"]
     assert abs(sum(s["amount"] for s in pr["customer"]["sections"]) - pr["customer"]["total"]) < 0.01
     assert pr["pin_distance"]["extra_km"] > 0 and pr["job_inputs"]["extra_km"] == pr["pin_distance"]["extra_km"]
     assert pr["job_inputs"]["max_days"] == 3  # app pricing settings apply

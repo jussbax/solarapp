@@ -367,7 +367,7 @@ export interface PricingBlock {
   labor?: Record<string, number | string | boolean | unknown[]>
   build_up?: BuildUpLine[]
   totals?: { direct: number; markup: number; markup_over_direct: number; selling: number; commission: number; contract_ex_vat: number; vat: number; contract: number; contract_rounded: number; ocm: number; op: number; kwp: number; price_per_wp: number | null; materials_landed: number; materials_selling: number }
-  customer?: { sections: { key: string; label: string; amount: number; items?: { name: string; qty: number; unit: string }[] }[]; total: number; subtotal_ex_vat: number; vat: number }
+  customer?: { sections: { key: string; label: string; amount: number; items: { key: string; name: string; qty: number; unit: string; amount: number; main?: boolean }[] }[]; total: number; subtotal_ex_vat: number; vat: number }
   job_inputs?: Record<string, number | boolean>
   choices?: {
     strings: number; panels_per_string: number; string_current_a: number; string_voltage_v: number; pv_gauge: string; pv_drop: number

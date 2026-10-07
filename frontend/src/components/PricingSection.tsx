@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { api } from '../api'
 import type { MaterialItem, PricingBlock, PricingJob } from '../types'
 import MaterialPicker from './MaterialPicker'
@@ -98,6 +98,7 @@ export function PricingResults({
   const lines = pricing.lines ?? []
   const t = pricing.totals!
   const cust = pricing.customer!
+  const sec = (k: string) => cust.sections.find((s) => s.key === k)
   const editFor = (code: string) => job.bom_edits.find((e) => e.code === code)
   const setQty = (code: string, v: number | null) => {
     const gen = pricing.generated_bom?.find((g) => g.code === code)
@@ -138,25 +139,25 @@ export function PricingResults({
           <div className="sub">{t.price_per_wp ? `₱${t.price_per_wp.toFixed(2)} per Wp` : ''} · {t.kwp.toFixed(2)} kWp</div>
         </div>
         <div className="kpi">
-          <div className="label">Equipment</div>
-          <div className="value">{php0(cust.sections[0].amount)}</div>
-          <div className="sub">{(cust.sections[0].items ?? []).map((i) => `${qty(i.qty)} x ${i.name}`).join(', ')}</div>
-        </div>
-        <div className="kpi">
           <div className="label">Materials</div>
-          <div className="value">{php0(cust.sections[1].amount)}</div>
-          <div className="sub">mounting, wiring, protection, enclosures, grounding</div>
+          <div className="value">{php0(sec('materials')?.amount)}</div>
+          <div className="sub">{(sec('materials')?.items ?? []).filter((i) => i.main).map((i) => `${qty(i.qty)} x ${i.name}`).join(', ')}; mounting, wiring, protection, enclosures, grounding; freight baked in</div>
         </div>
         <div className="kpi">
           <div className="label">Labor</div>
-          <div className="value">{php0(cust.sections[2].amount)}</div>
+          <div className="value">{php0(sec('labor')?.amount)}</div>
           <div className="sub">
-            {String(lb.persons ?? '')} persons, {String(lb.days ?? '')} day(s), {String(lb.pairs ?? '')} pair(s) · incl. mob/demob, tools, permits
+            {String(lb.persons ?? '')} persons, {String(lb.days ?? '')} day(s), {String(lb.pairs ?? '')} pair(s) · incl. mob/demob, PPE, seal, permits and fees
           </div>
         </div>
         <div className="kpi">
+          <div className="label">Equipment</div>
+          <div className="value">{php0(sec('equipment')?.amount)}</div>
+          <div className="sub">tool charge for {String(lb.days ?? '')} installation day(s)</div>
+        </div>
+        <div className="kpi">
           <div className="label">Tax</div>
-          <div className="value">{php0(cust.sections[3].amount)}</div>
+          <div className="value">{php0(sec('tax')?.amount)}</div>
           <div className="sub">VAT 12% on the three sections above</div>
         </div>
       </div>
@@ -168,6 +169,82 @@ export function PricingResults({
         </a>
         <button onClick={() => setShowInternal((v) => !v)}>{showInternal ? 'Hide' : 'Show'} internal build-up</button>
       </div>
+
+      <details style={{ marginBottom: 10 }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Customer quotation lines (what the PDF shows)</summary>
+        <div className="table-wrap" style={{ marginTop: 6 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th className="num">Qty</th>
+                <th>Unit</th>
+                <th className="num">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cust.sections.map((s) => (
+                <Fragment key={s.key}>
+                  <tr style={{ fontWeight: 600, background: '#f7fafa' }}>
+                    <td colSpan={3}>{s.label}</td>
+                    <td className="num">{php(s.amount)}</td>
+                  </tr>
+                  {s.items.map((i) => (
+                    <tr key={i.key}>
+                      <td style={{ paddingLeft: 18 }}>{i.name}</td>
+                      <td className="num">{qty(i.qty)}</td>
+                      <td>{i.unit}</td>
+                      <td className="num">{php(i.amount)}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+              <tr style={{ fontWeight: 700 }}>
+                <td colSpan={3}>Total, VAT inclusive</td>
+                <td className="num">{php(cust.total)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details style={{ marginBottom: 10 }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Customer quotation lines (what the PDF shows)</summary>
+        <div className="table-wrap" style={{ marginTop: 6 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th className="num">Qty</th>
+                <th>Unit</th>
+                <th className="num">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cust.sections.map((s) => (
+                <Fragment key={s.key}>
+                  <tr style={{ fontWeight: 600, background: '#f7fafa' }}>
+                    <td colSpan={3}>{s.label}</td>
+                    <td className="num">{php(s.amount)}</td>
+                  </tr>
+                  {s.items.map((i) => (
+                    <tr key={i.key}>
+                      <td style={{ paddingLeft: 18 }}>{i.name}</td>
+                      <td className="num">{qty(i.qty)}</td>
+                      <td>{i.unit}</td>
+                      <td className="num">{php(i.amount)}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+              <tr style={{ fontWeight: 700 }}>
+                <td colSpan={3}>Total, VAT inclusive</td>
+                <td className="num">{php(cust.total)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
 
       <h3>
         Bill of materials{' '}

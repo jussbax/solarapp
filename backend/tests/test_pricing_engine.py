@@ -79,7 +79,15 @@ def test_sample_job_reproduces_329300(imported):
     assert tot["ocm"] == pytest.approx(18688.8399294716)
     cust = res["customer"]
     assert sum(s["amount"] for s in cust["sections"]) == pytest.approx(329300)
-    assert [s["key"] for s in cust["sections"]] == ["equipment", "materials", "labor", "tax"]
+    assert [s["key"] for s in cust["sections"]] == ["materials", "labor", "equipment", "tax"]
+    assert cust["sections"][2]["amount"] == pytest.approx(905.62 * 1.3 * (1 + 0.05 / (1 + (37377.68 / 244346.59))), rel=0.02)  # tools with services markup and its commission share
+    for sec in cust["sections"]:  # category lines add up to the section
+        assert sec["items"] and sum(i["amount"] for i in sec["items"]) == pytest.approx(sec["amount"])
+    mat = cust["sections"][0]["items"]
+    assert [i["key"] for i in mat] == ["Solar Panel", "Inverter", "Battery", "Mounting", "Wires and Terminations", "Protective Devices", "Enclosures and Raceways", "Grounding", "Consumables"]
+    assert mat[0]["qty"] == 8 and mat[0]["name"].startswith("Solar panels: 8 x") and mat[3]["unit"] == "lot"
+    assert [i["key"] for i in cust["sections"][1]["items"]] == ["labor", "mobdemob", "ppe", "seal", "permit", "erc", "meter"]
+    assert cust["sections"][2]["items"][0]["qty"] == res["labor"]["days"]
 
 
 def test_crew_options_and_far_site(imported):

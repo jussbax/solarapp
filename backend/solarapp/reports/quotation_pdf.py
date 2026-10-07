@@ -72,38 +72,28 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict) -> byt
     story.append(t)
 
     story.append(Paragraph("Price", h2))
-    rows = [["Section", "Description", "Amount"]]
-    materials_names = sorted({l["category"] for l in lines if l.get("category") not in ("Solar Panel", "Inverter", "Battery", "All-in-one System")})
-    desc = {
-        "equipment": ", ".join(f"{int(i['qty']) if float(i['qty']).is_integer() else i['qty']} x {i['name']}" for i in cust["sections"][0].get("items", [])),
-        "materials": "Mounting, wiring, protection, enclosures, grounding and consumables" if materials_names else "-",
-        "labor": "Installation, commissioning, mobilization, permits and fees",
-        "tax": "Value added tax",
-    }
-    for s in cust["sections"]:
-        rows.append([s["label"], Paragraph(desc.get(s["key"], ""), cell), php(s["amount"])])
-    rows.append(["Total", "", php(cust["total"])])
-    pt = Table(rows, colWidths=[32 * mm, 98 * mm, 40 * mm])
-    pt.setStyle(TableStyle([
-        ("FONTSIZE", (0, 0), (-1, -1), 9), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef3f3")),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")), ("ALIGN", (2, 0), (2, -1), "RIGHT"),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"), ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
-        ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f7fafa")),
-    ]))
-    story.append(pt)
-    story.append(Paragraph(f"Total contract price {php(cust['total'])}, inclusive of VAT.", body))
-
-    story.append(Paragraph("Scope", h2))
-    scope_rows = [["Item", "Qty", "Unit"]]
-    for l in lines:
-        q = l["qty"]
-        scope_rows.append([Paragraph(l["name"], cell), f"{int(q) if float(q).is_integer() else q:g}", l.get("unit") or ""])
-    st = Table(scope_rows, colWidths=[130 * mm, 20 * mm, 20 * mm], repeatRows=1)
-    st.setStyle(TableStyle([
+    rows = [["Item", "Qty", "Unit", "Amount"]]
+    styles = [
         ("FONTSIZE", (0, 0), (-1, -1), 8.5), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef3f3")),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")), ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
-    story.append(st)
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")), ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("ALIGN", (3, 0), (3, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]
+    for s in cust["sections"]:
+        rows.append([s["label"], "", "", ""])
+        r = len(rows) - 1
+        styles += [("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"), ("BACKGROUND", (0, r), (-1, r), colors.HexColor("#f7fafa")), ("SPAN", (0, r), (2, r))]
+        for i in s.get("items", []):
+            q = float(i["qty"])
+            rows.append([Paragraph(i["name"], cell), f"{int(q) if q.is_integer() else round(q, 1):g}", i.get("unit", ""), php(i["amount"])])
+        rows.append([f"{s['label']} subtotal", "", "", php(s["amount"])])
+        r = len(rows) - 1
+        styles += [("FONTNAME", (3, r), (3, r), "Helvetica-Bold"), ("SPAN", (0, r), (2, r)), ("ALIGN", (0, r), (0, r), "RIGHT")]
+    rows.append(["Total contract price, VAT inclusive", "", "", php(cust["total"])])
+    r = len(rows) - 1
+    styles += [("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"), ("BACKGROUND", (0, r), (-1, r), colors.HexColor("#eef3f3")), ("SPAN", (0, r), (2, r))]
+    pt = Table(rows, colWidths=[112 * mm, 14 * mm, 20 * mm, 34 * mm], repeatRows=1)
+    pt.setStyle(TableStyle(styles))
+    story.append(pt)
 
     prog = results.get("program") or {}
     if prog.get("available"):

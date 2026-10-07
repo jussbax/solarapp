@@ -345,33 +345,71 @@ def price_job(bom: list[BomLine], catalog: Catalog, cfg: PricingConfig, job: Job
     ocm = markup * j.ocm_share
     kwp = sum((l.rating or 0) * l.qty for l in lines if l.category == "Solar Panel" and (l.rating_unit or "").upper() == "W") / 1000.0
 
-    # ---- customer sections: Equipment, Materials, Labor, Tax; freight and commission baked in
-    equip_lines = [l for l in lines if l.category in EQUIPMENT_CATEGORIES]
-    other_lines = [l for l in lines if l.category not in EQUIPMENT_CATEGORIES]
-    equip_selling = sum(l.selling for l in equip_lines)
-    other_selling = sum(l.selling for l in other_lines)
-    share_total = sum(l.truck_share for l in lines)
-    freight_selling = bl[1].selling
-    equip_freight = freight_selling * (sum(l.truck_share for l in equip_lines) / share_total) if share_total > 0 else 0.0
-    other_freight = freight_selling - equip_freight
-    services_selling = sum(x.selling for x in bl[2:])
-    equip_direct = sum(l.landed for l in equip_lines)
-    other_direct = sum(l.landed for l in other_lines)
+    # ---- customer sections, in the owner's order: Materials, Labor, Equipment (tools), Tax.
+    # Every line is priced for the customer: freight spread over the material lines by truck share,
+    # commission over every line in proportion to direct cost, and the rounding pesos on the labour line.
     def comm(d: float) -> float:
         return commission * d / direct if direct > 0 else 0.0
-    services_direct = sum(x.direct for x in bl[2:])
-    equipment = equip_selling + equip_freight + comm(equip_direct + bl[1].direct * (sum(l.truck_share for l in equip_lines) / share_total if share_total else 0))
-    materials = other_selling + other_freight + comm(other_direct + bl[1].direct * (sum(l.truck_share for l in other_lines) / share_total if share_total else 0))
-    labor_sec = services_selling + comm(services_direct)
-    subtotal = equipment + materials + labor_sec
+    share_total = sum(l.truck_share for l in lines)
+    freight = bl[1]
+    # materials by catalogue category, the customer does not get the item list
+    cat_order = ["Solar Panel", "Inverter", "Battery", "All-in-one System", "Mounting", "Wires and Terminations", "Protective Devices",
+                 "Enclosures and Raceways", "Grounding", "Accessories", "Consumables"]
+    cat_label = {"Solar Panel": "Solar panels", "Inverter": "Inverter", "Battery": "Battery", "All-in-one System": "All-in-one system",
+                 "Mounting": "Mounting structure", "Wires and Terminations": "Wires and terminations", "Protective Devices": "Protective devices",
+                 "Enclosures and Raceways": "Enclosures and raceways", "Grounding": "Grounding", "Accessories": "Accessories", "Consumables": "Consumables"}
+    by_cat: dict[str, dict] = {}
+    for l in lines:
+        fshare = (l.truck_share / share_total) if share_total > 0 else 0.0
+        amount = l.selling + freight.selling * fshare + comm(l.landed + freight.direct * fshare)
+        c = by_cat.setdefault(l.category, {"amount": 0.0, "qty": 0.0, "names": []})
+        c["amount"] += amount
+        c["qty"] += l.qty
+        if l.name and l.name not in c["names"]:
+            c["names"].append(l.name)
+    mat_items = []
+    for cat in cat_order + [c for c in by_cat if c not in cat_order]:
+        c = by_cat.get(cat)
+        if not c or c["amount"] <= 0:
+            continue
+        main = cat in EQUIPMENT_CATEGORIES
+        label = cat_label.get(cat, cat)
+        if main:
+            name = f"{label}: " + ", ".join(f"{int(l.qty) if float(l.qty).is_integer() else l.qty} x {l.name}" for l in lines if l.category == cat)
+            mat_items.append({"key": cat, "name": name, "qty": c["qty"], "unit": "pc", "amount": c["amount"], "main": True})
+        else:
+            mat_items.append({"key": cat, "name": label, "qty": 1, "unit": "lot", "amount": c["amount"], "main": False})
+    labor_names = {
+        "labor": (f"Installation crew: {lb.crew}" if lb.crew else "Installation labour", lb.days, "day"),
+        "mobdemob": ("Mobilization and demobilization", lb.days, "day"),
+        "ppe": ("Safety equipment (PPE)", lb.person_days, "person-day"),
+        "seal": ("Electrical plans, PEE sign and seal", 1, "lot"),
+        "permit": ("LGU electrical permit and certificate of final electrical inspection", 1, "lot"),
+        "erc": ("ERC certificate of compliance (net metering)", 1, "lot"),
+        "meter": ("Bi-directional meter (net metering)", 1, "lot"),
+    }
+    labor_items = []
+    for x in bl[2:]:
+        if x.key == "tools" or x.selling <= 0:
+            continue
+        name, qty, unit = labor_names.get(x.key, (x.label, 1, "lot"))
+        labor_items.append({"key": x.key, "name": name, "qty": qty, "unit": unit, "amount": x.selling + comm(x.direct)})
+    tools_line = next(x for x in bl if x.key == "tools")
+    equip_items = [{"key": "tools", "name": "Tools and equipment for the installation", "qty": lb.days, "unit": "day", "amount": tools_line.selling + comm(tools_line.direct)}] if tools_line.selling > 0 else []
+    materials = sum(i["amount"] for i in mat_items)
+    labor_sec = sum(i["amount"] for i in labor_items)
+    equipment = sum(i["amount"] for i in equip_items)
+    subtotal = materials + labor_sec + equipment
     tax = subtotal * j.vat
     rounding = rounded - (subtotal + tax)
-    labor_sec += rounding  # keep the rounded contract price; the few pesos sit in the services line
+    labor_sec += rounding
+    if labor_items:
+        labor_items[0]["amount"] += rounding
     sections = [
-        {"key": "equipment", "label": "Equipment", "amount": equipment, "items": [{"name": l.name, "qty": l.qty, "unit": l.unit} for l in equip_lines]},
-        {"key": "materials", "label": "Materials", "amount": materials},
-        {"key": "labor", "label": "Labor", "amount": labor_sec},
-        {"key": "tax", "label": "Tax (VAT 12%)", "amount": tax},
+        {"key": "materials", "label": "Materials", "amount": materials, "items": mat_items},
+        {"key": "labor", "label": "Labor", "amount": labor_sec, "items": labor_items},
+        {"key": "equipment", "label": "Equipment", "amount": equipment, "items": equip_items},
+        {"key": "tax", "label": "Tax (VAT 12%)", "amount": tax, "items": [{"key": "vat", "name": "Value added tax, 12% of the sections above", "qty": 1, "unit": "lot", "amount": tax}]},
     ]
 
     return {

@@ -225,12 +225,18 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   them. Extra one-way km beyond the route's reference site is prefilled
   from the map pin: straight line to Pila x 1.3 road factor, less the
   10 km reference; it can be overridden per job.
-- Customer quotation shows four sections only: Equipment (panels,
-  inverter, battery), Materials, Labor (installation, mob/demob, tools,
-  PPE, seal, permits and fees) and Tax. Freight is split between equipment
-  and materials by truck share, commission in proportion to direct cost,
-  and the rounding pesos sit in Labor so the total is the rounded contract
-  price. Landed costs, markups, freight and labour detail stay internal.
+- Customer quotation shows four sections in the owner's order, priced by
+  general category rather than item by item: Materials (solar panels,
+  inverter and battery with their counts and model names, then mounting,
+  wires and terminations, protective devices, enclosures and raceways,
+  grounding, consumables as lots; freight spread over the lines by truck
+  share), Labor (installation crew by the day, mobilization and
+  demobilization, PPE, plans and PEE seal, LGU permit and CFEI, ERC
+  certificate and bi-directional meter for net metering), Equipment (the
+  tool charge for the installation days) and Tax. Commission is spread over
+  every line in proportion to direct cost and the rounding pesos sit on the
+  labour line so the total is the rounded contract price. Landed costs,
+  markups, item prices, freight and labour detail stay internal.
 
 ## Program of works and cashflow (module 4)
 

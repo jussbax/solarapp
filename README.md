@@ -44,8 +44,8 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    consumables), can be edited line by line, and is priced exactly as the
    workbook does it: landed cost, freight run through the suppliers, labour
    crew and days, build-up with markups, commission and VAT, rounded up to
-   the hundred. A customer quotation PDF shows Equipment, Materials, Labor
-   and Tax only.
+   the hundred. A customer quotation PDF shows Materials, Labor, Equipment
+   (the tool charge) and Tax only.
 8. Program of works: from the signing date, the schedule of permits, net
    metering steps, the pickup run, installation days with activities by
    the hour for the roof pairs and the ground crew, commissioning and the
