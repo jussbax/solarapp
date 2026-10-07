@@ -31,6 +31,7 @@ class TmyPayload:
     year_min: Optional[int]
     year_max: Optional[int]
     months_selected: list[dict]
+    time_offset_h: float = 0.0  # hours from the label to the centre of the irradiance averaging interval
 
 
 def parse_tmy_json(payload: dict[str, Any]) -> TmyPayload:
@@ -58,6 +59,7 @@ def parse_tmy_json(payload: dict[str, Any]) -> TmyPayload:
         year_min=meteo.get("year_min"),
         year_max=meteo.get("year_max"),
         months_selected=list(payload["outputs"].get("months_selected", [])),
+        time_offset_h=float(loc.get("irradiance_time_offset") or 0.0),
     )
 
 

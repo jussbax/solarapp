@@ -39,11 +39,13 @@ class CellInfo:
     file: Path
     radiation_db: str
     distance_km: float = 0.0
+    time_offset_h: float = 0.0
 
     def to_dict(self) -> dict:
         return {
             "id": self.id, "lat": self.lat, "lon": self.lon, "elevation_m": self.elevation_m,
             "radiation_db": self.radiation_db, "distance_km": round(self.distance_km, 2),
+            "time_offset_h": self.time_offset_h,
         }
 
 
@@ -97,6 +99,7 @@ class PvgisDataset:
                 id=c.get("id") or cell_id(c["lat"], c["lon"]), lat=float(c["lat"]), lon=float(c["lon"]),
                 elevation_m=float(c.get("elevation_m") or 0.0), file=f,
                 radiation_db=str(c.get("radiation_db") or self._meta.get("radiation_db") or ""),
+                time_offset_h=float(c.get("time_offset_h") or 0.0),
             ))
         self._cells = cells
         self._lats = np.array([c.lat for c in cells])
@@ -139,7 +142,7 @@ class PvgisDataset:
         d = haversine_km(lat, lon, self._lats, self._lons)
         i = int(np.argmin(d))
         c = self._cells[i]
-        return CellInfo(c.id, c.lat, c.lon, c.elevation_m, c.file, c.radiation_db, float(d[i]))
+        return CellInfo(c.id, c.lat, c.lon, c.elevation_m, c.file, c.radiation_db, float(d[i]), c.time_offset_h)
 
     def load_tmy(self, cell: CellInfo) -> pd.DataFrame:
         return _read_parquet(str(cell.file), cell.file.stat().st_mtime)

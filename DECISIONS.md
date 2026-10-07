@@ -22,6 +22,14 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   is shown on the internal page next to PVGIS monthly horizontal irradiation
   and is never used in the results, to avoid mixing two datasets.
 - Nearest grid cell to the site is used, which is what PVGIS itself does.
+- PVGIS hourly values are labelled by the start of the hour and carry an
+  `irradiance_time_offset` of 0.5 h (ERA5). Verified against clear-sky
+  geometry on the Manila cell: evaluating the sun position at label + 0.5 h
+  gives symmetric sunrise and sunset behaviour. The offset is stored per
+  cell and applied in the simulation.
+- At Manila the NASA POWER annual average is about 8 percent above PVGIS
+  ERA5 (5.10 versus 4.70 kWh/m2/day). This gap is the honest size of the
+  weather-data uncertainty and is shown on the internal page only.
 - The dataset lives outside git in `data/` on the server. The app refuses to
   produce a customer PDF from a synthetic (test) dataset.
 

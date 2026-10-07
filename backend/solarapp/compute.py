@@ -34,7 +34,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
     cell = pvgis.nearest_cell(doc.lat, doc.lon)
     assert cell is not None
     tmy = pvgis.load_tmy(cell)
-    sky = prepare_sky(tmy, doc.lat, doc.lon, cell.elevation_m)
+    sky = prepare_sky(tmy, doc.lat, doc.lon, cell.elevation_m, cell.time_offset_h)
     warnings: list[dict] = []
     if cell.distance_km > 40:
         warnings.append(_warn("far_cell", f"Nearest weather cell is {cell.distance_km:.0f} km away."))

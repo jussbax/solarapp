@@ -60,3 +60,12 @@ def test_multiple_faces_sum(manila_tmy):
 def test_typical_air_temperature(manila_tmy):
     t = typical_air_temperature(manila_tmy, 4, 12)
     assert t is not None and 20 < t < 40
+
+
+def test_time_offset_shifts_solar_geometry(manila_tmy):
+    lat, lon, elev = MANILA
+    a = prepare_sky(manila_tmy, lat, lon, elev, 0.0)
+    b = prepare_sky(manila_tmy, lat, lon, elev, 0.5)
+    assert len(a.zenith) == len(b.zenith) == len(manila_tmy)
+    assert (a.azimuth.values != b.azimuth.values).any()
+    assert list(a.zenith.index) == list(manila_tmy.index)

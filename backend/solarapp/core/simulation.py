@@ -60,12 +60,19 @@ class SkyContext:
     airmass: pd.Series
 
 
-def prepare_sky(tmy: pd.DataFrame, lat: float, lon: float, elevation_m: float) -> SkyContext:
+def prepare_sky(tmy: pd.DataFrame, lat: float, lon: float, elevation_m: float, time_offset_h: float = 0.0) -> SkyContext:
+    """Solar geometry at the centre of each averaging interval.
+
+    PVGIS labels each hour by its start and reports ``irradiance_time_offset``
+    (0.5 h for ERA5), so the sun position is evaluated at label + offset.
+    """
     idx = tmy.index
-    solpos = pvlib.solarposition.get_solarposition(idx, lat, lon, altitude=elevation_m, temperature=float(tmy["temp_air"].mean()))
-    dni_extra = pvlib.irradiance.get_extra_radiation(idx)
+    centre = idx + pd.Timedelta(hours=float(time_offset_h))
+    solpos = pvlib.solarposition.get_solarposition(centre, lat, lon, altitude=elevation_m, temperature=float(tmy["temp_air"].mean()))
+    solpos.index = idx
+    dni_extra = pvlib.irradiance.get_extra_radiation(centre)
     airmass = pvlib.atmosphere.get_relative_airmass(solpos["apparent_zenith"]).fillna(0)
-    local = idx.tz_convert(LOCAL_TZ)
+    local = centre.tz_convert(LOCAL_TZ)
     month = local.month.values
     # Count month-day pairs, not full dates: a composite TMY spans several
     # calendar years and the UTC to local shift moves a few hours across years.
@@ -184,8 +191,9 @@ def simulate(
     k_site: float,
     thermal: ThermalModel,
     sky: Optional[SkyContext] = None,
+    time_offset_h: float = 0.0,
 ) -> SimulationResult:
-    sky = sky or prepare_sky(tmy, lat, lon, elevation_m)
+    sky = sky or prepare_sky(tmy, lat, lon, elevation_m, time_offset_h)
     face_results = [simulate_face(tmy, sky, f, panel_wp, k_site, thermal) for f in faces]
     monthly = [sum(f.monthly_kwh[i] for f in face_results) for i in range(12)]
     annual = float(sum(monthly))

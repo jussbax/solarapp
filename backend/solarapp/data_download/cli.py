@@ -22,6 +22,29 @@ from ..core.dataset import cell_id
 from . import grid, nasa, pvgis
 
 
+def write_cell(frame, file: Path) -> None:
+    """Store hourly values as float32 (plenty for W/m2, deg C, m/s); halves the size."""
+    frame.astype("float32").reset_index().to_parquet(file, index=False, compression="zstd")
+
+
+def repack(root: Path) -> None:
+    """Rewrite existing cell files in the current storage format."""
+    import pandas as pd
+
+    cells_dir = root / "pvgis" / "cells"
+    files = sorted(cells_dir.glob("*.parquet"))
+    before = sum(f.stat().st_size for f in files)
+    for i, f in enumerate(files):
+        df = pd.read_parquet(f).set_index("time_utc")
+        tmp = f.with_suffix(".parquet.tmp")
+        write_cell(df, tmp)
+        tmp.replace(f)
+        if (i + 1) % 100 == 0:
+            print(f"  repacked {i + 1}/{len(files)}", flush=True)
+    after = sum(f.stat().st_size for f in files)
+    print(f"Repacked {len(files)} files: {before / 1e6:.0f} MB -> {after / 1e6:.0f} MB", flush=True)
+
+
 def _write_index(root: Path, meta: dict) -> None:
     (root / "pvgis").mkdir(parents=True, exist_ok=True)
     tmp = root / "pvgis" / "index.json.tmp"
@@ -85,7 +108,7 @@ async def download_pvgis(root: Path, bbox, step: float, concurrency: int, delay:
                 await asyncio.sleep(delay)
                 return
             file = cells_dir / f"{cid}.parquet"
-            payload.frame.reset_index().to_parquet(file, index=False, compression="zstd")
+            write_cell(payload.frame, file)
             async with lock:
                 index_cells[cid] = {
                     "id": cid, "lat": c.lat, "lon": c.lon,
@@ -94,6 +117,7 @@ async def download_pvgis(root: Path, bbox, step: float, concurrency: int, delay:
                     "year_min": payload.year_min, "year_max": payload.year_max,
                     "months_selected": payload.months_selected,
                     "pvgis_lat": payload.lat, "pvgis_lon": payload.lon,
+                    "time_offset_h": payload.time_offset_h,
                 }
                 meta["radiation_db"] = meta["radiation_db"] or payload.radiation_db
                 done += 1
@@ -119,14 +143,14 @@ async def download_pvgis(root: Path, bbox, step: float, concurrency: int, delay:
 async def download_nasa(root: Path, bbox) -> None:
     out = root / "nasa"
     out.mkdir(parents=True, exist_ok=True)
-    points: dict[tuple[float, float], dict] = {}
+    raw: dict[tuple[float, float], dict] = {}
     headers = {"User-Agent": "solarapp-dataset-download/1.0 (one-time regional fetch)"}
     async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
         for tile in nasa.tiles(bbox):
             print(f"NASA: tile {tile}", flush=True)
-            for p in await nasa.fetch_regional(client, tile):
-                points[(p["lat"], p["lon"])] = p
-            await asyncio.sleep(1.0)
+            for key, rec in (await nasa.fetch_regional(client, tile)).items():
+                raw.setdefault(key, {"lat": rec["lat"], "lon": rec["lon"]}).update(rec)
+    points = {(p["lat"], p["lon"]): p for p in nasa.merge_points(raw)}
     data = {
         "source": "NASA POWER climatology, community RE (https://power.larc.nasa.gov/)",
         "parameters": nasa.PARAMETERS,
@@ -148,8 +172,8 @@ def write_synthetic(root: Path, bbox, step: float) -> None:
     for i, c in enumerate(centers):
         cid = cell_id(c.lat, c.lon)
         df = synthetic_tmy(c.lat, c.lon, 10.0)
-        df.reset_index().to_parquet(cells_dir / f"{cid}.parquet", index=False, compression="zstd")
-        cells.append({"id": cid, "lat": c.lat, "lon": c.lon, "elevation_m": 10.0, "file": f"cells/{cid}.parquet", "radiation_db": "SYNTHETIC"})
+        write_cell(df, cells_dir / f"{cid}.parquet")
+        cells.append({"id": cid, "lat": c.lat, "lon": c.lon, "elevation_m": 10.0, "file": f"cells/{cid}.parquet", "radiation_db": "SYNTHETIC", "time_offset_h": 0.0})
         if (i + 1) % 25 == 0:
             print(f"  synthetic {i+1}/{len(centers)}", flush=True)
     _write_index(root, {
@@ -184,10 +208,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--skip-nasa", action="store_true")
     ap.add_argument("--only-nasa", action="store_true")
     ap.add_argument("--synthetic", action="store_true", help="write a synthetic test dataset instead of downloading")
+    ap.add_argument("--repack", action="store_true", help="rewrite already downloaded cell files in the current storage format")
     args = ap.parse_args(argv)
 
     root = Path(args.out)
     bbox = tuple(args.bbox)
+    if args.repack:
+        repack(root)
+        return 0
     if args.synthetic:
         write_synthetic(root, bbox, args.step)
         return 0

@@ -44,8 +44,9 @@ docker compose run --rm solarapp python -m solarapp.data_download --out /app/dat
 ```
 
 This fetches the PVGIS typical meteorological year for every 0.25 degree
-cell over the Philippines that contains land (roughly a thousand cells,
-about an hour) and the NASA POWER monthly climatology for reference. It is
+cell over the Philippines that contains land (913 cells, about 15 minutes
+with the default 3 parallel requests, about 100 MB on disk) and the NASA
+POWER monthly climatology for reference (198 points, under a minute). It is
 resumable: run it again if it stops and it continues where it left off.
 Data lands in `./data/` on the host, outside the image. Options:
 
@@ -143,5 +144,9 @@ data/                                 weather dataset and SQLite database (not i
 
 `data/pvgis/index.json` lists cells; `data/pvgis/cells/<lat>_<lon>.parquet`
 holds 8760 hourly rows with `time_utc, temp_air, rh, ghi, dni, dhi, ir,
-wind_speed, wind_dir, pressure`. `data/nasa/climatology.json` holds monthly
-horizontal irradiation per NASA POWER grid point.
+wind_speed, wind_dir, pressure` (float32). PVGIS labels each hour by its
+start; the index stores `time_offset_h` (0.5 for ERA5) and the simulation
+evaluates the sun position at the centre of each hour. For the Philippines
+PVGIS serves its ERA5 database (2005 to 2023) with terrain horizon applied.
+`data/nasa/climatology.json` holds monthly horizontal irradiation per NASA
+POWER grid point (1 degree).
