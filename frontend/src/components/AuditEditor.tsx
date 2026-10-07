@@ -175,7 +175,7 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
                     </select>
                   </td>
                   <td className="num">
-                    <button type="button" className="small" onClick={() => setOpenId(open ? null : a.id)}>
+                    <button type="button" className="small" style={{ whiteSpace: 'nowrap' }} onClick={() => setOpenId(open ? null : a.id)}>
                       {a.windows.length} ({hours.toFixed(1)} h/d) {open ? '▴' : '▾'}
                     </button>
                   </td>
