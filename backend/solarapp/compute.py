@@ -190,6 +190,8 @@ def compute_audit_and_sizing(doc: AssessmentDoc, production, selected_panel_resu
         "annual_kwh": res.annual_kwh,
         "peak_kw": res.peak_kw,
         "peak_avg_kw": res.peak_avg_kw,
+        "duty_weighted_peak_kw": res.duty_weighted_peak_kw,
+        "peak_detail": res.peak_detail,
         "largest_motor_kw": res.largest_motor_kw,
         "largest_motor_multiplier": res.largest_motor_multiplier,
         "audit_vs_bill": res.audit_vs_bill,
@@ -206,9 +208,11 @@ def compute_audit_and_sizing(doc: AssessmentDoc, production, selected_panel_resu
     s = a.system
     sizing = size_system(
         np.asarray(res.load_kw), per_kwp, roof_max_panels=int(selected_panel_result["total_count"]), panel_wp=panel_wp, kind=s.kind,
-        peak_load_kw=res.peak_kw, largest_motor_kw=res.largest_motor_kw, largest_motor_multiplier=res.largest_motor_multiplier,
+        peak_load_kw=res.peak_kw if s.inverter_peak_basis == "nameplate" else res.duty_weighted_peak_kw,
+        largest_motor_kw=res.largest_motor_kw, largest_motor_multiplier=res.largest_motor_multiplier,
         battery=BatterySpec(s.battery_module_kwh, s.battery_dod, s.battery_efficiency, max_modules=s.battery_max_modules),
         inverter=InverterRules(list(s.inverter_sizes_kw), s.inverter_surge_factor, s.pv_ratio_max),
-        offgrid=OffGridRules(s.autonomy_days, s.offgrid_pv_margin),
+        offgrid=OffGridRules(s.offgrid_pv_margin),
     )
+    sizing["inverter"]["peak_basis"] = s.inverter_peak_basis
     return audit_block, sizing

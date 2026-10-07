@@ -9,9 +9,11 @@ metering with a battery.
 * PV, off-grid: the worst month's typical day must produce the day's
   consumption times a design margin; more panels are added until the hourly
   balance leaves nothing unserved, up to what the roof holds.
-* Battery: usable capacity equal to the largest daily surplus-to-night shift
-  over the twelve typical days; off-grid also at least the autonomy days
-  times the largest daily consumption. Rounded up to whole modules, capped.
+* Battery: usable capacity equal to the energy it must deliver on the
+  typical day with the largest unmet load (hours where solar is short),
+  divided by the one-way efficiency, over the twelve months. It carries
+  exactly what solar cannot at that hour, nothing more. Rounded up to whole
+  modules, capped. No autonomy allowance, by the owner's rule.
 * Inverter: smallest catalogue size that covers the nameplate coincident
   peak, the surge of the largest motor at the stated surge factor, and the
   PV array at the allowed PV-to-inverter ratio. Parallel units if needed.
@@ -43,8 +45,7 @@ class BatterySpec:
 
 @dataclass
 class OffGridRules:
-    autonomy_days: float = 1.0   # battery carries this many days of consumption without sun
-    pv_margin: float = 1.25      # worst-month production over consumption
+    pv_margin: float = 1.25      # worst-month production over consumption, a cloudy-spell safety factor
 
 
 @dataclass
@@ -152,10 +153,11 @@ def size_system(
         modules_ = 0
         if with_battery and kwp_ > 0:
             big = 1e6
-            swings = [float((lambda b: b.soc.max() - b.soc.min())(balance_day(load[m], prod_[m], big, big, kind, battery.round_trip_efficiency))) for m in range(12)]
-            need = max(swings) if swings else 0.0
-            if off_grid:
-                need = max(need, offgrid.autonomy_days * float(daily_load.max()))
+            one_way = math.sqrt(max(battery.round_trip_efficiency, 1e-6))
+            # with an unlimited battery, the day's discharge is the unmet load solar can shift; the
+            # stored energy needed for it is that discharge over the one-way efficiency
+            needs = [float(balance_day(load[m], prod_[m], big, big, kind, battery.round_trip_efficiency).discharge.sum()) / one_way for m in range(12)]
+            need = max(needs) if needs else 0.0
             modules_ = int(math.ceil(need / per_module)) if per_module > 0 else 0
             if modules_ > battery.max_modules:
                 battery_capped = True
@@ -243,7 +245,7 @@ def size_system(
         "annual_import_kwh": 0.0 if off_grid else tot["imported"],
         "annual_unserved_kwh": tot["imported"] if off_grid else 0.0,
         "net_annual_kwh": net_kwh,
-        "offgrid": {"autonomy_days": offgrid.autonomy_days, "pv_margin": offgrid.pv_margin} if off_grid else None,
+        "offgrid": {"pv_margin": offgrid.pv_margin} if off_grid else None,
         "battery": {
             "modules": modules, "module_kwh": battery.module_kwh, "installed_kwh": modules * battery.module_kwh,
             "usable_kwh": usable, "power_kw": battery_power, "depth_of_discharge": battery.depth_of_discharge,

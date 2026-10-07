@@ -157,12 +157,16 @@ def test_audit_and_sizing_flow(client):
 
     # off-grid variant: no import, unserved reported
     d3 = dict(DOC)
-    d3["audit"] = dict(TANAUAN_AUDIT, system={"kind": "off_grid", "autonomy_days": 1.0})
+    d3["audit"] = dict(TANAUAN_AUDIT, system={"kind": "off_grid", "inverter_peak_basis": "duty_weighted"})
     r = client.post(f"/api/assessments/{aid}/compute", json=d3)
     assert r.status_code == 200, r.text
-    og = r.json()["results"]["sizing"]
-    assert og["kind"] == "off_grid" and og["annual_import_kwh"] == 0 and og["offgrid"]["autonomy_days"] == 1.0
+    res3 = r.json()["results"]
+    og = res3["sizing"]
+    assert og["kind"] == "off_grid" and og["annual_import_kwh"] == 0 and og["offgrid"]["pv_margin"] == 1.25
     assert "unserved_kwh" in og["monthly"][0]
+    assert og["inverter"]["peak_basis"] == "duty_weighted" and og["inverter"]["peak_load_kw"] == res3["audit"]["duty_weighted_peak_kw"]
+    pd = res3["audit"]["peak_detail"]
+    assert pd["nameplate_kw"] == res3["audit"]["peak_kw"] and pd["contributors"] and pd["time"]
 
     # without appliances the blocks are absent and the roof results unchanged
     doc2 = dict(DOC)

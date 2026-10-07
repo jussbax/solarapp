@@ -58,8 +58,7 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
             <div className="label">Battery</div>
             <div className="value">{sizing.battery.modules > 0 ? `${sizing.battery.modules} x ${sizing.battery.module_kwh} kWh` : 'none'}</div>
             <div className="sub">
-              {sizing.battery.modules > 0 ? `${n1(sizing.battery.usable_kwh)} kWh usable` : KIND_LABEL[sizing.kind]}
-              {sizing.offgrid && `, ${sizing.offgrid.autonomy_days} day(s) autonomy`}
+              {sizing.battery.modules > 0 ? `${n1(sizing.battery.usable_kwh)} kWh usable, carries what solar cannot at night` : KIND_LABEL[sizing.kind]}
             </div>
           </div>
           <div className="kpi">
@@ -190,9 +189,21 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
         </table>
       </div>
       <div className="muted" style={{ marginTop: 6 }}>
-        * uncertain type, scaled first during reconciliation. ~ future appliance scaled like the existing ones of its type. Nameplate coincident peak {n1(audit.peak_kw)} kW, highest hourly average {n2(audit.peak_avg_kw)} kW
-        {audit.largest_motor_kw > 0 && `, largest motor ${n1(audit.largest_motor_kw)} kW starting at ${audit.largest_motor_multiplier}x`}.
+        * uncertain type, scaled first during reconciliation. ~ future appliance scaled like the existing ones of its type.
       </div>
+      <h3>Peak load</h3>
+      <div className="muted">
+        Highest hourly average {n2(audit.peak_avg_kw)} kW. Worst instant with everything in its window on at nameplate: <b>{n1(audit.peak_kw)} kW</b>
+        {audit.peak_detail.time && ` on ${audit.peak_detail.weekday} at ${audit.peak_detail.time} (${MONTHS[audit.peak_detail.month - 1]})`}; the same instant weighted by duty factors{' '}
+        {n1(audit.peak_detail.duty_weighted_kw_at_peak ?? audit.duty_weighted_peak_kw)} kW, highest duty-weighted instant {n1(audit.duty_weighted_peak_kw)} kW
+        {audit.largest_motor_kw > 0 && `, largest motor ${n1(audit.largest_motor_kw)} kW starting at ${audit.largest_motor_multiplier}x`}.
+        {sizing && ` The inverter is sized for the ${sizing.inverter.peak_basis === 'duty_weighted' ? 'duty-weighted' : 'nameplate'} peak.`}
+      </div>
+      {audit.peak_detail.contributors && audit.peak_detail.contributors.length > 0 && (
+        <div className="muted" style={{ marginTop: 4 }}>
+          At that instant: {audit.peak_detail.contributors.map((c) => `${c.name} ${Math.round(c.watts).toLocaleString()} W`).join(', ')}.
+        </div>
+      )}
 
       {sizing && (
         <>
@@ -236,7 +247,7 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
           </div>
           <div className="muted" style={{ marginTop: 6 }}>
             {KIND_LABEL[sizing.kind]}
-            {sizing.offgrid && ` (worst month produces ${sizing.offgrid.pv_margin}x consumption, ${sizing.offgrid.autonomy_days} day(s) of autonomy)`}. Yield {n0(sizing.annual_yield_kwh_per_kwp)} kWh per kWp per year from this roof's measured simulation. Self-consumption {n0(sizing.self_consumption_pct)}% of production.
+            {sizing.offgrid && ` (worst month produces ${sizing.offgrid.pv_margin}x consumption; the battery carries the night, no autonomy allowance)`}. Yield {n0(sizing.annual_yield_kwh_per_kwp)} kWh per kWp per year from this roof's measured simulation. Self-consumption {n0(sizing.self_consumption_pct)}% of production.
             Inverter check: peak {n1(sizing.inverter.peak_load_kw)} kW, surge {n1(sizing.inverter.surge_requirement_kw)} kW at {sizing.inverter.surge_factor}x, PV {n1(sizing.inverter.pv_requirement_kw)} kW at {sizing.inverter.pv_ratio_max}x.
           </div>
         </>

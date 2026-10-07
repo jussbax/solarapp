@@ -120,3 +120,13 @@ def test_future_copy_of_existing_type_inherits_scale():
     assert rows["ac2"]["scale"] == rows["ac"]["scale"] != 1.0 and rows["ac2"]["scale_inherited"]
     assert rows["ev"]["scale"] == 1.0 and not rows["ev"]["scale_inherited"]
     assert abs(rows["ac2"]["kwh_per_day_reconciled"] - rows["ac"]["kwh_per_day_reconciled"]) < 1e-9
+
+
+def test_peak_breakdown_names_the_coincident_loads():
+    res = run_audit(tanauan_appliances(), [Bill("b1", "2026-08", 338.0, days=31)])
+    pd = res.peak_detail
+    assert pd["nameplate_kw"] == res.peak_kw > res.duty_weighted_peak_kw > res.peak_avg_kw
+    # in this fixture both aircons, the rice cooker and the TV coincide in the evening
+    assert pd["contributors"][0]["name"] == "Split inverter AC 2.5HP" and pd["contributors"][0]["watts"] == 4200
+    assert pd["time"] == "19:00" and "Rice cooker" in [c["name"] for c in pd["contributors"]]
+    assert abs(sum(c["watts"] for c in pd["contributors"]) / 1000.0 - res.peak_kw) < 1e-6

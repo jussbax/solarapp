@@ -280,17 +280,18 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
           </select>
         </div>
         {audit.system.kind === 'off_grid' && (
-          <>
-            <div className="narrow" style={{ width: 120 }}>
-              <label>Autonomy (days)</label>
-              <NumberInput value={audit.system.autonomy_days} onChange={(v) => setSystem({ autonomy_days: v ?? 1 })} min={0} max={5} step={0.5} />
-            </div>
-            <div className="narrow" style={{ width: 130 }}>
-              <label>Worst-month PV margin</label>
-              <NumberInput value={audit.system.offgrid_pv_margin} onChange={(v) => setSystem({ offgrid_pv_margin: v ?? 1.25 })} min={1} max={2} step={0.05} />
-            </div>
-          </>
+          <div className="narrow" style={{ width: 150 }}>
+            <label>Worst-month PV margin</label>
+            <NumberInput value={audit.system.offgrid_pv_margin} onChange={(v) => setSystem({ offgrid_pv_margin: v ?? 1.25 })} min={1} max={2} step={0.05} />
+          </div>
         )}
+        <div className="narrow" style={{ width: 230 }}>
+          <label>Inverter sized for</label>
+          <select value={audit.system.inverter_peak_basis} onChange={(e) => setSystem({ inverter_peak_basis: e.target.value as SystemSettings['inverter_peak_basis'] })}>
+            <option value="nameplate">Everything in a window at nameplate</option>
+            <option value="duty_weighted">Same, weighted by duty factor</option>
+          </select>
+        </div>
         <div className="narrow" style={{ width: 160 }}>
           <label>Inverter sizes (kW)</label>
           <input

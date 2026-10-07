@@ -68,20 +68,22 @@ def test_battery_sizing_shifts_surplus_to_night():
     assert combo["coverage_pct"] > nm["coverage_pct"]
 
 
-def test_off_grid_serves_everything_with_autonomy():
+def test_off_grid_serves_everything_from_solar_and_battery():
     load = evening_load(11.0)
     per_kwp = synthetic_production_per_kwp()
-    og = size_system(load, per_kwp, 29, 550, "off_grid", 4.0, 1.5, 3.0, battery=BatterySpec(max_modules=20), offgrid=OffGridRules(autonomy_days=1.0, pv_margin=1.25))
+    og = size_system(load, per_kwp, 29, 550, "off_grid", 4.0, 1.5, 3.0, battery=BatterySpec(max_modules=20), offgrid=OffGridRules(pv_margin=1.25))
     assert og["kind"] == "off_grid" and not og["roof_limited"]
     assert og["annual_unserved_kwh"] == 0 and og["annual_import_kwh"] == 0 and og["annual_export_kwh"] == 0
     assert og["coverage_pct"] == pytest.approx(100.0)
     # worst month produces at least the margin times consumption
     for m in og["monthly"]:
         assert m["production_kwh"] >= 1.25 * m["consumption_kwh"] - 1e-6
-    # battery carries a full day of consumption
-    assert og["battery"]["usable_kwh"] >= 11.0 - 1e-6
+    # battery carries only what solar cannot (the night deficit), never a whole extra day
+    night = load[0][(np.arange(24) >= 18) | (np.arange(24) < 6)].sum()
+    assert night * 0.9 <= og["battery"]["usable_kwh"] < 2 * 11.0
     combo = size_system(load, per_kwp, 29, 550, "combination", 4.0, 1.5, 3.0)
-    assert og["kwp"] >= combo["kwp"] and og["battery"]["modules"] >= combo["battery"]["modules"]
+    assert og["kwp"] >= combo["kwp"]
+    assert og["battery"]["modules"] == combo["battery"]["modules"]  # same rule: the surplus-to-night shift
     # roof too small: unserved energy is reported instead of a system that cannot fit
     small = size_system(load, per_kwp, 3, 550, "off_grid", 4.0, 1.5, 3.0, offgrid=OffGridRules())
     assert small["roof_limited"] and small["annual_unserved_kwh"] > 0 and small["panels"] == 3
