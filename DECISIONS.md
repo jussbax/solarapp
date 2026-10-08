@@ -612,3 +612,10 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   days; the estimate log keeps a town-level location only; the privacy
   notice and the privacy line say exactly what the system does, including
   the e-mail service and the encrypted backup.
+- Two-factor login lives in the app, not in Cloudflare: a time-based code
+  from any authenticator app after the password (offline, so it works on
+  a roof), with eight one-time backup codes for a lost phone, a replay
+  guard per 30 s window, wrong codes counted by the login throttle, and
+  the secret kept in `data/twofactor.json` (0600), never in `.env`.
+  Cloudflare Access stays as an optional outer layer. Passkeys (WebAuthn)
+  are the next step if codes become a nuisance.

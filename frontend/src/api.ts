@@ -53,9 +53,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  me: () => request<{ username: string | null; signed_in: boolean }>('/api/auth/me'),
-  login: (username: string, password: string) =>
-    request<{ username: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  me: () => request<{ username: string | null; signed_in: boolean; two_factor?: boolean }>('/api/auth/me'),
+  login: (username: string, password: string, code = '') =>
+    request<{ username: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password, code }) }),
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   dataStatus: () => request<DataStatus>('/api/data/status'),
   settings: () => request<AppSettings>('/api/settings'),

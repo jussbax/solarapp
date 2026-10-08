@@ -311,6 +311,7 @@ class AssessmentOut(BaseModel):
 class LoginIn(BaseModel):
     username: str = Field(max_length=120)
     password: str = Field(max_length=200)
+    code: str = Field(default="", max_length=16)   # authenticator code or backup code, when two-factor login is on
 
 
 class SettingsOut(BaseModel):

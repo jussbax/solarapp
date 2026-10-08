@@ -118,12 +118,12 @@ the token or to a signed-in user.
    and delete the old tunnel in the dashboard. You may then also delete the
    `ports:` block on the `solarapp` service in `docker-compose.yml`: the
    host no longer needs to publish anything.
-5. Protect the back office with Cloudflare Access: in Zero Trust › Access ›
-   Applications add a self-hosted application for `solar.pldevinc.com` with
-   a policy that allows your email (one-time PIN) and nothing else. The
-   website on `pldevinc.com` needs no Access rule. The owner's own link to
-   the estimate page (`solar.pldevinc.com/estimate`) keeps working behind
-   Access.
+5. Switch on two-factor login for the back office:
+   `docker compose exec solarapp python -m solarapp.twofactor setup`, scan
+   the QR code with an authenticator app and keep the backup codes. The
+   login page then asks for the code after the password. Cloudflare Access
+   in front of `solar.pldevinc.com` is optional on top (see
+   `docs/security.md`).
 
 Then follow `docs/security.md` for the Cloudflare rules (rate limits, WAF,
 Access, the www redirect), the server checklist, backups and the monthly

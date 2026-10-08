@@ -506,3 +506,47 @@ def test_retention_anonymises_old_leads_and_trims_the_estimate_log(client):
         gone = s.get(Assessment, aid)
         assert gone.customer_name == "" and gone.doc["lead"]["contact"] == "" and gone.doc["lat"] == 14.12 and gone.doc["anonymised"]
         assert s.get(Assessment, fresh.id).customer_name == "Fresh Lead"
+
+
+def test_two_factor_login_with_authenticator_and_backup_codes(client, tmp_path_factory):
+    import pyotp
+    from solarapp import twofactor
+    from solarapp.api import auth_routes
+    from solarapp.config import get_settings
+    auth_routes._fails.clear()
+    # the client fixture's settings are served through the dependency override; find them
+    app = client.app
+    settings = app.dependency_overrides[get_settings]()
+    assert not twofactor.enabled(settings)
+    client.post("/api/auth/logout")
+    assert client.get("/api/auth/me").json()["two_factor"] is False
+    secret, codes, uri = twofactor.setup(settings)
+    try:
+        assert twofactor.enabled(settings) and uri.startswith("otpauth://totp/") and len(codes) == 8
+        assert client.get("/api/auth/me").json()["two_factor"] is True
+        # password alone no longer opens the door
+        r = client.post("/api/auth/login", json={"username": "u", "password": "p"})
+        assert r.status_code == 401 and "code" in r.json()["detail"]
+        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": "000000"}).status_code == 401
+        now = pyotp.TOTP(secret).now()
+        twofactor._last_step.clear()
+        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": now}).status_code == 200
+        client.post("/api/auth/logout")
+        # the same code cannot be replayed within its window
+        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": now}).status_code == 401
+        # a backup code works exactly once
+        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": codes[0]}).status_code == 200
+        client.post("/api/auth/logout")
+        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": codes[0]}).status_code == 401
+        assert twofactor.remaining_backup_codes(settings) == 7
+        # wrong codes count toward the throttle
+        auth_routes._fails.clear()
+        for _ in range(auth_routes.MAX_FAILS):
+            client.post("/api/auth/login", json={"username": "u", "password": "p", "code": "111111"})
+        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": codes[1]}).status_code == 429
+    finally:
+        auth_routes._fails.clear()
+        twofactor._last_step.clear()
+        twofactor.disable(settings)
+    assert not twofactor.enabled(settings)
+    assert client.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 200
