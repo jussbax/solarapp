@@ -30,7 +30,7 @@ export default function SignInSecurity() {
       const key = await api.passkeyRegister(confirm, challenge_id, name || 'Security key', credential)
       setName('')
       setCode('')
-      setMsg(`"${key.name}" added. It can sign you in from now on.`)
+      setMsg(`"${key.name}" added. It can sign you in from now on. Add a second key, or keep your backup codes somewhere safe.`)
       load()
     } catch (err) {
       setMsg(err instanceof Error && 'status' in err ? err.message : passkeyProblem(err))
@@ -77,7 +77,7 @@ export default function SignInSecurity() {
         <div className="muted">On. The password alone no longer opens the back office; a 6-digit code or a backup code is needed too.</div>
       ) : (
         <div className="banner warn">
-          Off. On the server run <code>python -m solarapp.twofactor setup</code> and scan the QR code with an authenticator app.
+          Off. On the server run <code>python -m solarapp.twofactor setup</code> and scan the QR code with an authenticator app (see docs/security.md, or ask your developer).
         </div>
       )}
       <h3>Security keys and passkeys</h3>

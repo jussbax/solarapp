@@ -135,7 +135,7 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
               const hoursPerUseDay = useDays ? a.windows.reduce((s, w) => s + windowHours(w) * w.days.length, 0) / useDays : 0
               return [
                 <tr key={a.id}>
-                  <td className="cell-main cell-sticky" style={{ minWidth: 200 }} data-label="Appliance">
+                  <td className="cell-main cell-sticky" style={{ minWidth: 180 }} data-label="Appliance">
                     <NameWithSuggestions
                       value={a.name}
                       onChange={(name) => updateApp(i, { name })}
@@ -147,7 +147,7 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
                     </div>
                   </td>
                   <td data-label="Category">
-                    <select value={a.category} onChange={(e) => updateApp(i, { category: e.target.value })} title={c?.note} style={{ minWidth: 150 }}>
+                    <select value={a.category} onChange={(e) => updateApp(i, { category: e.target.value })} title={c?.note} style={{ minWidth: 140 }}>
                       {cats.map((x) => (
                         <option key={x.id} value={x.id}>
                           {x.label}
@@ -165,14 +165,14 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
                     <NumberInput value={a.duty_factor} onChange={(v) => updateApp(i, { duty_factor: v })} allowEmpty min={0.01} max={1} step={0.05} placeholder={c ? c.duty.toFixed(2) : ''} style={{ width: 70 }} />
                   </td>
                   <td data-label="Status">
-                    <select value={a.status} onChange={(e) => updateApp(i, { status: e.target.value as ApplianceEntry['status'] })} style={{ minWidth: 100 }}>
+                    <select value={a.status} onChange={(e) => updateApp(i, { status: e.target.value as ApplianceEntry['status'] })} style={{ minWidth: 90 }}>
                       <option value="existing">In use</option>
                       <option value="future">Planned</option>
                       <option value="retiring">Being removed</option>
                     </select>
                   </td>
                   <td className="num" data-label="When used">
-                    <button type="button" className="small" style={{ whiteSpace: 'nowrap' }} onClick={() => setOpenId(open ? null : a.id)}>
+                    <button type="button" className="small when-used" onClick={() => setOpenId(open ? null : a.id)}>
                       {a.windows.length} {a.windows.length === 1 ? 'window' : 'windows'} · {hoursPerUseDay.toFixed(1)} h × {useDays} d/wk {open ? '▴' : '▾'}
                     </button>
                   </td>

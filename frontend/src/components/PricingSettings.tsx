@@ -3,12 +3,13 @@ import { useBlocker } from 'react-router-dom'
 import { api } from '../api'
 import type { PaymentPlan, PricingConfig } from '../types'
 import { PaymentPlanEditor } from './ProgramSection'
+import { fmtDate } from '../fmt'
 
 const SECTION_LABELS: Record<string, string> = {
   company_base: 'Company base',
   truck: 'Truck and freight run', handling: 'Handling at base', route: 'Route: stops, km and toll', categories: 'Categories: wastage and markup tiers',
   labor: 'Labor day rates', roof: 'Roof work', ground: 'Ground work', hauling: 'Hauling', mobdemob: 'Crew transport (mob/demob)', tools: 'Tools', job: 'Job level: fees, markups, VAT, rounding',
-  job_defaults: 'Job defaults', wiring: 'Wiring rules and voltage drop', roles: 'BOQ item roles (codes the generator uses)',
+  job_defaults: 'Job defaults', wiring: 'Wiring rules and voltage drop', roles: 'BOM item roles (codes the generator uses)',
   program: 'Program of works: site day, durations, payment terms', economics: 'Savings: tariff, export credit, escalation, lifetimes', quick: 'Website estimate',
 }
 const SKIP = new Set(['imported_from', 'imported_at'])
@@ -226,7 +227,8 @@ export default function PricingSettings() {
     if (isMatrix(v)) {
       const stops: string[] = Array.isArray(cfg[section]?.stops) ? (cfg[section].stops as string[]) : v.map((_, i) => `#${i + 1}`)
       return (
-        <div className="table-wrap">
+        <div className="table-wrap scroll-x">
+          <div className="scroll-note muted">Scroll sideways to see every stop.</div>
           <table className="matrix">
             <thead>
               <tr>
@@ -328,7 +330,7 @@ export default function PricingSettings() {
     <div>
       <div className="muted" style={{ marginBottom: 8 }}>
         Imported from {cfg.imported_from ?? 'built-in defaults'}
-        {cfg.imported_at ? ` on ${new Date(cfg.imported_at).toLocaleDateString('en-PH', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}. These drive the price build-up; the workbook's DRIVERS, ROUTE,
+        {cfg.imported_at ? ` on ${fmtDate(cfg.imported_at)}` : ''}. These drive the price build-up; the workbook's DRIVERS, ROUTE,
         LABOR RATES, MOB-DEMOB, TOOLS and JOB sheets live here now. Percentages are shown as percent.
       </div>
       {sections.map((sec) => {
@@ -350,7 +352,7 @@ export default function PricingSettings() {
                         const meta = META[`${sec}.${k}`]
                         return (
                           <tr key={k}>
-                            <th style={{ width: 260, textAlign: 'left', verticalAlign: 'top' }}>
+                            <th className="settings-key">
                               {meta?.label ?? titleCase(k)}
                               {meta?.help && <div className="hint">{meta.help}</div>}
                             </th>

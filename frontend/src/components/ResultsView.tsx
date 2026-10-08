@@ -1,14 +1,14 @@
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { AssessmentDoc, Results } from '../types'
 import { compassLabel } from './compass'
+import { fmtDateTime, n0 } from '../fmt'
 
-const n0 = (v: number) => Math.round(v).toLocaleString()
 const n1 = (v: number) => v.toFixed(1)
 const n2 = (v: number) => v.toFixed(2)
 const n3 = (v: number) => v.toFixed(3)
 const pct = (v: number | null | undefined) => (v == null ? '-' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`)
 
-export default function ResultsView({ doc, results, stale }: { doc: AssessmentDoc; results: Results; stale: boolean }) {
+export default function ResultsView({ doc, results }: { doc: AssessmentDoc; results: Results }) {
   const prod = results.production
   const ref = results.reference
   const selected = results.panels.find((p) => p.panel.id === results.selected_panel_id)
@@ -20,9 +20,8 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
 
   return (
     <div>
-      {stale && <div className="banner warn">Inputs changed since the last calculation. Press Calculate to refresh.</div>}
-      {results.warnings.map((w) => (
-        <div key={w.code} className={`banner ${w.code === 'synthetic_data' ? 'bad' : 'warn'}`}>
+      {results.warnings.map((w, i) => (
+        <div key={w.code + (w.face_id ?? '') + i} className={`banner ${w.code === 'synthetic_data' ? 'bad' : 'warn'}`}>
           {w.message}
         </div>
       ))}
@@ -301,7 +300,7 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
           </>
         )}
         <div className="muted" style={{ marginTop: 8 }}>
-          Computed {new Date(results.computed_at).toLocaleString()}.
+          Computed {fmtDateTime(results.computed_at)}.
         </div>
       </details>
     </div>

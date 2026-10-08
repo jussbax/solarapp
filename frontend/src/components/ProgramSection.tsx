@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { PaymentMilestone, PaymentPlan, ProgramBlock, ProgramJob } from '../types'
 import { JOB_STAGES } from '../types'
+import { api } from '../api'
 import NumberInput from './NumberInput'
+import { fmtDate, fmtDateShort, php0 } from '../fmt'
 
-const php0 = (v: number | null | undefined) => (v == null ? '-' : `₱${Math.round(v).toLocaleString()}`)
-const d = (s: string | null | undefined) => (s ? new Date(s + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '')
+const d = fmtDate
 const EVENTS: { id: string; label: string }[] = [
   { id: 'signing', label: 'Signing' }, { id: 'materials_on_site', label: 'Delivery to site' }, { id: 'installation_done', label: 'End of installation' },
   { id: 'commissioning', label: 'Switch-on' }, { id: 'cfei', label: 'Final inspection certificate' }, { id: 'meter_installed', label: 'Meter installed' },
@@ -15,9 +16,9 @@ const C_IN = '#C9A227'
 const C_OUT = '#c84f2b'
 const C_BAL = '#2f5fd8'
 
-function Num({ label, value, onChange, hint, step, min, width = 150 }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number; width?: number }) {
+function Num({ label, value, onChange, hint, step, min, width }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number; width?: number }) {
   return (
-    <div className="narrow" style={{ width }}>
+    <div className={width ? 'narrow' : undefined} style={width ? { width } : undefined}>
       <label>{label}</label>
       <NumberInput value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />
     </div>
@@ -113,12 +114,50 @@ export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = 
   )
 }
 
-export function ProgramInputs({ job, program, onChange }: { job: ProgramJob; program: ProgramBlock | null; onChange: (j: ProgramJob) => void }) {
-  const set = (p: Partial<ProgramJob>) => onChange({ ...job, ...p })
+/** The site-day defaults from the program settings, so a blank time input says what it means. */
+function useTimeDefaults(program: ProgramBlock | null) {
+  const [cfg, setCfg] = useState<{ depart: string; lunch: string } | null>(null)
+  useEffect(() => {
+    api
+      .pricingConfig()
+      .then((c) => setCfg({ depart: String(c?.program?.depart_time ?? ''), lunch: String(c?.program?.lunch_start ?? '') }))
+      .catch(() => setCfg(null))
+  }, [])
+  const frame = program?.install?.frame
+  return { depart: cfg?.depart || (frame ? String(frame.depart) : ''), lunch: cfg?.lunch || (frame ? String(frame.lunch_start) : '') }
+}
+
+function TimeField({ label, value, fallback, onChange }: { label: string; value: string | null; fallback: string; onChange: (v: string | null) => void }) {
   return (
     <div>
-      <div className="row">
-        <div className="narrow" style={{ width: 170 }}>
+      <label>
+        {label}
+        {!value && fallback && <span className="muted"> (default)</span>}
+      </label>
+      <input type="time" value={value ?? fallback} onChange={(e) => onChange(e.target.value && e.target.value !== fallback ? e.target.value : null)} />
+      <div className="time-default">
+        {value ? (
+          <>
+            default {fallback || 'from the program settings'}{' '}
+            <button type="button" className="toggle link" onClick={() => onChange(null)}>
+              use default
+            </button>
+          </>
+        ) : (
+          fallback ? 'from the program settings' : 'blank: the program settings decide'
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function ProgramInputs({ job, program, onChange }: { job: ProgramJob; program: ProgramBlock | null; onChange: (j: ProgramJob) => void }) {
+  const set = (p: Partial<ProgramJob>) => onChange({ ...job, ...p })
+  const defaults = useTimeDefaults(program)
+  return (
+    <div>
+      <div className="input-grid">
+        <div>
           <label>Job stage</label>
           <select value={job.stage} onChange={(e) => set({ stage: e.target.value as ProgramJob['stage'] })}>
             {JOB_STAGES.map((s) => (
@@ -128,28 +167,22 @@ export function ProgramInputs({ job, program, onChange }: { job: ProgramJob; pro
             ))}
           </select>
         </div>
-        <div className="narrow" style={{ width: 160 }}>
+        <div>
           <label>Signing date</label>
           <input type="date" value={job.signing_date ?? ''} onChange={(e) => set({ signing_date: e.target.value || null })} />
         </div>
-        <div className="narrow" style={{ width: 160 }}>
+        <div>
           <label>Installation start</label>
           <input type="date" value={job.install_date ?? ''} onChange={(e) => set({ install_date: e.target.value || null })} />
         </div>
-        <div className="narrow" style={{ width: 120 }}>
-          <label>Depart base</label>
-          <input type="time" value={job.depart_time ?? ''} placeholder="06:00" onChange={(e) => set({ depart_time: e.target.value || null })} />
-        </div>
-        <div className="narrow" style={{ width: 120 }}>
-          <label>Lunch at</label>
-          <input type="time" value={job.lunch_start ?? ''} placeholder="12:00" onChange={(e) => set({ lunch_start: e.target.value || null })} />
-        </div>
-        <Num label="Lunch (min)" value={job.lunch_minutes} onChange={(v) => set({ lunch_minutes: v })} hint="60" step={5} min={0} width={100} />
+        <TimeField label="Depart base" value={job.depart_time} fallback={defaults.depart} onChange={(depart_time) => set({ depart_time })} />
+        <TimeField label="Lunch at" value={job.lunch_start} fallback={defaults.lunch} onChange={(lunch_start) => set({ lunch_start })} />
+        <Num label="Lunch (min)" value={job.lunch_minutes} onChange={(v) => set({ lunch_minutes: v })} hint="60" step={5} min={0} />
       </div>
-      <div className="row" style={{ marginTop: 8 }}>
-        <Num label="Permit approval (days)" value={job.permit_approval_days} onChange={(v) => set({ permit_approval_days: v })} hint="7" step={1} min={0} width={170} />
-        <Num label="Net metering application (days)" value={job.netmeter_application_days} onChange={(v) => set({ netmeter_application_days: v })} hint="30" step={1} min={0} width={210} />
-        <Num label="DU inspection and meter (days)" value={job.netmeter_meter_days} onChange={(v) => set({ netmeter_meter_days: v })} hint="15" step={1} min={0} width={210} />
+      <div className="input-grid">
+        <Num label="Permit approval (days)" value={job.permit_approval_days} onChange={(v) => set({ permit_approval_days: v })} hint="7" step={1} min={0} />
+        <Num label="Net metering application (days)" value={job.netmeter_application_days} onChange={(v) => set({ netmeter_application_days: v })} hint="30" step={1} min={0} />
+        <Num label="DU inspection and meter (days)" value={job.netmeter_meter_days} onChange={(v) => set({ netmeter_meter_days: v })} hint="15" step={1} min={0} />
       </div>
       <div className="muted" style={{ margin: '6px 0' }}>
         Blank dates: signing today, installation the day after the permit is expected. Blank durations follow the program settings; the permit and utility durations are assumptions until you have data.
@@ -159,17 +192,16 @@ export function ProgramInputs({ job, program, onChange }: { job: ProgramJob; pro
   )
 }
 
-export function ProgramResults({ program, programUrl, stale }: { program: ProgramBlock; programUrl: string; stale: boolean }) {
+export function ProgramResults({ program, programUrl, docReason, openDocument }: { program: ProgramBlock; programUrl: string; docReason: string | null; openDocument: (url: string) => void }) {
   const [day, setDay] = useState(1)
   const [view, setView] = useState<'hourly' | 'tasks'>('hourly')
   if (!program.available) return <div className="banner warn">{program.reason}</div>
   const inst = program.install!
   const cf = program.cashflow!
   const dayRows = inst.hourly.find((h) => h.day === day)?.rows ?? []
-  const chart = cf.weekly.map((w) => ({ week: d(w.week), In: Math.round(w.inflow), Out: Math.round(w.outflow), Balance: Math.round(w.balance) }))
+  const chart = cf.weekly.map((w) => ({ week: fmtDateShort(w.week), In: Math.round(w.inflow), Out: Math.round(w.outflow), Balance: Math.round(w.balance) }))
   return (
     <div>
-      {stale && <div className="banner warn">Inputs changed since the last calculation. Press Calculate to refresh the program.</div>}
       {program.warnings.map((w, i) => (
         <div key={w.code + i} className={`banner ${w.code === 'install_before_permit' || w.code === 'schedule_overrun' ? 'warn' : 'info'}`}>
           {w.message}
@@ -202,12 +234,10 @@ export function ProgramResults({ program, programUrl, stale }: { program: Progra
         </div>
       </div>
       <div className="actions" style={{ position: 'static', border: 0, padding: '4px 0' }}>
-        <a href={stale ? undefined : programUrl} onClick={(e) => stale && e.preventDefault()}>
-          <button disabled={stale} title={stale ? 'Calculate first' : ''}>
-            Program of works PDF (internal)
-          </button>
-        </a>
-        <span className="muted">The proposal PDF carries the milestone schedule and payment terms only.</span>
+        <button type="button" disabled={!!docReason} onClick={() => openDocument(programUrl)}>
+          Program of works PDF (internal)
+        </button>
+        <span className="muted">{docReason ?? 'The proposal PDF carries the milestone schedule and payment terms only.'}</span>
       </div>
 
       <h3>Schedule</h3>

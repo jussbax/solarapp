@@ -2,17 +2,16 @@ import { useState } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { EconomicsBlock, EconomicsJob } from '../types'
 import NumberInput from './NumberInput'
-
-const php0 = (v: number | null | undefined) => (v == null ? '-' : `₱${Math.round(v).toLocaleString()}`)
+import { php0 } from '../fmt'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 // colours validated for colour-blind separation and contrast on the light surface
 const C_SAVE = '#C9A227'
 const C_COST = '#c84f2b'
 const C_CUM = '#2f5fd8'
 
-function Num({ label, value, onChange, hint, step, min, width = 170 }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number; width?: number }) {
+function Num({ label, value, onChange, hint, step, min }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number }) {
   return (
-    <div className="narrow" style={{ width }}>
+    <div>
       <label>{label}</label>
       <NumberInput value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />
     </div>
@@ -28,18 +27,18 @@ export function EconomicsInputs({ job, eco, onChange }: { job: EconomicsJob; eco
   const hint = (v: number | undefined, f = (x: number) => String(x)) => (v == null ? '' : f(v))
   return (
     <div>
-      <div className="row">
-        <Num label="Tariff (₱/kWh)" value={job.tariff_php_per_kwh} onChange={(v) => set({ tariff_php_per_kwh: v })} hint={a ? `${a.tariff_php_per_kwh.toFixed(2)} from ${a.tariff_source}` : 'from the bill'} step={0.1} min={0} width={200} />
+      <div className="input-grid">
+        <Num label="Tariff (₱/kWh)" value={job.tariff_php_per_kwh} onChange={(v) => set({ tariff_php_per_kwh: v })} hint={a ? `${a.tariff_php_per_kwh.toFixed(2)} from ${a.tariff_source}` : 'from the bill'} step={0.1} min={0} />
         <Num label="Export credit (₱/kWh)" value={job.export_rate_php_per_kwh} onChange={(v) => set({ export_rate_php_per_kwh: v })} hint={hint(a?.export_rate_php_per_kwh, (x) => x.toFixed(2))} step={0.1} min={0} />
         <Num label="Tariff rise per year (%)" value={pctIn(job.tariff_escalation)} onChange={(v) => set({ tariff_escalation: pctOut(v) })} hint={hint(a?.tariff_escalation, (x) => (x * 100).toFixed(1))} step={0.5} />
-        <Num label="Panel degradation per year (%)" value={pctIn(job.degradation)} onChange={(v) => set({ degradation: pctOut(v) })} hint={hint(a?.degradation, (x) => (x * 100).toFixed(2))} step={0.1} min={0} width={200} />
+        <Num label="Panel degradation per year (%)" value={pctIn(job.degradation)} onChange={(v) => set({ degradation: pctOut(v) })} hint={hint(a?.degradation, (x) => (x * 100).toFixed(2))} step={0.1} min={0} />
       </div>
-      <div className="row" style={{ marginTop: 8 }}>
-        <Num label="Analysis years" value={job.analysis_years} onChange={(v) => set({ analysis_years: v })} hint={hint(a?.analysis_years)} step={1} min={1} width={130} />
-        <Num label="Discount rate (%)" value={pctIn(job.discount_rate)} onChange={(v) => set({ discount_rate: pctOut(v) })} hint={hint(a?.discount_rate, (x) => (x * 100).toFixed(1))} step={0.5} min={0} width={140} />
-        <Num label="Battery life (years)" value={job.battery_life_years} onChange={(v) => set({ battery_life_years: v })} hint={hint(a?.battery_life_years)} step={1} min={1} width={150} />
-        <Num label="Inverter life (years)" value={job.inverter_life_years} onChange={(v) => set({ inverter_life_years: v })} hint={hint(a?.inverter_life_years)} step={1} min={1} width={150} />
-        <Num label="Upkeep per year (₱)" value={job.om_per_year} onChange={(v) => set({ om_per_year: v })} hint={hint(a?.om_per_year, (x) => Math.round(x).toString())} step={100} min={0} width={160} />
+      <div className="input-grid">
+        <Num label="Analysis years" value={job.analysis_years} onChange={(v) => set({ analysis_years: v })} hint={hint(a?.analysis_years)} step={1} min={1} />
+        <Num label="Discount rate (%)" value={pctIn(job.discount_rate)} onChange={(v) => set({ discount_rate: pctOut(v) })} hint={hint(a?.discount_rate, (x) => (x * 100).toFixed(1))} step={0.5} min={0} />
+        <Num label="Battery life (years)" value={job.battery_life_years} onChange={(v) => set({ battery_life_years: v })} hint={hint(a?.battery_life_years)} step={1} min={1} />
+        <Num label="Inverter life (years)" value={job.inverter_life_years} onChange={(v) => set({ inverter_life_years: v })} hint={hint(a?.inverter_life_years)} step={1} min={1} />
+        <Num label="Upkeep per year (₱)" value={job.om_per_year} onChange={(v) => set({ om_per_year: v })} hint={hint(a?.om_per_year, (x) => Math.round(x).toString())} step={100} min={0} />
       </div>
       <div className="muted" style={{ marginTop: 6 }}>
         Blank fields follow the settings. The tariff defaults to the latest bill's amount over kWh, the effective rate the customer pays. The export credit is the utility's blended generation rate under net metering, not the retail rate; check it for the customer's utility.
@@ -57,11 +56,6 @@ export function EconomicsResults({ eco }: { eco: EconomicsBlock }) {
   const monthly = (eco.monthly ?? []).map((m) => ({ month: MONTHS[m.month - 1], Before: Math.round(m.bill_before), After: Math.round(m.bill_after) }))
   return (
     <div>
-      {eco.warnings.map((w, i) => (
-        <div key={w.code + i} className="banner info">
-          {w.message}
-        </div>
-      ))}
       <div className="kpis">
         <div className="kpi">
           <div className="label">Monthly bill, without → with solar</div>
@@ -99,6 +93,16 @@ export function EconomicsResults({ eco }: { eco: EconomicsBlock }) {
           <div className="sub">lifetime cost over lifetime production; {eco.co2_t_per_year?.toFixed(1)} t CO2 avoided a year</div>
         </div>
       </div>
+      {eco.warnings.length > 0 && (
+        <div className="installer-notes">
+          <b>Notes for the installer</b>
+          <ul>
+            {eco.warnings.map((w, i) => (
+              <li key={w.code + i}>{w.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <h3>Monthly bill, before and after solar (year 1)</h3>
       <div style={{ width: '100%', height: 220 }}>

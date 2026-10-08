@@ -148,6 +148,8 @@ export interface AssessmentDoc {
   test_panel_calibration: number
   setback_m: number
   gap_m: number
+  /** Printed on the roof check card; blank means the card's own default line. */
+  card_next_step: string
   audit: EnergyAudit
   pricing: PricingJob
   program: ProgramJob
@@ -491,6 +493,8 @@ export interface Funnel {
 export interface Warning {
   code: string
   message: string
+  /** Set on warnings about one roof face (face_no_fit), so the face card can show them inline. */
+  face_id?: string | null
 }
 
 export interface LayoutOption {
@@ -772,6 +776,7 @@ export function emptyDoc(): AssessmentDoc {
     test_panel_calibration: 1.0,
     setback_m: 0.6,
     gap_m: 0,
+    card_next_step: '',
     audit: emptyAudit(),
     pricing: emptyPricingJob(),
     program: emptyProgramJob(),

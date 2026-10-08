@@ -66,6 +66,19 @@ export default function App() {
           <Route path="/assessments/:id" element={user ? <AssessmentPage status={status} /> : <Navigate to="/login" />} />
           <Route path="/materials" element={user ? <MaterialsPage /> : <Navigate to="/login" />} />
           <Route path="/settings" element={user ? <SettingsPage status={status} onRefresh={refreshStatus} /> : <Navigate to="/login" />} />
+          <Route
+            path="*"
+            element={
+              user ? (
+                <div className="card">
+                  <div className="banner bad">There is no page at this address.</div>
+                  <Link to="/">Back to the list</Link>
+                </div>
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
         </Routes>
       </div>
     </>

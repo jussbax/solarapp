@@ -3,15 +3,15 @@ import { api } from '../api'
 import type { MaterialItem, PricingBlock, PricingJob } from '../types'
 import MaterialPicker from './MaterialPicker'
 import NumberInput from './NumberInput'
+import { php0, php2 } from '../fmt'
 
-const php = (v: number | null | undefined) => (v == null ? '-' : `₱${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
-const php0 = (v: number | null | undefined) => (v == null ? '-' : `₱${Math.round(v).toLocaleString()}`)
+const php = php2
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
 const qty = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1))
 
 function Num({ label, value, onChange, hint, step, min }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number }) {
   return (
-    <div className="narrow" style={{ width: 170 }}>
+    <div>
       <label>{label}</label>
       <NumberInput value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />
     </div>
@@ -28,8 +28,8 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
       <div className="muted" style={{ marginBottom: 8 }}>
         Blank fields use the pricing settings. Extra km comes from the map pin (straight line × road factor, less the route's reference site).
       </div>
-      <div className="row">
-        <div className="narrow" style={{ width: 300 }}>
+      <div className="input-grid">
+        <div className="wide">
           <label>Inverter</label>
           <select value={job.inverter_code ?? ''} onChange={(e) => set({ inverter_code: e.target.value || null })}>
             <option value="">Default inverter{ch?.inverter_code ? ` (${ch.inverter_units && ch.inverter_units > 1 ? `${ch.inverter_units} x ` : ''}${ch.inverter_code})` : ''}</option>
@@ -41,7 +41,7 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
             {job.inverter_code && !(ch?.inverter_options ?? []).some((o) => o.code === job.inverter_code) && <option value={job.inverter_code}>{job.inverter_code}</option>}
           </select>
         </div>
-        <div className="narrow" style={{ width: 300 }}>
+        <div className="wide">
           <label>Battery</label>
           <select value={job.battery_code ?? ''} onChange={(e) => set({ battery_code: e.target.value || null })}>
             <option value="">Cheapest combination that fits{ch?.battery_code ? ` (${ch.battery_units} x ${ch.battery_code})` : ''}</option>
@@ -54,20 +54,20 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
           </select>
         </div>
       </div>
-      <div className="row" style={{ marginTop: 8 }}>
+      <div className="input-grid">
         <Num label="Max panels per string" value={job.max_panels_per_string} onChange={(v) => set({ max_panels_per_string: v })} hint="10" min={1} step={1} />
         <Num label="Strings (override)" value={job.strings_override} onChange={(v) => set({ strings_override: v })} hint={ch ? `${ch.strings} computed` : 'computed'} min={1} step={1} />
         <Num label="Extra km (one way)" value={job.extra_km} onChange={(v) => set({ extra_km: v })} hint={pricing?.pin_distance ? `${pricing.pin_distance.extra_km} from pin` : '0'} min={0} />
         <Num label="Extra toll (₱)" value={job.extra_toll} onChange={(v) => set({ extra_toll: v })} hint={d('extra_toll', '0')} min={0} />
       </div>
-      <div className="row" style={{ marginTop: 8 }}>
+      <div className="input-grid">
         <Num label="Roof productivity factor" value={job.roof_factor} onChange={(v) => set({ roof_factor: v })} hint={d('roof_factor', '0.75')} min={0.1} step={0.05} />
         <Num label="Days the roof is closed" value={job.roof_closed_days} onChange={(v) => set({ roof_closed_days: v })} hint={d('roof_closed_days', '1')} min={0} step={1} />
         <Num label="Max installation days" value={job.max_days} onChange={(v) => set({ max_days: v })} hint={d('max_days', '2')} min={1} step={1} />
         <Num label="Max roof pairs" value={job.max_pairs} onChange={(v) => set({ max_pairs: v })} hint={d('max_pairs', '2')} min={1} step={1} />
         <Num label="Owner days on site" value={job.owner_days} onChange={(v) => set({ owner_days: v })} hint={d('owner_days', '0')} min={0} />
       </div>
-      <div className="row" style={{ marginTop: 8 }}>
+      <div className="input-grid">
         <Num label="PV run per string (m)" value={job.pv_run_m} onChange={(v) => set({ pv_run_m: v })} hint="25" min={1} />
         <Num label="AC run (m)" value={job.ac_run_m} onChange={(v) => set({ ac_run_m: v })} hint="15" min={1} />
         <Num label="Grounding run (m)" value={job.grounding_run_m} onChange={(v) => set({ grounding_run_m: v })} hint="20" min={0} />
@@ -82,13 +82,16 @@ export function PricingResults({
   job,
   onJobChange,
   quotationUrl,
-  stale,
+  docReason,
+  openDocument,
 }: {
   pricing: PricingBlock
   job: PricingJob
   onJobChange: (j: PricingJob) => void
   quotationUrl: string
-  stale: boolean
+  /** Why no document can be produced right now (stale results, test data), or null when they can. */
+  docReason: string | null
+  openDocument: (url: string) => void
 }) {
   const [adding, setAdding] = useState(false)
   const [showInternal, setShowInternal] = useState(false)
@@ -129,7 +132,6 @@ export function PricingResults({
 
   return (
     <div>
-      {stale && <div className="banner warn">Inputs changed since the last calculation. Press Calculate to refresh the price.</div>}
       {(pricing.warnings ?? []).map((w, i) => (
         <div key={w.code + i} className={`banner ${['missing_item', 'no_inverter', 'no_battery', 'ats', 'ac_breaker'].includes(w.code) ? 'bad' : 'warn'}`}>
           {w.message}
@@ -165,12 +167,11 @@ export function PricingResults({
         </div>
       </div>
       <div className="actions" style={{ position: 'static', border: 0, padding: '4px 0' }}>
-        <a href={stale ? undefined : quotationUrl} onClick={(e) => stale && e.preventDefault()}>
-          <button disabled={stale} title={stale ? 'Calculate first' : ''}>
-            Proposal PDF
-          </button>
-        </a>
-        <button onClick={() => setShowInternal((v) => !v)}>{showInternal ? 'Hide' : 'Show'} internal build-up</button>
+        <button type="button" disabled={!!docReason} onClick={() => openDocument(quotationUrl)}>
+          Proposal PDF
+        </button>
+        <button type="button" onClick={() => setShowInternal((v) => !v)}>{showInternal ? 'Hide' : 'Show'} internal build-up</button>
+        {docReason && <span className="muted doc-reason">{docReason}</span>}
       </div>
 
       <details style={{ marginBottom: 10 }}>
@@ -212,7 +213,7 @@ export function PricingResults({
       </details>
 
       <h3>
-        Bill of materials{' '}
+        Bill of materials (BOM){' '}
         {edited && (
           <button type="button" className="toggle link" onClick={() => onJobChange({ ...job, bom_edits: [], bom_extra: [] })}>
             Reset to generated
@@ -371,8 +372,8 @@ export function PricingResults({
           </div>
           {fr && (
             <div className="muted" style={{ marginTop: 6 }}>
-              Freight: {fr.trips} trip(s) via {(fr.stops_on_run ?? []).join(' → ')}, {fr.loop_km.toFixed(0)} km loop (extra {String(pricing.job_inputs?.extra_km ?? 0)} km each way), toll ₱{fr.toll.toLocaleString()}, run cost {php0(fr.run_cost)}; truck share{' '}
-              {((fr.truck_share ?? 0) * 100).toFixed(1)}%. Labour: roof {Number(lb.roof_mh ?? 0).toFixed(1)} MH, ground {Number(lb.ground_mh ?? 0).toFixed(1)} MH, carry crew {String(lb.carry_crew ?? '')}; labour {php0(Number(lb.labor ?? 0))}, mob/demob{' '}
+              Freight: {fr.trips} trip(s) via {(fr.stops_on_run ?? []).join(' → ')}, {fr.loop_km.toFixed(0)} km loop (extra {String(pricing.job_inputs?.extra_km ?? 0)} km each way), toll {php0(fr.toll)}, run cost {php0(fr.run_cost)}; truck share{' '}
+              {((fr.truck_share ?? 0) * 100).toFixed(1)}%. Labor: roof {Number(lb.roof_mh ?? 0).toFixed(1)} MH, ground {Number(lb.ground_mh ?? 0).toFixed(1)} MH, carry crew {String(lb.carry_crew ?? '')}; labor {php0(Number(lb.labor ?? 0))}, mob/demob{' '}
               {php0(Number(lb.mobdemob ?? 0))}, tools {php0(Number(lb.tools ?? 0))}.
             </div>
           )}

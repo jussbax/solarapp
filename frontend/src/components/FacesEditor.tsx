@@ -1,4 +1,4 @@
-import { newFace, newId, type FaceShape, type RoofFace, type ShadeObstacle, type WallEdge, type WallObstacle } from '../types'
+import { newFace, newId, type FaceShape, type RoofFace, type ShadeObstacle, type WallEdge, type WallObstacle, type Warning } from '../types'
 import { COMPASS, compassLabel } from './compass'
 import NumberInput from './NumberInput'
 
@@ -9,7 +9,7 @@ const EDGES: { id: WallEdge; label: string }[] = [
   { id: 'eave', label: 'Eave side' }, { id: 'ridge', label: 'Ridge side' }, { id: 'left', label: 'Left end' }, { id: 'right', label: 'Right end' },
 ]
 
-export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; onChange: (f: RoofFace[]) => void }) {
+export default function FacesEditor({ faces, warnings, onChange }: { faces: RoofFace[]; warnings?: Warning[] | null; onChange: (f: RoofFace[]) => void }) {
   const update = (i: number, patch: Partial<RoofFace>) => onChange(faces.map((f, j) => (j === i ? { ...f, ...patch } : f)))
   const add = () => onChange([...faces, newFace(`Roof ${faces.length + 1}`)])
   const remove = (i: number) => onChange(faces.filter((_, j) => j !== i))
@@ -74,6 +74,13 @@ export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; on
               <NumberInput value={f.azimuth_deg} onChange={(v) => update(i, { azimuth_deg: (((v ?? 0) % 360) + 360) % 360 })} min={0} max={359.9} />
             </div>
           </div>
+          {(warnings ?? [])
+            .filter((w) => w.face_id === f.id)
+            .map((w, k) => (
+              <div key={w.code + k} className="banner warn face-warn" role="alert">
+                {w.message}
+              </div>
+            ))}
           <details className="more">
             <summary>More: panels left out, count override</summary>
             <div className="face-grid" style={{ marginTop: 6 }}>
