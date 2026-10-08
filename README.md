@@ -81,7 +81,8 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
 The company website lives in `site/` as plain HTML and CSS (pages under
 `site/pages/`, the shared frame in `site/layout.html`, styles and the small
 script under `site/static/`). `python site/build.py` writes it to
-`site/dist/`; the Docker build does this. Contact details, the owner, the
+`site/dist/`; the Docker build does this. Build with `--base-url https://pldevinc.com` for absolute share-image and page addresses (Facebook needs them), and with `--with-placeholders` to keep the photo placeholder blocks, which the public build drops.
+Contact details, the owner, the
 PEE, warranties, brands and the service area are filled in at page load
 from the company profile under Settings, so the pages never need editing
 for those. The estimate page (`/estimate`) embeds the widget. Photos are
@@ -100,6 +101,7 @@ the token or to a signed-in user.
 
 1. In `.env` set `SOLARAPP_INTERNAL_TOKEN` to a long random string
    (`openssl rand -hex 24`) and `SOLARAPP_PUBLIC_URL=https://solar.pldevinc.com`.
+   `SOLARAPP_WEBSITE_URL=https://pldevinc.com` is where the card's QR code and the copied estimate summary send people (its `/estimate` page); it defaults to the first entry of `SOLARAPP_PUBLIC_ORIGINS`.
 2. In the Cloudflare Zero Trust dashboard (Networks › Tunnels) create two
    tunnels of the Docker type and copy each token into `.env`:
    - **office**: public hostname `solar.pldevinc.com` → service

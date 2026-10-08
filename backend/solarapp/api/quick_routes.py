@@ -26,15 +26,16 @@ from ..core.quick import GOAL_LABEL, PATTERN_LABEL, quick_estimate
 from ..core.towns import towns_payload
 from ..db import get_engine, get_session
 from ..models import Assessment, QuickEstimateLog
-from ..notify import send_lead_notice, smtp_configured
+from ..notify import lead_notice, send_lead_notice, smtp_configured
 from ..pricing.job import PricingContext
 from ..pricing.store import load_catalog, load_config
-from ..profile import public_profile, warranty_lines
+from ..profile import company_profile, public_profile, warranty_lines
 from ..schemas import AssessmentDoc, BillEntry, EnergyAudit, LeadInfo, ProgramJob, QuickLead, QuickRequest
 from .deps import get_pvgis
 
 log = logging.getLogger("solarapp.audit")
-UNAVAILABLE = "The estimate isn't available right now. Please try again later or message us on Facebook."
+# no "message us on Facebook" here: the page adds that itself, and only when the profile has a link to message
+UNAVAILABLE = "The estimate isn't available right now. Please try again later."
 TOO_MANY = "You've run a lot of estimates in a short time. Please try again in an hour."
 
 # ---- client address: proxy headers are honoured only from our own proxies (loopback, Docker and office networks)
@@ -221,5 +222,11 @@ def lead(body: QuickLead, request: Request, tasks: BackgroundTasks, session: Ses
     log.info("lead created id=%s ip=%s source=%s", a.id, client_ip(request), _source_label(body.source))
     if smtp_configured(settings):
         link = f"{settings.public_url.rstrip('/')}/assessments/{a.id}" if settings.public_url else f"assessment #{a.id}"
-        tasks.add_task(send_lead_notice, settings, f"New solar lead: {doc.customer_name} ({where['label']})", f"{notes}\n\nSource: {_source_label(body.source)}\nOpen: {link}\n")
+        promise = (company_profile(session, settings).get("callback_promise") or "").strip() or "within one working day"
+        subject, text = lead_notice(
+            name=doc.customer_name, contact=body.contact.strip(), preferred_time=body.preferred_time, wants=wants, uses=PATTERN_LABEL[body.pattern],
+            kwh=float(kwh), monthly_php=body.monthly_php, estimate=est, place=where["label"], pin_placed=not body.town, address=body.address.strip(),
+            source=_source_label(body.source), link=link, promise=promise,
+        )
+        tasks.add_task(send_lead_notice, settings, subject, text)
     return {"ok": True, "id": a.id, "goal_label": GOAL_LABEL[body.goal]}

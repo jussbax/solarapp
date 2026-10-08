@@ -3,6 +3,8 @@
 //   <script src="https://solar.pldevinc.com/widget/quick.js" defer></script>
 // The script finds the div (or makes one after itself), injects its styles and calls
 // the server it was loaded from (override with data-api="https://..." on the script tag).
+// data-embedded="true" on the script tag drops the widget's own header and footer, for a
+// page that already has both (the company website).
 import { createRoot } from 'react-dom/client'
 import css from './estimate.css?inline'
 import Estimate from './Estimate'
@@ -31,7 +33,7 @@ function mount() {
     style.textContent = css
     document.head.appendChild(style)
   }
-  createRoot(host).render(<Estimate apiBase={apiBase} />)
+  createRoot(host).render(<Estimate apiBase={apiBase} embedded={script?.dataset.embedded === 'true'} />)
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount)

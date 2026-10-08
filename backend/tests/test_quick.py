@@ -69,3 +69,29 @@ def test_quick_estimate_by_town_with_battery_alternative(ctx, pvgis):
     assert not far["inputs"]["in_area"] and any("outside Laguna and Batangas" in w for w in far["warnings"])
     with pytest.raises(ValueError):
         quick_estimate(QuickRequest(goal="net_metering", town="Atlantis", monthly_kwh=338), pvgis, ctx)
+
+
+def test_quick_estimate_refuses_very_small_usage(ctx, pvgis):
+    from solarapp.core.quick import MIN_MONTHLY_KWH, TOO_LITTLE
+    for req in (QuickRequest(goal="net_metering", town="Pila", province="Laguna", monthly_kwh=50, pattern="balanced"),
+                QuickRequest(goal="combination", town="Pila", province="Laguna", monthly_php=150, pattern="balanced")):
+        with pytest.raises(ValueError) as e:
+            quick_estimate(req, pvgis, ctx)
+        assert str(e.value) == TOO_LITTLE and "very little usage" in TOO_LITTLE
+    small = quick_estimate(QuickRequest(goal="net_metering", town="Pila", province="Laguna", monthly_kwh=MIN_MONTHLY_KWH, pattern="balanced"), pvgis, ctx)
+    assert small["system"]["panels"] >= 1
+
+
+def test_quick_battery_is_the_priced_unit_and_the_copy_reads_right(ctx, pvgis):
+    q = quick_estimate(QuickRequest(goal="combination", town="Tanauan", province="Batangas", monthly_kwh=338, pattern="evening"), pvgis, ctx)
+    kwh = q["system"]["battery_kwh"]
+    ratings = [i.rating for i in ctx.catalog.by_category("Battery") if i.rating and (i.rating_unit or "").lower() == "kwh"]
+    # the figure the visitor sees is units x the catalogue rating of the battery in the price, not the sizing's nominal kWh
+    assert kwh >= 0.5 and any(abs(kwh - n * r) < 1e-6 for r in ratings for n in range(1, 9))
+    assert q["price"]["battery_part"] > 0 and q["alternative"]["system"]["battery_kwh"] == 0
+    assert any(a.startswith("Sized for a house using about 338 kWh a month, mostly in the evening: solar with a battery and net metering.") for a in q["assumptions"])
+    assert any("include the " in a and "km trip from Pila, Laguna" in a for a in q["assumptions"])
+    # Pila itself: no "0 km trip"
+    home = quick_estimate(QuickRequest(goal="net_metering", town="Pila", province="Laguna", monthly_kwh=338, pattern="balanced"), pvgis, ctx)
+    assert any(a == "Prices are from our current supplier list; no travel charge within Pila." for a in home["assumptions"])
+    assert not any("0 km" in a for a in home["assumptions"])

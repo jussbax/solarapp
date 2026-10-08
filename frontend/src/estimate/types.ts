@@ -36,6 +36,7 @@ export interface EstimateStatus {
   warranty: string[]
   towns: Town[]
   public_url: string
+  estimate_url: string   // the website's estimate page, for the copied summary
 }
 
 export interface LeadSource {

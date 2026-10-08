@@ -29,12 +29,12 @@
       var v = profile[k];
       if (v) el.setAttribute('href', hrefFor(k, v));
     });
+    // one key, or several separated by commas: hidden while every one of them is blank
     document.querySelectorAll('[data-profile-hide-if-empty]').forEach(function (el) {
-      var v = profile[el.getAttribute('data-profile-hide-if-empty')];
-      el.classList.toggle('is-empty', !v);
+      var keys = el.getAttribute('data-profile-hide-if-empty').split(',');
+      var any = keys.some(function (k) { return !!profile[k.trim()]; });
+      el.classList.toggle('is-empty', !any);
     });
-    var anyContact = ['phone', 'messenger', 'facebook', 'email'].some(function (k) { return !!profile[k]; });
-    document.querySelectorAll('[data-profile-empty-note]').forEach(function (el) { el.classList.toggle('is-hidden', anyContact); });
     var list = document.querySelector('[data-warranty-list]');
     if (list) {
       list.innerHTML = '';
@@ -43,9 +43,11 @@
         li.textContent = w;
         list.appendChild(li);
       });
-      var wrap = list.closest('[data-warranty-wrap]');
-      if (wrap) wrap.classList.toggle('is-empty', !(warranty && warranty.length));
     }
+    // every warranty claim on the site stays hidden until the owner fills the years under Settings
+    document.querySelectorAll('[data-warranty-wrap]').forEach(function (el) {
+      el.classList.toggle('is-empty', !(warranty && warranty.length));
+    });
   }
 
   try {

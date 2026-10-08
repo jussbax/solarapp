@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { emit, makeApi, readSource } from './api'
+import { emit, isUnavailable, makeApi, readSource } from './api'
 import type { EstimateResult, EstimateStatus, Goal, Pattern, Town, Variant } from './types'
 
 const php0 = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '-' : `${v < 0 ? '-' : ''}₱${Math.abs(Math.round(v)).toLocaleString()}`)
@@ -18,14 +18,22 @@ const PATTERNS: { id: Pattern; title: string; text: string }[] = [
 ]
 const TIMES = ['Morning', 'Afternoon', 'Evening']
 
+/** The battery the price includes (the catalogue unit); anything under half a kWh is no battery at all. */
+const hasBattery = (v: Variant) => v.system.battery_kwh >= 0.5
+
 function systemLine(v: Variant) {
   const s = v.system
-  const parts = [`${s.panels} × ${Math.round(s.panel_wp)} W panels (${s.kwp.toFixed(2)} kWp)`, `${s.inverter_units > 1 ? `${s.inverter_units} × ` : ''}${s.inverter_kw} kW hybrid inverter`]
-  if (s.battery_kwh > 0) parts.push(`${s.battery_kwh.toFixed(0)} kWh lithium battery`)
+  const parts = [`${s.panels} × ${Math.round(s.panel_wp)} W ${s.panels === 1 ? 'panel' : 'panels'} (${s.kwp.toFixed(2)} kWp)`, `${s.inverter_units > 1 ? `${s.inverter_units} × ` : ''}${s.inverter_kw} kW hybrid inverter`]
+  if (hasBattery(v)) parts.push(`${s.battery_kwh.toFixed(0)} kWh lithium battery`)
   return parts.join(', ')
 }
 
-export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
+/** "https://m.me/pldev" -> "m.me/pldev", for text that gets copied and forwarded. */
+const bareUrl = (u: string) => u.replace(/^https?:\/\//, '').replace(/\/$/, '')
+
+// embedded: the company website already has a header and a footer around the widget, so the widget
+// shows neither and keeps the trust lines inside the booking card. Standalone (/estimate on the app host) keeps both.
+export default function Estimate({ apiBase = '', embedded = false }: { apiBase?: string; embedded?: boolean }) {
   const source = useMemo(() => readSource(), [])
   const api = useMemo(() => makeApi(apiBase, source), [apiBase, source])
   const [status, setStatus] = useState<EstimateStatus | null | 'down'>(null)
@@ -46,13 +54,27 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
   const [leadError, setLeadError] = useState<string | null>(null)
   const [leadSent, setLeadSent] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [bookInView, setBookInView] = useState(false)
   const resultRef = useRef<HTMLDivElement>(null)
+  const bookRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     api.status().then(setStatus).catch(() => setStatus('down'))
   }, [api])
 
   const profile = status && status !== 'down' ? status.profile : null
+  const messengerHref = profile?.messenger ? profile.messenger : ''
+  // "message us on Facebook" only when there is somewhere to message; otherwise just ask for patience
+  const contactHref = messengerHref || profile?.facebook || ''
+  const downNote = contactHref ? (
+    <>
+      The estimate is taking a break. <a href={contactHref} target="_blank" rel="noreferrer">Message us on Facebook</a> and we'll work it out for you.
+    </>
+  ) : (
+    'The estimate is taking a break. Please try again later.'
+  )
+  const unavailableText = contactHref ? "The estimate isn't available right now. Please try again later or message us on Facebook." : "The estimate isn't available right now. Please try again later."
+  const showError = (e: unknown) => setError(isUnavailable(e) ? unavailableText : (e as Error).message)
   const towns: Town[] = status && status !== 'down' ? status.towns : []
   const provinces = useMemo(() => Array.from(new Set(towns.map((t) => t.province))), [towns])
   const townsHere = useMemo(() => towns.filter((t) => t.province === province).sort((a, b) => a.name.localeCompare(b.name)), [towns, province])
@@ -103,12 +125,12 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
     try {
       const r = await api.estimate(request())
       setResult(r)
-      setWithBattery(r.system.battery_kwh > 0)
-      setLeadSent(false)
+      setWithBattery(hasBattery(r))
+      // a visit already booked stays booked: the thank-you keeps its place under a second or third estimate
       emit('estimate_shown', { goal: r.goal, panels: r.system.panels, price: r.price.total })
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     } catch (e) {
-      setError((e as Error).message)
+      showError(e)
     } finally {
       setBusy(false)
     }
@@ -118,10 +140,25 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
   const shown: Variant | null = useMemo(() => {
     if (!result) return null
     if (withBattery == null || result.alternative == null) return result
-    const mainHas = result.system.battery_kwh > 0
-    return withBattery === mainHas ? result : result.alternative
+    return withBattery === hasBattery(result) ? result : result.alternative
   }, [result, withBattery])
   const other: Variant | null = result && shown ? (shown === result ? result.alternative : result) : null
+  const stickyShown = !!(result && shown && !leadSent && !bookInView)
+
+  // the sticky price bar steps aside while the booking form (with its own button) is on screen:
+  // from the point where a good part of the form is visible, not from its first pixel
+  useEffect(() => {
+    const el = bookRef.current
+    if (!el || !result || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver((entries) => setBookInView(entries.some((x) => x.isIntersecting)), { threshold: 0.4 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [result])
+  // room under the page while the bar is up, so it never covers the host page's footer
+  useEffect(() => {
+    document.body.classList.toggle('pld-sticky-on', stickyShown)
+    return () => document.body.classList.remove('pld-sticky-on')
+  }, [stickyShown])
 
   const sendLead = async () => {
     if (!result || !shown || !lead.name.trim() || !lead.contact.trim()) return
@@ -152,21 +189,25 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
       setLeadSent(true)
       emit('lead_submitted', { goal: shown.goal, price: shown.price.total })
     } catch (e) {
-      setLeadError((e as Error).message)
+      setLeadError(isUnavailable(e) ? unavailableText : (e as Error).message)
     } finally {
       setLeadBusy(false)
     }
   }
 
+  // where a forwarded summary sends the reader: the website's estimate page and the Messenger handle, when set
+  const estimateUrl = status && status !== 'down' ? status.estimate_url || '' : ''
   const summaryText = () => {
     if (!shown || !result) return ''
     const e = shown.economics
+    const links = [messengerHref ? `Questions: ${bareUrl(messengerHref)}` : '', estimateUrl ? `Run your own: ${bareUrl(estimateUrl)}` : ''].filter(Boolean).join(' · ')
     return [
-      `Solar estimate from ${profile?.company_name || 'PL Development'} for ${result.inputs.place}:`,
+      `Solar estimate from ${profile?.company_name || 'PL Development Inc.'} for ${result.inputs.place}:`,
       systemLine(shown) + '.',
       `Estimated price ${php0(shown.price.total)} installed, VAT included.`,
       e ? `Bill ${php0(e.bill_before_monthly)} → about ${php0(e.bill_after_monthly)} a month; pays for itself in ${years(e.payback_years, e.analysis_years)}.` : '',
       'This is an estimate, not a quotation.',
+      links,
     ]
       .filter(Boolean)
       .join('\n')
@@ -181,7 +222,6 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
     }
   }
 
-  const messengerHref = profile?.messenger ? profile.messenger : ''
   const telHref = profile?.phone ? `tel:${profile.phone.replace(/[^+\d]/g, '')}` : ''
   const trust = profile
     ? [
@@ -197,22 +237,23 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
   const makesPct = prod ? Math.round(prod.production_vs_use_pct) : 0
 
   return (
-    <div className="pld">
-      <header className="pld-head">
-        <img src={`${apiBase}/brand/logo-mark.png`} alt="" className="pld-logo" />
-        <div>
-          <div className="pld-company">{profile?.company_name || 'PL Development Inc.'}</div>
-          {profile?.service_area && <div className="pld-sub">Solar for homes in {profile.service_area}</div>}
-        </div>
-      </header>
+    <div className={`pld${embedded ? ' pld-embedded' : ''}`}>
+      {!embedded && (
+        <header className="pld-head">
+          <img src={`${apiBase}/brand/logo-mark.png`} alt="" className="pld-logo" />
+          <div>
+            <div className="pld-company">{profile?.company_name || 'PL Development Inc.'}</div>
+            {profile?.service_area && <div className="pld-sub">Solar engineering for homes in {profile.service_area}</div>}
+          </div>
+        </header>
+      )}
 
       <section className="pld-card">
         <h1 className="pld-h1">How much solar does your house need?</h1>
         <p className="pld-lead">
           Four questions, about a minute. You'll see the system size, the price and what it saves each month. For an exact figure, we measure your roof. The visit is free.
         </p>
-        {status === 'down' && <div className="pld-note pld-warn">{"The estimate is taking a break. Message us on Facebook and we'll work it out for you."}</div>}
-        {status && status !== 'down' && !status.enabled && <div className="pld-note pld-warn">{"The estimate is taking a break. Message us on Facebook and we'll work it out for you."}</div>}
+        {(status === 'down' || (status && !status.enabled)) && <div className="pld-note pld-warn">{downNote}</div>}
 
         <div className="pld-step">1. What do you want from solar?</div>
         <div className="pld-choices">
@@ -317,7 +358,7 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
                   <div className="pld-hero-big">
                     {php0(e.bill_before_monthly)} <span className="pld-arrow">→</span> about {php0(e.bill_after_monthly)}
                   </div>
-                  <div className="pld-hero-sub">about {php0(e.savings_monthly)} less each month</div>
+                  <div className="pld-hero-sub">about {php0(e.savings_monthly)} less each month, before any fixed charges on your bill</div>
                 </div>
                 <div className="pld-hero-grid">
                   <div>
@@ -347,11 +388,12 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
           <div className="pld-line">
             <b>What it makes:</b> about {n0(prod.annual_kwh / 12)} kWh a month, {makesPct}% of the {n0(result.inputs.monthly_kwh)} kWh you use.
             {makesPct > 100 && shown.goal !== 'off_grid' && " Daytime power is used directly; the surplus is credited by your electric company at its generation rate, which is why the bill does not reach zero."}
+            {shown.goal === 'off_grid' && ' Off-grid systems are oversized so the battery still fills in the rainy months.'}
             {shown.goal === 'off_grid' && prod.annual_unserved_kwh > 50 && ` About ${n0(prod.annual_unserved_kwh)} kWh a year would still go short in the rainy months.`}
           </div>
           {other && (
             <div className="pld-line pld-alt">
-              {shown.system.battery_kwh > 0 ? (
+              {hasBattery(shown) ? (
                 <>
                   <b>Without the battery:</b> {php0(other.price.total)}
                   {other.economics && `, bill about ${php0(other.economics.bill_after_monthly)} a month, pays for itself in ${years(other.economics.payback_years, other.economics.analysis_years)}`}.
@@ -362,7 +404,7 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
                 </>
               ) : (
                 <>
-                  <b>Add a {other.system.battery_kwh.toFixed(0)} kWh battery for brownouts:</b> about {php0(other.price.total - shown.price.total)} more
+                  <b>Add a battery ({other.system.battery_kwh.toFixed(0)} kWh) for brownouts:</b> about {php0(other.price.total - shown.price.total)} more
                   {other.economics && `, bill about ${php0(other.economics.bill_after_monthly)} a month, pays for itself in ${years(other.economics.payback_years, other.economics.analysis_years)}`}.{' '}
                   <button type="button" className="pld-link" onClick={() => setWithBattery(true)}>
                     Show with the battery
@@ -372,12 +414,12 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
             </div>
           )}
 
-          <div className="pld-book" id="pld-book">
+          <div className="pld-book" id="pld-book" ref={bookRef}>
             <h3 className="pld-h3">Want the exact figure? The roof visit is free.</h3>
             {leadSent ? (
               <div className="pld-thanks">
                 <p>
-                  Thank you, {lead.name.trim()}. {profile?.owner_name || 'We'} will message you {profile?.callback_promise || 'within one working day'} to pick a visit day; visits are usually within the week. Have a recent bill handy.
+                  Thank you, {lead.name.trim()}. {profile?.owner_name || 'We'} will message or call you {profile?.callback_promise || 'within one working day'} to pick a visit day; visits are usually within the week. Have a recent bill handy.
                 </p>
                 <div className="pld-row">
                   {messengerHref && (
@@ -433,6 +475,13 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
                 <div className="pld-privacy">{profile?.privacy_note || 'We use your name and number only to arrange your visit and send your estimate. We never pass them on.'}</div>
               </>
             )}
+            {embedded && trust.length > 0 && (
+              <ul className="pld-trust pld-trust-book">
+                {trust.map((t, i) => (
+                  <li key={i}>{t}</li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <details className="pld-details">
@@ -476,7 +525,7 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
         </section>
       )}
 
-      {result && shown && !leadSent && (
+      {stickyShown && shown && (
         <div className="pld-sticky">
           <div>
             <div className="pld-sticky-label">Estimated price</div>
@@ -488,7 +537,7 @@ export default function Estimate({ apiBase = '' }: { apiBase?: string }) {
         </div>
       )}
 
-      {profile && (
+      {!embedded && profile && (
         <footer className="pld-foot">
           {trust.length > 0 && (
             <ul className="pld-trust">
