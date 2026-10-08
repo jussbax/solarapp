@@ -5,8 +5,9 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      # Only reachable from this machine; the Cloudflare Tunnel connects to it locally.
-      - "127.0.0.1:8000:8000"
+      # Default: reachable from this machine only; the Cloudflare Tunnel connects to it locally.
+      # Set SOLARAPP_BIND=0.0.0.0 in .env to open it to the local network (http://<server ip>:8000).
+      - "${SOLARAPP_BIND:-127.0.0.1}:8000:8000"
     volumes:
       # Weather dataset and the SQLite database live here, outside the image.
       - ./data:/app/data

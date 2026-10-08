@@ -107,7 +107,10 @@ docker compose up -d
 curl http://127.0.0.1:8000/api/health
 ```
 
-The app listens on `127.0.0.1:8000` only. Expose it with a Cloudflare Tunnel:
+The app listens on `127.0.0.1:8000` only. To reach it from other machines on
+the office network, set `SOLARAPP_BIND=0.0.0.0` in `.env`, run
+`docker compose up -d` again and open `http://<server ip>:8000`. For access
+from anywhere, expose it with a Cloudflare Tunnel:
 
 ```bash
 # quick tunnel for testing
