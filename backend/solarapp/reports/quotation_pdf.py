@@ -93,6 +93,28 @@ def customer_battery_kwh(pricing: dict, sizing: dict) -> float:
     return bom_battery_kwh(pricing) or float((sizing.get("battery") or {}).get("installed_kwh") or 0)
 
 
+def customer_inverter_text(pricing: dict, sizing: dict) -> str:
+    """The inverter the customer pays for, from the BOM lines (units times the catalogue kW), so the proposal never
+    says "10 kW" while the parts list carries two 6 kW units; the sizing's figure only when there is no BOM line."""
+    units, kw = 0, 0.0
+    for l in pricing.get("lines") or []:
+        if not l.get("found", True) or not (l.get("role") == "inverter" or l.get("category") == "Inverter"):
+            continue
+        q = int(round(float(l.get("qty") or 0)))
+        if q <= 0:
+            continue
+        units += q
+        if (l.get("rating_unit") or "").lower() == "kw" and l.get("rating"):
+            kw = float(l["rating"])
+    if units and kw:
+        return f"{units} × {kw:g} kW hybrid inverter ({units * kw:g} kW in all)" if units > 1 else f"{kw:g} kW hybrid inverter"
+    inv = sizing.get("inverter") or {}
+    if not inv:
+        return "-"
+    n = int(inv.get("units", 1) or 1)
+    return (f"{n} × " if n > 1 else "") + f"{inv.get('size_kw', 0):g} kW hybrid inverter"
+
+
 def inverter_certificate(pricing: dict) -> str:
     """The grid listing of the inverter in the BOM (IEC 61727 / 62116 or the like), when the item carries one."""
     for l in pricing.get("lines") or []:
@@ -329,7 +351,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         ["System type", KIND_LABEL.get(sizing.get("kind", ""), "Solar PV system")],
         ["Solar panels", f"{n_panels} × {wp:.0f} W" if wp else f"{n_panels}"],
         ["System size", f"{pricing['totals']['kwp']:.2f} kWp (the size of the solar array)"],
-        ["Inverter", (f"{int(inv.get('units', 1))} × " if int(inv.get("units", 1) or 1) > 1 else "") + f"{inv.get('size_kw', 0):g} kW hybrid inverter" if inv else "-"],
+        ["Inverter", customer_inverter_text(pricing, sizing)],
     ]
     certs = inverter_certificate(pricing)
     if certs:

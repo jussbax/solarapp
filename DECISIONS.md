@@ -737,3 +737,42 @@ chart, and the engineering build order in the plan.
   the same content for the Design and outputs step.
 - The bill of materials exports as CSV and XLSX with the owner's edits,
   under the same stale rule as every document.
+
+## Engineering numbers (the approved batch)
+
+- Losses after the panels: inverter 0.96, wiring 0.98, soiling 0.97,
+  other 0.99 (about ten percent in all), editable under the pricing
+  settings, applied to the per-kWp profile before sizing so the array is
+  sized on energy at the meter. Results keep both figures; customer
+  documents print the one at the meter. The website estimate uses the same
+  factor.
+- The battery is balanced over the real hourly year, not twelve typical
+  days, with a days-of-autonomy setting (default one evening without sun,
+  the owner's choice) and the loss-of-load hours, days and kWh reported.
+  The off-grid loop adds panels until the autonomy is met or the roof is
+  full and warns when it cannot be; the proposal says plainly how many
+  hours a year an off-grid house goes without power, and that the grid
+  steps in on a hybrid.
+- The sized panels go on the best faces first (by specific yield), whole
+  rows from the eave, and the system's production is the sum over those
+  panels, not the whole-roof blend; the priced mounting and the plan
+  drawings follow the same allocation.
+- Materials carry electrical data (panel Voc, Vmp, Isc, Imp and
+  coefficients; inverter PV window, MPPTs, currents; battery continuous
+  current), a grid-interactive flag inferred from the workbook names and
+  remarks and editable, and the certificate text. These are the inputs
+  the string design table and the circuit sheet will use next.
+- The inverter rule: a job with net metering gets a grid-interactive
+  inverter; the default is per system kind (the grid-tie hybrid, FS-INV-001
+  in the bundled workbook, for grid jobs; the eco-hybrid for off-grid). An
+  off-grid default on a grid job is skipped with a warning; an unknown
+  flag gives a hard warning to confirm the anti-islanding certificate
+  before the application. The proposal prints the certificate and the
+  inverter the BOM carries.
+- The battery bank's continuous current is checked against the inverter's
+  battery current and the breaker sized at 1.25 times it, within the
+  battery's rating; warnings only, never silent extra packs.
+- The hour-by-hour plan has floors (commissioning two hours, battery and
+  inverter one hour each) that do not change the labour price; the
+  schedule-overrun warning tells the owner when a priced day is no longer
+  enough.

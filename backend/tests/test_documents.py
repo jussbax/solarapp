@@ -246,3 +246,14 @@ def test_card_next_step_does_not_make_results_stale(client):
     assert client.get(f"/api/assessments/{aid}").json()["doc"]["card_next_step"] == "Your free energy audit on Monday"
     r = client.put(f"/api/assessments/{aid}", json={**doc, "card_next_step": "Your free energy audit on Monday", "notes": "changed"})
     assert r.json()["results_stale"] is True
+
+
+def test_proposal_inverter_text_follows_the_bom():
+    from solarapp.reports.quotation_pdf import customer_inverter_text
+    sizing = {"inverter": {"size_kw": 10, "units": 1}}
+    two_units = {"lines": [{"role": "inverter", "category": "Inverter", "qty": 2, "rating": 6, "rating_unit": "kW"}]}
+    assert customer_inverter_text(two_units, sizing) == "2 × 6 kW hybrid inverter (12 kW in all)"
+    one_unit = {"lines": [{"category": "Inverter", "qty": 1, "rating": 6, "rating_unit": "kW"}]}
+    assert customer_inverter_text(one_unit, sizing) == "6 kW hybrid inverter"
+    assert customer_inverter_text({"lines": []}, sizing) == "10 kW hybrid inverter"
+    assert customer_inverter_text({"lines": []}, {}) == "-"
