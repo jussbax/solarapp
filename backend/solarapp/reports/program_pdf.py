@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import io
-from datetime import datetime
+from datetime import date, datetime
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -14,6 +14,7 @@ from xml.sax.saxutils import escape
 
 from ..schemas import AssessmentDoc
 from . import brand
+from .drawings import gantt_drawing
 
 
 def php(v: float) -> str:
@@ -48,6 +49,8 @@ def build_program_pdf(doc: AssessmentDoc, results: dict, company: dict) -> bytes
     story = [head]
     story.append(Paragraph(f"INTERNAL, NOT FOR THE CUSTOMER · {escape(doc.address)} · {pricing['totals']['kwp']:.2f} kWp · contract PHP {php(pricing['totals']['contract_rounded'])}", small))
     story.append(Paragraph("Schedule", h2))
+    story.append(gantt_drawing(prog["events"], 269, today=date.today()))  # the Gantt first, the table under it
+    story.append(Spacer(1, 5))
     rows = [["Date", "Until", "Activity", "Customer sees"]]
     for e in prog["events"]:
         amt = f" PHP {php(e['amount'])}" if e.get("amount") else ""

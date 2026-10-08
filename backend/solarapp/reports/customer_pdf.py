@@ -18,6 +18,7 @@ from xml.sax.saxutils import escape  # noqa: E402
 from ..schemas import AssessmentDoc  # noqa: E402
 from . import brand  # noqa: E402
 from .card import reading_lines  # noqa: E402
+from .drawings import plan_blocks  # noqa: E402
 from .quotation_pdf import contact_line  # noqa: E402
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -138,6 +139,14 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
         ("ALIGN", (-1, 1), (-1, -1), "CENTER"),
     ]))
     story.append(ft)
+
+    # the plan of each face: the panels as they will sit, two faces to a row, each row with its captions
+    caption = ParagraphStyle("caption", parent=body, fontSize=8.5, leading=11)
+    plans = plan_blocks(results.get("geometry") or [], 174, caption, small, columns=2, max_height_mm=58)
+    if plans:
+        story.append(KeepTogether([Paragraph("Your roof, as the panels will sit", h2), plans[0]]))
+        story += plans[1:]
+        story.append(Paragraph("Panels are numbered from the eave up. The dashed line is the setback we keep from every edge; a hatched strip is shaded by a wall in the main hours, so no panels go there.", small))
 
     # the readings are the proof: the same lines the card prints
     story.append(Paragraph("Measured on your roof", h2))

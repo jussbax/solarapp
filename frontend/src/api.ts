@@ -216,4 +216,7 @@ export const api = {
   /** Start assessment: creates the project from the lead and returns its id. */
   convertLead: (id: number) => request<{ project_id: number; lead: Lead }>(`/api/leads/${id}/convert`, { method: 'POST' }),
   leadFunnel: (days = 30) => request<LeadFunnel>(`/api/leads/funnel?days=${days}`),
+  /** Bill of materials export (the generated list with the owner's edits); fetch through fetchDocument so a stale record shows its message. */
+  bomCsvUrl: (id: number) => `/api/assessments/${id}/bom.csv`,
+  bomXlsxUrl: (id: number) => `/api/assessments/${id}/bom.xlsx`,
 }

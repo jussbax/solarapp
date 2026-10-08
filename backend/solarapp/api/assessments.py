@@ -233,3 +233,71 @@ def client_card(
     step = doc.card_next_step if next_step is None else next_step
     png = build_client_card(doc, results, company, next_step=step[:120], public_url=settings.estimate_url)
     return Response(png, media_type="image/png", headers=_download_name("roof-check", a, "png", inline=True))
+
+
+# ---- bill of materials export: the generated list with the owner's edits, as the pricing results hold it
+
+BOM_COLUMNS = ["code", "item", "supplier", "qty", "unit", "role", "note"]
+
+
+def _bom_rows(a: Assessment) -> list[list]:
+    """One row per BOM line (code, item, supplier, qty, unit, role, note); the one stale rule applies, and a record
+    without priced results is refused the same way the proposal is."""
+    results = _fresh_results(a)
+    pricing = results.get("pricing") or {}
+    if not pricing.get("available"):
+        raise HTTPException(status_code=409, detail="Calculate first. Pricing needs the panel linked to the materials list.")
+    rows: list[list] = []
+    for l in pricing.get("lines") or []:
+        qty = float(l.get("qty") or 0)
+        rows.append([
+            l.get("code") or "", l.get("name") or ("" if l.get("found", True) else "not in the materials list"), l.get("supplier") or "",
+            int(qty) if qty.is_integer() else round(qty, 2), l.get("unit") or "", l.get("role") or "", l.get("note") or "",
+        ])
+    return rows
+
+
+@router.get("/{assessment_id}/bom.csv")
+def bom_csv(assessment_id: int, session: Session = Depends(get_session)) -> Response:
+    """The bill of materials as CSV (UTF-8 with a byte-order mark, so spreadsheets open it as typed)."""
+    import csv
+    import io
+
+    a = _get(session, assessment_id)
+    rows = _bom_rows(a)
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\r\n")
+    w.writerow(BOM_COLUMNS)
+    w.writerows(rows)
+    return Response(buf.getvalue().encode("utf-8-sig"), media_type="text/csv; charset=utf-8", headers=_download_name("bom", a, "csv"))
+
+
+@router.get("/{assessment_id}/bom.xlsx")
+def bom_xlsx(assessment_id: int, session: Session = Depends(get_session)) -> Response:
+    """The bill of materials as a workbook: one sheet, a bold header, the columns sized to read."""
+    import io
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    a = _get(session, assessment_id)
+    rows = _bom_rows(a)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "BOM"
+    ws.append(BOM_COLUMNS)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+        c.fill = PatternFill("solid", fgColor="FAF4E1")
+    for r in rows:
+        ws.append(r)
+    for i, width in enumerate([16, 44, 18, 8, 8, 16, 48], start=1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+    for row in ws.iter_rows(min_row=2, min_col=4, max_col=4):
+        for c in row:
+            c.alignment = Alignment(horizontal="right")
+    ws.freeze_panes = "A2"
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(buf.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=_download_name("bom", a, "xlsx"))
