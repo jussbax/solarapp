@@ -228,3 +228,18 @@ def test_roof_check_prints_the_readings_and_keeps_the_closing_notes_together(cli
     assert "About this estimate" in last  # never a lone paragraph on its own page
     text = _pdf_text(build_program_pdf(doc, res, {"company_name": "Test Solar"}))
     assert "Assumed: permit approval" in text and "Assumption:" not in text
+
+
+def test_card_next_step_does_not_make_results_stale(client):
+    """The next-step line is printed on the card, never computed, so editing it keeps the documents available."""
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    rows = client.get("/api/assessments").json()
+    calculated = [r for r in rows if r["has_results"] and not r["results_stale"]]
+    assert calculated, "a calculated record from the earlier tests is expected"
+    aid = calculated[0]["id"]
+    doc = client.get(f"/api/assessments/{aid}").json()["doc"]
+    r = client.put(f"/api/assessments/{aid}", json={**doc, "card_next_step": "Your free energy audit on Monday"})
+    assert r.status_code == 200 and r.json()["results_stale"] is False
+    assert client.get(f"/api/assessments/{aid}").json()["doc"]["card_next_step"] == "Your free energy audit on Monday"
+    r = client.put(f"/api/assessments/{aid}", json={**doc, "card_next_step": "Your free energy audit on Monday", "notes": "changed"})
+    assert r.json()["results_stale"] is True

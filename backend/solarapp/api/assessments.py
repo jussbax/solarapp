@@ -131,9 +131,12 @@ def update_assessment(assessment_id: int, doc: AssessmentDoc, session: Session =
     a = _get(session, assessment_id)
     new_doc = doc.model_dump(mode="json")
     if new_doc != a.doc:
+        # the card's next-step line is printed, never computed: changing it leaves the results fresh
+        affects_results = {k: v for k, v in new_doc.items() if k != "card_next_step"} != {k: v for k, v in (a.doc or {}).items() if k != "card_next_step"}
         a.doc = new_doc
         a.customer_name, a.address = doc.customer_name, doc.address
-        a.results_stale = a.results is not None
+        if affects_results:
+            a.results_stale = a.results is not None
         a.updated_at = utcnow()
         session.add(a)
         session.commit()

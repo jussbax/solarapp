@@ -654,3 +654,43 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   code or a key is in use (an attacker with the password learns it on the
   first attempt anyway, and the login page needs it); styles may be
   inline (scripts may not); the app runs as one worker by design.
+
+## Second audit round: the spot-clean batch
+
+Four reviewers (engineering, UX, marketing and copy, security) audited the
+back office and the website with the owner's framing: a solar engineering
+app, not a CRM or a project-management tool. The plan that came out of it,
+with the corrected deliverable set and the boundary, is
+`docs/plan-engineering-app.md`. The clear-cut defects were fixed at once:
+
+- Documents: the proposal prints the battery the customer pays for (BOM
+  units times the catalogue rating), never the sizing's nominal figure;
+  the three main items are built from quantity, rating and supplier, never
+  the catalogue string; a What you get block names what the firm delivers;
+  the website estimate is carried onto the proposal and the card; the roof
+  check shows the readings it claims; every document refuses stale results
+  with one message, server and client; the card prints the reading time.
+- Website: placeholder photo cards and owner-facing notes are stripped
+  from the public build unless `--with-placeholders` is given; the
+  illustration figures on the net-metering page come from the engine and
+  say so; "often lower than the estimate" is gone; warranty claims hide
+  until the years are filled; the share image and page URLs are absolute
+  with `--base-url`; the site says "solar engineering" and lists what the
+  customer gets on paper; the embedded widget drops its duplicate header
+  and footer; the sticky bar hides while the booking form is in view.
+- Estimate: usage under 60 kWh a month is refused with a plain message
+  (the owner may move the floor); the battery figure is the priced unit, so
+  the website and the proposal agree.
+- Back office: per-row k values stay aligned with the rows as typed and a
+  dropped row says so; a face no panel fits is flagged on the face, and a
+  layout with no panels is an input error, not a result; offline and
+  validation messages are in the owner's words; one number helper
+  everywhere; the login remembers the last method; the card's next step is
+  a saved field that does not make results stale.
+- Terms: BOM is the parts list, BOQ the priced list (Details of charges);
+  ERC certificate of compliance; two-way meter; US spelling in the owner's
+  screens.
+
+Left for the owner's go-ahead (scope, not defects): the leads inbox and the
+stage split, the Results regrouping with the plan drawing and the Gantt
+chart, and the engineering build order in the plan.

@@ -268,7 +268,7 @@ export function ProgramResults({ program, programUrl, docReason, openDocument }:
       {program.assumptions && program.assumptions.length > 0 && (
         <div className="muted" style={{ marginTop: 4 }}>
           {program.assumptions.map((a, i) => (
-            <div key={i}>Assumption: {a}</div>
+            <div key={i}>{a}</div>
           ))}
         </div>
       )}

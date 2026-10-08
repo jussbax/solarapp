@@ -286,6 +286,13 @@ cd frontend && npm run dev                                # http://localhost:517
 without the download. The app shows a red banner and refuses to produce a
 customer PDF while synthetic data is in use.
 
+## BOM and BOQ, in the app's words
+
+The bill of materials (BOM) is the parts list the design generates, with the
+owner's edits: every item, code, quantity and role. The bill of quantities
+(BOQ) is that list priced through the build-up; the customer sees it as
+"Details of charges" on the proposal, without the internal costs.
+
 ## Layout
 
 ```
@@ -300,7 +307,7 @@ backend/solarapp/core/sizing.py       hourly balance, PV target, battery modules
 backend/solarapp/pricing/importer.py  reads the materials workbook (items, suppliers, drivers, route, rates)
 backend/solarapp/pricing/engine.py    landed cost, freight run, labour calc, build-up, customer sections
 backend/solarapp/pricing/boq.py       bill of materials from the sized system and roof layout
-backend/solarapp/pricing/job.py       prices an assessment: BOQ, manual edits, extra km from the map pin
+backend/solarapp/pricing/job.py       prices an assessment: BOM, manual edits, extra km from the map pin
 backend/solarapp/pricing/store.py     materials tables and pricing settings in SQLite, workbook import
 backend/solarapp/pricing/program.py   program of works: schedule, hourly installation plan, cashflow
 backend/solarapp/pricing/economics.py customer economics: bill before and after, payback, NPV, IRR

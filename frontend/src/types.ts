@@ -529,10 +529,13 @@ export interface PanelResult {
 export interface ReadingSetResult {
   label: string
   face_id: string | null
-  k_raw_values: number[]
+  measured_at?: string | null
+  sky_condition?: string
+  row_usable?: boolean[]      // one per reading as typed; false where the row was dropped as unusable
+  k_raw_values: (number | null)[]   // aligned with the rows as typed; null for a dropped row
   k_raw: number
   eta_rel_values: number[]
-  k_site_values: number[]
+  k_site_values: (number | null)[]
   k_site: number
   avg_irradiance_wm2: number
   irradiance_spread_fraction: number
