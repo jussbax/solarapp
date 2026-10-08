@@ -314,6 +314,38 @@ class BuildUpLine:
         return {"key": self.key, "label": self.label, "direct": self.direct, "tier": self.tier, "markup": self.markup, "selling": self.selling, "pass_through": self.pass_through}
 
 
+_RATING_UNITS = {"w": "W", "kw": "kW", "kwh": "kWh"}
+
+
+def _n(q: float) -> str:
+    return f"{int(q)}" if float(q).is_integer() else f"{q:g}"
+
+
+def customer_item_name(cat: str, cat_lines: list[PricedLine]) -> str:
+    """The customer's line for a main item, built from quantity, rating and supplier, never the catalogue string:
+    "Solar panels: 6 × 585 W (Blue Carbon)", "Hybrid inverter: 6 kW (Felicity Solar)", "Lithium battery (LiFePO4): 15 kWh (Blue Carbon)"."""
+    label = {"Solar Panel": "Solar panels", "Inverter": "Inverter", "Battery": "Battery", "All-in-one System": "All-in-one system"}.get(cat, cat)
+    parts = []
+    for l in cat_lines:
+        unit = _RATING_UNITS.get((l.rating_unit or "").strip().lower(), (l.rating_unit or "").strip())
+        who = f" ({l.supplier})" if l.supplier else ""
+        n = l.qty
+        if cat == "Battery":
+            low = l.name.lower()
+            label = "Lithium battery (LiFePO4)" if "lifepo" in low else "Lithium battery" if ("lithium" in low or "li-ion" in low) else "Battery"
+            if l.rating and unit == "kWh":
+                parts.append((f"{n * l.rating:.0f} kWh" if n == 1 else f"{_n(n)} × {l.rating:.0f} kWh ({n * l.rating:.0f} kWh in all)") + who)
+                continue
+        elif cat == "Inverter":
+            label = "Hybrid inverter" if l.is_hybrid_inverter else "Inverter"
+        if l.rating and unit:
+            rating = f"{l.rating:g} {unit}"
+            parts.append((f"{_n(n)} × {rating}" if (cat == "Solar Panel" or n != 1) else rating) + who)
+        else:  # no rating on the item: the quantity and the catalogue name are all there is
+            parts.append(f"{_n(n)} × {l.name}{who}")
+    return f"{label}: " + ", ".join(parts)
+
+
 def price_job(bom: list[BomLine], catalog: Catalog, cfg: PricingConfig, job: JobInputs) -> dict:
     lines = price_lines(bom, catalog, cfg)
     t = takeoff_from_lines(lines)
@@ -376,19 +408,18 @@ def price_job(bom: list[BomLine], catalog: Catalog, cfg: PricingConfig, job: Job
         main = cat in EQUIPMENT_CATEGORIES
         label = cat_label.get(cat, cat)
         if main:
-            name = f"{label}: " + ", ".join(f"{int(l.qty) if float(l.qty).is_integer() else l.qty} × {l.name}" for l in lines if l.category == cat)
-            mat_items.append({"key": cat, "name": name, "qty": c["qty"], "unit": "pc", "amount": c["amount"], "main": True})
+            mat_items.append({"key": cat, "name": customer_item_name(cat, [l for l in lines if l.category == cat]), "qty": c["qty"], "unit": "pc", "amount": c["amount"], "main": True})
         else:
             mat_items.append({"key": cat, "name": label, "qty": 1, "unit": "lot", "amount": c["amount"], "main": False})
-    crew_text = (lb.crew or "").replace("skilled,", "skilled technician,").replace("laborers", "helpers").replace("labourers", "helpers")
+    crew_text = f"1 team lead, {lb.pairs} skilled {'technician' if lb.pairs == 1 else 'technicians'}, {lb.pairs + 1} helpers" if lb.pairs else ""
     labor_names = {
-        "labor": (f"Installation crew: {crew_text}" if lb.crew else "Installation labor", lb.days, "day"),
+        "labor": (f"Installation crew: {crew_text}" if crew_text else "Installation labor", lb.days, "day"),
         "mobdemob": ("Crew transport to and from your house", lb.days, "day"),
         "ppe": ("Crew safety gear", lb.person_days, "person-day"),
         "seal": ("Electrical plans, signed and sealed by a Professional Electrical Engineer", 1, "lot"),
         "permit": ("Electrical permit and final inspection certificate (city or municipal office)", 1, "lot"),
-        "erc": ("ERC Certificate of Compliance (required for net metering)", 1, "lot"),
-        "meter": ("Net metering meter from your electric company (two-way meter)", 1, "lot"),
+        "erc": ("ERC certificate of compliance (required for net metering)", 1, "lot"),
+        "meter": ("Two-way meter from your electric company (net metering)", 1, "lot"),
     }
     labor_items = []
     for x in bl[2:]:

@@ -8,7 +8,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from xml.sax.saxutils import escape
 
@@ -58,7 +58,7 @@ def build_program_pdf(doc: AssessmentDoc, results: dict, company: dict) -> bytes
     if prog.get("assumptions"):
         story.append(Spacer(1, 4))
         for a in prog["assumptions"]:
-            story.append(Paragraph("Assumption: " + a, small))
+            story.append(Paragraph(escape(a), small))
     for w in prog.get("warnings", []):
         story.append(Paragraph("Note: " + w["message"], small))
 
@@ -68,13 +68,13 @@ def build_program_pdf(doc: AssessmentDoc, results: dict, company: dict) -> bytes
     story.append(Paragraph(f"Depart base {fr['depart']}, on site {fr['arrive']}, work from {fr['work_start']}, lunch {fr['lunch_start']} to {fr['lunch_end']}, "
                            f"{fr['productive_hours']:g} productive hours a day, back at base about {fr['back_at_base']}. Man-hours: roof {inst['man_hours']['roof']:.1f}, ground {inst['man_hours']['ground']:.1f}, hand-off {inst['man_hours']['handoff']:.1f}.", body))
     for day in inst["hourly"]:
-        story.append(Paragraph(f"Day {day['day']}: {_d(prog['install_start']) if day['day'] == 1 else ''}", h2) if day["day"] == 1 else Paragraph(f"Day {day['day']}", h2))
+        heading = Paragraph(f"Day {day['day']}: {_d(prog['install_start'])}", h2) if day["day"] == 1 else Paragraph(f"Day {day['day']}", h2)
         rows = [["Hour", "Roof crew", "Ground crew"]]
         for r in day["rows"]:
             rows.append([r["time"], Paragraph(r["roof"], cell), Paragraph(r["ground"], cell)])
         t = Table(rows, colWidths=[16 * mm, 118 * mm, 118 * mm], repeatRows=1)
         t.setStyle(grid)
-        story.append(t)
+        story.append(KeepTogether([heading, t]))  # a day's table starts on a fresh page rather than leaving one row behind
     story.append(Paragraph("Task list", h2))
     rows = [["Day", "From", "To", "Crew", "Persons", "Task"]]
     for s in inst["segments"]:

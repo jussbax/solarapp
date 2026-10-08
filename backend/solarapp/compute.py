@@ -87,7 +87,13 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
     selected = panel_results[selected_idx]
     selected_panel = doc.panels[selected_idx]
     if selected["total_count"] == 0:
-        warnings.append(_warn("no_panels_fit", "No panel fits. Check the face sizes, reduce the setback, or try a smaller panel."))
+        # a layout with no panels is an input error, not a result
+        if panel_results[best_idx]["total_count"] == 0:
+            raise ComputeError("No panel fits any roof face. Check the face sizes and the setback.")
+        raise ComputeError(f"The chosen panel ({selected_panel.name}) fits no roof face. Pick another panel under Panel options, or check the face sizes and the setback.")
+    for f in doc.faces:
+        if selected["faces"][f.id]["gross"] == 0:
+            warnings.append({**_warn("face_no_fit", f"{f.name}: no panel fits this face ({f.length_m:g} m along the eave × {f.width_m:g} m up the slope, setback {doc.setback_m:g} m). Check the size or reduce the setback."), "face_id": f.id})
 
     # k factor
     set_results: list[kfactor.ReadingSetResult] = []
@@ -154,9 +160,19 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
 
     audit_block, sizing_block = compute_audit_and_sizing(doc, measured, selected, selected_panel.watt_peak)
 
-    def set_to_dict(r: kfactor.ReadingSetResult) -> dict:
+    def set_to_dict(r: kfactor.ReadingSetResult, s) -> dict:
         d = asdict(r)
         d["warnings"] = [asdict(w) for w in r.warnings]
+        d["measured_at"] = s.measured_at.isoformat() if s.measured_at else None
+        d["sky_condition"] = s.sky_condition
+        # per-row values aligned with the rows as typed: None where a row was dropped as unusable
+        # (the same rule as core.kfactor: sunlight above zero and a non-negative power reading)
+        usable = [bool(x.irradiance_wm2 > 0 and x.power_w >= 0) for x in s.readings]
+        d["row_usable"] = usable
+        for key in ("k_raw_values", "k_site_values"):
+            if len(d[key]) == sum(usable):
+                vals = iter(d[key])
+                d[key] = [next(vals) if u else None for u in usable]
         return d
 
     results = {
@@ -170,7 +186,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
             "count": panel_results[best_idx]["total_count"], "system_kwp": panel_results[best_idx]["system_kwp"],
         },
         "k": {
-            "sets": [set_to_dict(r) for r in set_results],
+            "sets": [set_to_dict(r, s) for r, s in zip(set_results, doc.reading_sets)],
             "selected_set_index": selected_set,
             "k_site": k_site,
             "k_raw": k_raw,

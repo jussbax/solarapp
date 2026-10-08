@@ -11,12 +11,13 @@ import matplotlib.pyplot as plt  # noqa: E402
 from reportlab.lib.pagesizes import A4  # noqa: E402
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # noqa: E402
 from reportlab.lib.units import mm  # noqa: E402
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
+from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
 
 from xml.sax.saxutils import escape  # noqa: E402
 
 from ..schemas import AssessmentDoc  # noqa: E402
 from . import brand  # noqa: E402
+from .card import reading_lines  # noqa: E402
 from .quotation_pdf import contact_line  # noqa: E402
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -138,17 +139,22 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     ]))
     story.append(ft)
 
-    story.append(Paragraph("About this estimate", h2))
+    # the readings are the proof: the same lines the card prints
+    story.append(Paragraph("Measured on your roof", h2))
+    for line in reading_lines(results):
+        story.append(Paragraph(escape(line), body))
+
     notes = [
         "We estimated production hour by hour for a typical year of weather at your location (PVGIS records), using your roof's pitch and direction.",
         "We adjusted it with readings taken on your roof: a test panel, a sunlight meter and a power meter.",
         "These are the panels' output in a typical year. Real weather varies, so some years will be higher and some lower.",
         "This is a roof check, not a quotation.",
     ]
-    for n in notes:
-        story.append(Paragraph(n, small))
-
-    story.append(Paragraph("Next step: your free energy audit", h2))
-    story.append(Paragraph("We'll go through your bill and the appliances you use, then size the system and send you a proposal with the price, the savings and the schedule. Please have your latest bill ready.", body))
+    tail = [Paragraph("About this estimate", h2)] + [Paragraph(n, small) for n in notes]
+    tail += [
+        Paragraph("Next step: your free energy audit", h2),
+        Paragraph("We'll go through your bill and the appliances you use, then size the system and send you a proposal with the price, the savings and the schedule. Please have your latest bill ready.", body),
+    ]
+    story.append(KeepTogether(tail))  # the closing notes and the next step move together, so a page never holds one lone paragraph
     pdf.build(story, onFirstPage=on_page, onLaterPages=on_page)
     return buf.getvalue()
