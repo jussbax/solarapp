@@ -203,9 +203,10 @@ export interface EconomicsBlock {
   co2_t_per_year?: number
 }
 
-export type JobStage = 'lead' | 'contacted' | 'assessed' | 'quoted' | 'signed' | 'sourcing' | 'installing' | 'commissioned' | 'net_metering' | 'closed'
+/** The project's own stage, from the first visit to the closed job. "Lead" and "Contacted" live on the lead in the Leads inbox, not here. */
+export type JobStage = 'assessed' | 'quoted' | 'signed' | 'sourcing' | 'installing' | 'commissioned' | 'net_metering' | 'closed'
 export const JOB_STAGES: { id: JobStage; label: string }[] = [
-  { id: 'lead', label: 'Lead' }, { id: 'contacted', label: 'Contacted' }, { id: 'assessed', label: 'Assessed' }, { id: 'quoted', label: 'Quoted' }, { id: 'signed', label: 'Signed' }, { id: 'sourcing', label: 'Sourcing' },
+  { id: 'assessed', label: 'Assessed' }, { id: 'quoted', label: 'Quoted' }, { id: 'signed', label: 'Signed' }, { id: 'sourcing', label: 'Sourcing' },
   { id: 'installing', label: 'Installing' }, { id: 'commissioned', label: 'Commissioned' }, { id: 'net_metering', label: 'Net metering' }, { id: 'closed', label: 'Closed' },
 ]
 
@@ -474,18 +475,74 @@ export interface AssessmentSummary {
   annual_kwh: number | null
   panel_count: number | null
   kind: string | null
-  lead_contact: string | null
-  lead_town: string | null
-  lead_source: string | null
-  lead_estimate: { goal: string; panels: number; kwp: number; battery_kwh: number; price: number; bill_before_monthly: number | null; bill_after_monthly: number | null; payback_years: number | null } | null
+  face_count: number
+  battery_kwh: number | null
+  computed_at: string | null
+  lead_id: number | null
 }
 
-export interface Funnel {
+/** The leads inbox: website bookings. A future CRM module takes these over; the project keeps only lead_id. */
+export type LeadStatus = 'new' | 'contacted' | 'visit_booked' | 'converted' | 'closed'
+export const LEAD_STATUSES: { id: LeadStatus; label: string }[] = [
+  { id: 'new', label: 'New' }, { id: 'contacted', label: 'Contacted' }, { id: 'visit_booked', label: 'Visit booked' }, { id: 'converted', label: 'Converted' }, { id: 'closed', label: 'Closed' },
+]
+
+export interface LeadEstimate {
+  goal: string
+  panels: number
+  kwp: number
+  battery_kwh: number
+  price: number
+  bill_before_monthly: number | null
+  bill_after_monthly: number | null
+  payback_years: number | null
+  monthly_kwh: number | null
+  monthly_php: number | null
+  pattern: string
+}
+
+export interface LeadSource {
+  utm_source: string
+  utm_medium: string
+  utm_campaign: string
+  utm_content: string
+  fbclid: string
+  referrer: string
+  page: string
+}
+
+export interface Lead {
+  id: number
+  created_at: string
+  updated_at: string
+  name: string
+  contact: string
+  town: string
+  province: string
+  place: string
+  address: string
+  lat: number | null
+  lon: number | null
+  preferred_time: string
+  consent: boolean
+  notice_version: string
+  source: LeadSource
+  source_label: string
+  estimate: LeadEstimate
+  notes: string
+  status: LeadStatus
+  project_id: number | null
+  closed_reason: string
+  anonymised: boolean
+}
+
+export interface LeadFunnel {
   days: number
   estimates: number
   leads: number
-  visits: number
-  proposals: number
+  visits_booked: number
+  converted: number
+  quoted: number
   signed: number
   estimates_by_source: Record<string, number>
 }

@@ -1,6 +1,6 @@
 import type {
-  ApplianceCategory, AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, CatalogItem, DataStatus, Funnel, ImportReport, MaterialItem, MaterialSupplier,
-  PricingConfig, PricingStatus,
+  ApplianceCategory, AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, CatalogItem, DataStatus, ImportReport, Lead, LeadFunnel, LeadStatus, MaterialItem,
+  MaterialSupplier, PricingConfig, PricingStatus,
 } from './types'
 
 export class ApiError extends Error {
@@ -174,7 +174,6 @@ export const api = {
     }
     return { blob: await res.blob(), filename, inline: /^\s*inline/i.test(cd) }
   },
-  funnel: (days = 30) => request<Funnel>(`/api/assessments/funnel?days=${days}`),
   pricingStatus: () => request<PricingStatus>('/api/pricing/status'),
   pricingConfig: () => request<PricingConfig>('/api/pricing/config'),
   savePricingConfig: (cfg: PricingConfig) => request<PricingConfig>('/api/pricing/config', { method: 'PUT', body: JSON.stringify(cfg) }),
@@ -202,4 +201,19 @@ export const api = {
     return (await res.json()) as ImportReport
   },
   importSeed: (keepConfig: boolean) => request<ImportReport>(`/api/pricing/import-seed?keep_config=${keepConfig}`, { method: 'POST' }),
+  // the leads inbox (website bookings); a future CRM module takes these over
+  listLeads: (params: { status?: LeadStatus; q?: string } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.status) qs.set('status', params.status)
+    if (params.q) qs.set('q', params.q)
+    const s = qs.toString()
+    return request<Lead[]>(`/api/leads${s ? `?${s}` : ''}`)
+  },
+  getLead: (id: number) => request<Lead>(`/api/leads/${id}`),
+  updateLead: (id: number, patch: { status?: LeadStatus; notes?: string; closed_reason?: string }) =>
+    request<Lead>(`/api/leads/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteLead: (id: number) => request<void>(`/api/leads/${id}`, { method: 'DELETE' }),
+  /** Start assessment: creates the project from the lead and returns its id. */
+  convertLead: (id: number) => request<{ project_id: number; lead: Lead }>(`/api/leads/${id}/convert`, { method: 'POST' }),
+  leadFunnel: (days = 30) => request<LeadFunnel>(`/api/leads/funnel?days=${days}`),
 }

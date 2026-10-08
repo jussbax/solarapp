@@ -5,8 +5,11 @@ import SignInSecurity from '../components/SignInSecurity'
 import { PROFILE_FIELDS, type AppSettings, type DataStatus } from '../types'
 import { fmtDateTime } from '../fmt'
 
-const PUBLIC_KEYS = new Set(['company_name', 'address', 'phone', 'messenger', 'facebook', 'email', 'owner_name', 'pee_name', 'pee_license', 'service_area', 'brands', 'callback_promise', 'privacy_note'])
+// who you are: on the estimate page and every document
+const CONTACT_KEYS = ['company_name', 'address', 'phone', 'email', 'owner_name', 'pee_name', 'pee_license', 'service_area']
 const WARRANTY_KEYS = new Set(['warranty_workmanship_years', 'warranty_panels_product_years', 'warranty_panels_performance_years', 'warranty_inverter_years', 'warranty_battery_years'])
+// website only: the booking form, the thank-you page and the trust lines (mirrors backend profile.WEBSITE_KEYS)
+const WEBSITE_KEYS = ['messenger', 'facebook', 'brands', 'callback_promise']
 
 export default function SettingsPage({ status, onRefresh }: { status: DataStatus | null; onRefresh: () => void }) {
   const [s, setS] = useState<AppSettings | null>(null)
@@ -51,6 +54,7 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
         {hint && !long && <div className="hint">{hint}</div>}
       </div>
     )
+  const fields = (keys: string[]) => keys.map((k) => PROFILE_FIELDS.find((f) => f.key === k)).filter((f) => f != null).map((f) => field(f.key, f.label, f.hint))
 
   return (
     <>
@@ -62,13 +66,20 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
         {s && (
           <>
             <h3>Who you are and how to reach you</h3>
-            <div className="grid">{PROFILE_FIELDS.filter((f) => PUBLIC_KEYS.has(f.key) && f.key !== 'privacy_note' && f.key !== 'callback_promise').map((f) => field(f.key, f.label, f.hint))}</div>
+            <div className="grid">{fields(CONTACT_KEYS)}</div>
             {field('company_contact', 'Contact line on documents', 'Address, phone, email, as one line under the company name.')}
             <h3>Warranties printed on the proposal</h3>
             <div className="grid">{PROFILE_FIELDS.filter((f) => WARRANTY_KEYS.has(f.key)).map((f) => field(f.key, f.label))}</div>
-            <h3>Proposal and booking</h3>
+            <h3>Proposal</h3>
             {field('payment_details', 'Where to pay', 'Bank or GCash details printed in the proposal acceptance block.', true)}
-            <div className="grid">{field('callback_promise', 'After a booking, you reach out', 'e.g. within one working day')}</div>
+            <h3 id="website">Website</h3>
+            <div className="muted" style={{ marginBottom: 8 }}>
+              What visitors see on the estimate page and the booking form. Bookings land in Leads.{' '}
+              <a href="/estimate" target="_blank" rel="noreferrer">
+                Open the estimate page
+              </a>
+            </div>
+            <div className="grid">{fields(WEBSITE_KEYS)}</div>
             {field('privacy_note', 'Privacy line under the booking form', undefined, true)}
             <div className="actions" style={{ position: 'static', border: 0, padding: '6px 0 0' }}>
               <button className="primary" type="submit" disabled={busy || !dirty}>

@@ -173,12 +173,21 @@ class PaymentPlanIn(BaseModel):
     installment_first_offset_days: int = Field(default=30, ge=0)
 
 
-JobStage = Literal["lead", "contacted", "assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
+# The project's own stage, from the first visit to the closed job. "lead" and "contacted" belong to the Lead record (the leads inbox).
+JobStage = Literal["assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
+JOB_STAGES: list[str] = ["assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
+LEGACY_LEAD_STAGES = ("lead", "contacted")
 
 
 class ProgramJob(BaseModel):
     """Program of works inputs; blanks follow the program settings."""
     stage: JobStage = "assessed"
+
+    @field_validator("stage", mode="before")
+    @classmethod
+    def _legacy_stage(cls, v):  # noqa: ANN001
+        """A record saved before the leads inbox existed reads as "assessed"; the startup migration rewrites it for good."""
+        return "assessed" if v in LEGACY_LEAD_STAGES else v
     signing_date: Optional[str] = None       # YYYY-MM-DD; blank = today
     install_date: Optional[str] = None       # blank = after the permit
     depart_time: Optional[str] = None        # HH:MM
@@ -226,6 +235,10 @@ class LeadEstimate(BaseModel):
     bill_before_monthly: Optional[float] = Field(default=None, ge=0, le=10_000_000)
     bill_after_monthly: Optional[float] = Field(default=None, ge=0, le=10_000_000)
     payback_years: Optional[float] = Field(default=None, ge=0, le=1000)
+    # what the visitor typed, filled in by the server so "Start assessment" can prefill the first bill
+    monthly_kwh: Optional[float] = Field(default=None, ge=0, le=20000)
+    monthly_php: Optional[float] = Field(default=None, ge=0, le=1000000)
+    pattern: str = Field(default="", max_length=20)
 
 
 class LeadInfo(BaseModel):
@@ -258,7 +271,8 @@ class AssessmentDoc(BaseModel):
     pricing: PricingJob = Field(default_factory=PricingJob)
     program: ProgramJob = Field(default_factory=ProgramJob)
     economics: EconomicsJob = Field(default_factory=EconomicsJob)
-    lead: Optional[LeadInfo] = None
+    lead: Optional[LeadInfo] = None   # old records that started as a website lead; converted leads carry only the estimate the visitor saw
+    lead_id: Optional[int] = None     # the leads-inbox row this project was started from
     card_next_step: str = ""  # the card's next-step line, saved with the record
 
 
@@ -294,10 +308,10 @@ class AssessmentSummary(BaseModel):
     annual_kwh: Optional[float] = None
     panel_count: Optional[int] = None
     kind: Optional[str] = None
-    lead_contact: Optional[str] = None
-    lead_town: Optional[str] = None
-    lead_source: Optional[str] = None
-    lead_estimate: Optional[LeadEstimate] = None
+    face_count: int = 0
+    battery_kwh: Optional[float] = None    # the battery the customer pays for (BOM), else the sized one; None without results or for net metering
+    computed_at: Optional[str] = None      # when the results were last calculated
+    lead_id: Optional[int] = None          # the leads-inbox row it was started from; the only lead field a project summary carries
 
 
 class AssessmentOut(BaseModel):
@@ -410,3 +424,58 @@ class QuickLead(QuickRequest):
     website: str = Field(default="", max_length=200)   # honeypot: a real person leaves it empty
     source: LeadSource = Field(default_factory=LeadSource)
     estimate: LeadEstimate = Field(default_factory=LeadEstimate)
+
+
+# ---- the leads inbox (a future CRM module takes these over)
+
+LeadStatus = Literal["new", "contacted", "visit_booked", "converted", "closed"]
+LEAD_STATUSES: list[str] = ["new", "contacted", "visit_booked", "converted", "closed"]
+
+
+class LeadOut(BaseModel):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    name: str
+    contact: str
+    town: str
+    province: str
+    place: str                      # "Pila, Laguna", or what the visitor's pin resolved to
+    address: str
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    preferred_time: str
+    consent: bool
+    notice_version: str
+    source: LeadSource
+    source_label: str               # "fb/brownout1", a referrer host, or "direct"
+    estimate: LeadEstimate
+    notes: str
+    status: LeadStatus
+    project_id: Optional[int] = None
+    closed_reason: str = ""
+    anonymised: bool = False
+
+
+class LeadPatch(BaseModel):
+    """What the owner edits on the inbox: the status, the notes, and why a lead was closed."""
+    status: Optional[LeadStatus] = None
+    notes: Optional[str] = Field(default=None, max_length=4000)
+    closed_reason: Optional[str] = Field(default=None, max_length=200)
+
+
+class LeadConvertOut(BaseModel):
+    project_id: int
+    lead: LeadOut
+
+
+class LeadFunnel(BaseModel):
+    """The last N days: estimates run, leads, visits booked, converted (from the inbox), quoted and signed (from the projects)."""
+    days: int
+    estimates: int
+    leads: int
+    visits_booked: int
+    converted: int
+    quoted: int
+    signed: int
+    estimates_by_source: dict[str, int]
