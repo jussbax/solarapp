@@ -121,8 +121,9 @@ heading is "How much solar does your house need?"):
   quote from a satellite photo; we measure the roof so the proposal is
   exact. That turns the visit into the product, not a sales call.
 - **Carry the number forward.** Quick estimate ₱271,000 → measured
-  proposal ₱266,900. A price that goes down after measurement is a trust
-  event; mention it.
+  proposal ₱266,900, or higher when the audit finds a planned aircon. A
+  price that moves after measurement is a trust event when the reason is
+  on paper; never promise that it goes down.
 - **Battery as an add-on.** The estimate page already shows "add a battery
   for brownouts: +₱X". Keep that framing in conversation: the battery is
   insurance, not savings.

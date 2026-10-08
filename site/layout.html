@@ -8,7 +8,8 @@
     <meta property="og:type" content="website" />
     <meta property="og:title" content="{{title}}" />
     <meta property="og:description" content="{{description}}" />
-    <meta property="og:image" content="/brand/icon-512.png" />
+    <meta property="og:image" content="{{base_url}}/brand/icon-512.png" />
+    {{og_url}}
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#111111" />
@@ -21,7 +22,7 @@
       <div class="wrap head-row">
         <a class="brand" href="/">
           <img src="/brand/logo-mark-white.png" alt="" width="36" height="36" />
-          <span><span class="brand-name">PL Development</span><span class="brand-tag">Solar for homes</span></span>
+          <span><span class="brand-name">PL Development</span><span class="brand-tag">Solar engineering for homes</span></span>
         </a>
         <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav">Menu</button>
         <nav id="nav" class="nav" aria-label="Main">
@@ -46,8 +47,8 @@
             <p class="muted"><span data-profile="address">Pila, Laguna</span><br />Installs in <span data-profile="service_area">Laguna and Batangas</span>.</p>
             <p class="muted" data-profile-hide-if-empty="pee_name">Electrical plans signed and sealed by <span data-profile="pee_name"></span>, Professional Electrical Engineer<span data-profile-hide-if-empty="pee_license">, PRC No. <span data-profile="pee_license"></span></span>.</p>
           </div>
-          <div>
-            <h3>Talk to us</h3>
+          <div class="is-empty" data-profile-hide-if-empty="phone,messenger,facebook,email">
+            <div class="foot-h">Talk to us</div>
             <ul class="contact-list">
               <li data-profile-hide-if-empty="owner_name"><span data-profile="owner_name"></span></li>
               <li data-profile-hide-if-empty="phone"><a data-profile-href="phone" href="#"><span data-profile="phone"></span></a></li>
@@ -55,10 +56,9 @@
               <li data-profile-hide-if-empty="facebook"><a data-profile-href="facebook" href="#" target="_blank" rel="noreferrer">Facebook</a></li>
               <li data-profile-hide-if-empty="email"><a data-profile-href="email" href="#"><span data-profile="email"></span></a></li>
             </ul>
-            <p class="muted small" data-profile-empty-note>Contact details appear here once they are filled in under Settings.</p>
           </div>
           <div>
-            <h3>Start here</h3>
+            <div class="foot-h">Start here</div>
             <p><a class="btn btn-gold" href="/estimate">Get my free estimate</a></p>
             <p class="muted small">Four questions, one minute, no sign-up. An estimate, not a quotation; the free roof visit gives the exact figure.</p>
           </div>

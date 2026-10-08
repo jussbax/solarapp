@@ -31,19 +31,24 @@ export function readSource(): LeadSource {
 
 export class EstimateError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  /** True when the server gave no reason of its own: the page picks the wording (with or without a Messenger link). */
+  unavailable: boolean
+  constructor(status: number, message: string, unavailable = false) {
     super(message)
     this.status = status
+    this.unavailable = unavailable
   }
 }
 
-const UNAVAILABLE = "The estimate isn't available right now. Please try again later or message us on Facebook."
+export const isUnavailable = (e: unknown): boolean => e instanceof EstimateError && e.unavailable
 
-function describe(detail: unknown, status: number): string {
-  if (typeof detail === 'string') return detail
-  if (Array.isArray(detail)) return 'Please check your answers: ' + detail.map((d) => String(d?.msg ?? 'invalid')).join('; ')
-  if (status >= 500 || status === 0) return UNAVAILABLE
-  return `Something went wrong (HTTP ${status}).`
+const UNAVAILABLE = "The estimate isn't available right now. Please try again later."
+
+function describe(detail: unknown, status: number): [string, boolean] {
+  if (typeof detail === 'string') return [detail, false]
+  if (Array.isArray(detail)) return ['Please check your answers: ' + detail.map((d) => String(d?.msg ?? 'invalid')).join('; '), false]
+  if (status >= 500 || status === 0) return [UNAVAILABLE, true]
+  return [`Something went wrong (HTTP ${status}).`, false]
 }
 
 export function makeApi(base: string, source: LeadSource) {
@@ -57,7 +62,7 @@ export function makeApi(base: string, source: LeadSource) {
         headers: { 'Content-Type': 'application/json', 'X-Visitor': visitorId(), ...(sourceTag ? { 'X-Source': sourceTag } : {}), ...(init?.headers || {}) },
       })
     } catch {
-      throw new EstimateError(0, UNAVAILABLE)
+      throw new EstimateError(0, UNAVAILABLE, true)
     }
     if (!res.ok) {
       let detail: unknown = null
@@ -66,7 +71,8 @@ export function makeApi(base: string, source: LeadSource) {
       } catch {
         /* no body */
       }
-      throw new EstimateError(res.status, describe(detail, res.status))
+      const [message, unavailable] = describe(detail, res.status)
+      throw new EstimateError(res.status, message, unavailable)
     }
     return (await res.json()) as T
   }

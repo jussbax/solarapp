@@ -2,20 +2,23 @@
 .pld, .pld * { box-sizing: border-box; }
 .pld {
   --pld-ink: #111111; --pld-text: #2D2D2D; --pld-muted: #6b6b66; --pld-line: #e2e2dc; --pld-bg: #F5F5F3;
-  --pld-gold: #C9A227; --pld-gold-dark: #a4841c; --pld-gold-bg: #faf4e1; --pld-warn-bg: #fff6e0; --pld-warn: #8a5a00; --pld-bad-bg: #fde8e8; --pld-bad: #9b1c1c;
+  --pld-gold: #C9A227; --pld-gold-text: #856a14; --pld-gold-bg: #faf4e1; --pld-warn-bg: #fff6e0; --pld-warn: #8a5a00; --pld-bad-bg: #fde8e8; --pld-bad: #9b1c1c;
   font-family: 'Montserrat', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15.5px; line-height: 1.5; color: var(--pld-text);
-  max-width: 760px; margin: 0 auto; padding: 0 16px 120px;
+  max-width: 760px; margin: 0 auto; padding: 0 16px 24px;
 }
+/* --pld-gold-text: gold for small text, 4.5:1 on white; the bright gold stays for fills and large figures.
+   The host page gets room at the bottom while the sticky price bar is up, so the bar never covers its footer. */
+@media (max-width: 899px) { body.pld-sticky-on { padding-bottom: 84px; } }
 .pld-head { display: flex; align-items: center; gap: 12px; padding: 18px 0 10px; }
 .pld-logo { width: 44px; height: 44px; display: block; }
 .pld-company { font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pld-ink); font-size: 14px; }
-.pld-sub { font-size: 12.5px; color: var(--pld-gold-dark); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+.pld-sub { font-size: 12.5px; color: var(--pld-gold-text); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
 .pld-card { background: #fff; border: 1px solid var(--pld-line); border-radius: 14px; padding: 20px; margin: 10px 0 16px; }
 .pld-h1 { font-size: 26px; line-height: 1.2; margin: 0 0 8px; color: var(--pld-ink); font-weight: 700; }
 .pld-h2 { font-size: 20px; margin: 0 0 10px; color: var(--pld-ink); font-weight: 700; }
 .pld-h3 { font-size: 17px; margin: 0 0 6px; color: var(--pld-ink); font-weight: 700; }
 .pld-lead { margin: 0 0 14px; color: var(--pld-text); }
-.pld-step { font-size: 12.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pld-gold-dark); font-weight: 700; margin: 18px 0 8px; }
+.pld-step { font-size: 12.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pld-gold-text); font-weight: 700; margin: 18px 0 8px; }
 .pld-choices { display: grid; gap: 8px; grid-template-columns: 1fr; }
 @media (min-width: 560px) { .pld-choices { grid-template-columns: repeat(3, 1fr); } }
 .pld-choice { border: 2px solid var(--pld-line); border-radius: 12px; padding: 12px 14px; cursor: pointer; background: #fff; text-align: left; font: inherit; color: inherit; min-height: 48px; }
@@ -36,9 +39,10 @@
 .pld-primary { background: var(--pld-ink); color: #fff; border-color: var(--pld-ink); }
 @media (hover: hover) { .pld-primary:hover:not(:disabled) { background: var(--pld-gold); border-color: var(--pld-gold); color: var(--pld-ink); } }
 .pld-wide { width: 100%; margin-top: 16px; font-size: 17px; }
-.pld-link { background: none; border: 0; padding: 0; color: var(--pld-gold-dark); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.pld-link { background: none; border: 0; padding: 0; color: var(--pld-gold-text); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
 .pld-note { padding: 10px 14px; border-radius: 10px; margin: 12px 0 0; font-size: 14.5px; }
 .pld-warn { background: var(--pld-warn-bg); color: var(--pld-warn); }
+.pld-warn a { color: inherit; font-weight: 600; }
 .pld-bad { background: var(--pld-bad-bg); color: var(--pld-bad); font-weight: 600; }
 .pld-hero { background: var(--pld-ink); color: #fff; border-radius: 14px; padding: 20px; margin: 6px 0 14px; border-left: 6px solid var(--pld-gold); }
 .pld-hero-label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #b8b8b2; }
@@ -74,8 +78,9 @@
 @media (min-width: 900px) { .pld-sticky { display: none; } .pld { padding-bottom: 40px; } }
 .pld-foot { padding: 10px 0 20px; font-size: 13.5px; color: var(--pld-muted); }
 .pld-trust { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
-.pld-trust li::before { content: '✓ '; color: var(--pld-gold-dark); font-weight: 700; }
+.pld-trust li::before { content: '✓ '; color: var(--pld-gold-text); font-weight: 700; }
+.pld-trust-book { margin: 14px 0 0; padding-top: 10px; border-top: 1px dashed var(--pld-line); font-size: 13px; color: var(--pld-muted); }
 .pld-warranty { display: block; }
 .pld-warranty li { margin: 2px 0; }
 .pld-contact { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-weight: 600; }
-.pld-contact a { color: var(--pld-gold-dark); }
+.pld-contact a { color: var(--pld-gold-text); }

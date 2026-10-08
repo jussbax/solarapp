@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     public_origins: str = ""
     # Public address of the back office, used in links sent to the owner (e.g. https://solar.pldevinc.com)
     public_url: str = ""
+    # The company website (e.g. https://pldevinc.com): where the card's QR code and the copied estimate summary send people.
+    # Default: the first entry of public_origins, else the estimate-only host, else public_url.
+    website_url: str = ""
     # A hostname that serves the estimate page at its root and nothing else (single-container fallback)
     public_host: str = ""
     # Public website process: where the built site lives, which private app to forward the estimate calls to, and the shared token
@@ -66,11 +69,20 @@ class Settings(BaseSettings):
         return [h] if h else []
 
     @property
+    def website_base(self) -> str:
+        """The website's address without a trailing slash: website_url, else the first public origin, else blank."""
+        if self.website_url.strip():
+            return self.website_url.strip().rstrip("/")
+        return self.origins[0] if self.origins else ""
+
+    @property
     def estimate_url(self) -> str:
-        """Where the public estimate lives: the estimate-only host, else /estimate on the back office."""
-        hosts = self.public_hosts
-        if hosts:
-            return f"https://{hosts[0]}"
+        """Where the card's QR code and the copied summary send people: the website's /estimate page;
+        without a website, the estimate-only host (which serves the estimate at its root), else /estimate on the back office."""
+        if self.website_base:
+            return f"{self.website_base}/estimate"
+        if self.public_hosts:
+            return f"https://{self.public_hosts[0]}"
         return f"{self.public_url.rstrip('/')}/estimate" if self.public_url else ""
 
 

@@ -32,6 +32,9 @@ SHAPES = {
 PATTERN_LABEL = {"morning": "mostly in the morning", "balanced": "spread through the day", "evening": "mostly in the evening"}
 GOAL_LABEL = {"net_metering": "solar with net metering, no battery", "combination": "solar with a battery and net metering", "off_grid": "off-grid solar with a battery"}
 OUT_OF_AREA_KM = 25.0
+# Under this a system is one panel and a ₱180,000 inverter: refused with a plain message instead of a silly figure.
+MIN_MONTHLY_KWH = 60.0
+TOO_LITTLE = "That's very little usage; a solar system would not pay for itself. If the kWh on your bill is higher, enter that figure."
 _per_kwp_cache: dict[tuple, list] = {}
 
 
@@ -78,11 +81,27 @@ def _consumption(req: QuickRequest, default_tariff: float) -> tuple[float, float
     if req.monthly_kwh:
         kwh = float(req.monthly_kwh)
         tariff = float(req.monthly_php) / kwh if req.monthly_php else default_tariff
-        return kwh, tariff, None
-    if req.monthly_php:
+        note = None
+    elif req.monthly_php:
         kwh = float(req.monthly_php) / default_tariff
-        return kwh, default_tariff, f"We read your ₱{req.monthly_php:,.0f} bill as about {kwh:,.0f} kWh, at ₱{default_tariff:.2f} per kWh."
-    raise ValueError("Enter the kWh from your bill, or the amount you paid.")
+        tariff = default_tariff
+        note = f"We read your ₱{req.monthly_php:,.0f} bill as about {kwh:,.0f} kWh, at ₱{default_tariff:.2f} per kWh."
+    else:
+        raise ValueError("Enter the kWh from your bill, or the amount you paid.")
+    if kwh < MIN_MONTHLY_KWH:
+        raise ValueError(TOO_LITTLE)
+    return kwh, tariff, note
+
+
+def _priced_battery_kwh(boq, catalog, required_kwh: float) -> float:
+    """The battery the price includes: units times the catalogue rating, so the website figure and the proposal agree."""
+    if required_kwh <= 0:
+        return 0.0
+    code, units = boq.choices.get("battery_code"), int(boq.choices.get("battery_units") or 0)
+    item = catalog.get(code) if code else None
+    if item is None or not item.rating or units <= 0:
+        raise LookupError("No battery in the materials list covers the estimate; add one with its kWh rating on the Materials page.")
+    return float(units * item.rating)
 
 
 def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, lat: float, lon: float, pvgis: PvgisDataset, ctx: PricingContext) -> dict:
@@ -107,9 +126,11 @@ def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, l
     width = float(panel.panel_width_m or 1.134)
     rows = rows_for(panels, q.panels_per_row, dim)
     inv = s["inverter"]
-    bat_kwh = float(s["battery"]["installed_kwh"]) if goal != "net_metering" else 0.0
+    # the sizing's nominal kWh picks the unit; the visitor sees the unit the price includes
+    required_kwh = float(s["battery"]["installed_kwh"]) if goal != "net_metering" else 0.0
     boq = generate_boq(BoqRequest(panel.code, panels, rows, inverter_kw=float(inv["size_kw"]), inverter_units=int(inv["units"]),
-                                  inverter_required_kw=float(inv.get("required_kw") or 0) or None, battery_kwh=bat_kwh), catalog, cfg)
+                                  inverter_required_kw=float(inv.get("required_kw") or 0) or None, battery_kwh=required_kwh), catalog, cfg)
+    bat_kwh = _priced_battery_kwh(boq, catalog, required_kwh)
     pin = extra_km_from_pin(lat, lon, cfg)
     d = cfg.job_defaults
     job = JobInputs(roof_factor=d.roof_factor, roof_closed_days=d.roof_closed_days, max_days=d.max_days, max_pairs=d.max_pairs,
@@ -176,11 +197,17 @@ def quick_estimate(req: QuickRequest, pvgis: PvgisDataset, ctx: PricingContext) 
         warnings.append("This address is outside Laguna and Batangas, where we usually install. Message us and we'll tell you if we can come.")
     facing = "south" if q.azimuth_deg == 180 else f"{q.azimuth_deg:g}°"
     road = main["location"]["road_km"]
+    if road is None:
+        travel = "Prices are from our current supplier list."
+    elif round(road) >= 1:
+        travel = f"Prices are from our current supplier list and include the {road:.0f} km trip from Pila, Laguna."
+    else:
+        travel = "Prices are from our current supplier list; no travel charge within Pila."
     assumptions += [
-        f"Sized for a house using about {monthly_kwh:,.0f} kWh a month, {PATTERN_LABEL[req.pattern]}, with {GOAL_LABEL[req.goal]}.",
+        f"Sized for a house using about {monthly_kwh:,.0f} kWh a month, {PATTERN_LABEL[req.pattern]}: {GOAL_LABEL[req.goal]}.",
         f"We assumed a typical roof facing {facing} with a {q.tilt_deg:g}° pitch, and used long-term sun records for your area (PVGIS). "
         f"Panels are taken at {q.k_site * 100:.0f}% of their rating, which is what we usually measure on roofs here.",
-        f"Prices are from our current supplier list and include the {road:.0f} km trip from Pila, Laguna." if road else "Prices are from our current supplier list.",
+        travel,
         f"Savings assume electricity at ₱{tariff:.2f} per kWh, rising {cfg.economics.tariff_escalation * 100:.0f}% a year."
         + (f" Power you send back to the grid is credited at ₱{cfg.economics.export_rate_php_per_kwh:.2f} per kWh (the net metering rate)." if req.goal != "off_grid" else ""),
     ]
