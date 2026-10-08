@@ -550,3 +550,102 @@ def test_two_factor_login_with_authenticator_and_backup_codes(client, tmp_path_f
         twofactor.disable(settings)
     assert not twofactor.enabled(settings)
     assert client.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 200
+
+
+class SoftKey:
+    """A software security key: enough of WebAuthn to register and sign in against the app."""
+
+    def __init__(self, rp_id: str, origin: str):
+        import os
+        from cryptography.hazmat.primitives.asymmetric import ec
+        self.rp_id, self.origin = rp_id, origin
+        self.priv = ec.generate_private_key(ec.SECP256R1())
+        self.cred_id = os.urandom(32)
+        self.counter = 0
+
+    @staticmethod
+    def b64u(b: bytes) -> str:
+        import base64
+        return base64.urlsafe_b64encode(b).decode().rstrip("=")
+
+    def _client_data(self, typ: str, challenge: str) -> bytes:
+        import json
+        return json.dumps({"type": typ, "challenge": challenge, "origin": self.origin, "crossOrigin": False}).encode()
+
+    def register(self, options: dict) -> dict:
+        import hashlib
+        import cbor2
+        nums = self.priv.public_key().public_numbers()
+        cose = cbor2.dumps({1: 2, 3: -7, -1: 1, -2: nums.x.to_bytes(32, "big"), -3: nums.y.to_bytes(32, "big")})
+        auth_data = hashlib.sha256(self.rp_id.encode()).digest() + bytes([0x45]) + (0).to_bytes(4, "big") + bytes(16) + len(self.cred_id).to_bytes(2, "big") + self.cred_id + cose
+        att = cbor2.dumps({"fmt": "none", "attStmt": {}, "authData": auth_data})
+        cdj = self._client_data("webauthn.create", options["challenge"])
+        return {"id": self.b64u(self.cred_id), "rawId": self.b64u(self.cred_id), "type": "public-key", "clientExtensionResults": {},
+                "response": {"clientDataJSON": self.b64u(cdj), "attestationObject": self.b64u(att), "transports": ["usb"]}}
+
+    def sign(self, options: dict, verified: bool = True) -> dict:
+        import hashlib
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import ec
+        self.counter += 1
+        auth_data = hashlib.sha256(self.rp_id.encode()).digest() + bytes([0x05 if verified else 0x01]) + self.counter.to_bytes(4, "big")
+        cdj = self._client_data("webauthn.get", options["challenge"])
+        sig = self.priv.sign(auth_data + hashlib.sha256(cdj).digest(), ec.ECDSA(hashes.SHA256()))
+        return {"id": self.b64u(self.cred_id), "rawId": self.b64u(self.cred_id), "type": "public-key", "clientExtensionResults": {},
+                "response": {"clientDataJSON": self.b64u(cdj), "authenticatorData": self.b64u(auth_data), "signature": self.b64u(sig), "userHandle": None}}
+
+
+def test_passkey_register_and_sign_in(client):
+    from solarapp.api import auth_routes
+    auth_routes._fails.clear()
+    client.post("/api/auth/logout")
+    assert client.get("/api/auth/me").json()["passkeys"] is False
+    # managing keys needs a session; signing in with one is open but says so when none exists
+    assert client.get("/api/auth/passkeys").status_code == 401
+    assert client.post("/api/auth/passkeys/options").status_code == 401
+    assert client.post("/api/auth/passkey/options").status_code == 404
+    assert client.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 200
+
+    key = SoftKey("testserver", "http://testserver")
+    r = client.post("/api/auth/passkeys/options")
+    assert r.status_code == 200
+    opts = r.json()
+    assert opts["options"]["rp"]["id"] == "testserver" and opts["options"]["authenticatorSelection"]["userVerification"] == "required"
+    r = client.post("/api/auth/passkeys", json={"challenge_id": opts["challenge_id"], "name": "Keyring YubiKey", "credential": key.register(opts["options"])})
+    assert r.status_code == 201, r.text
+    key_id = r.json()["id"]
+    assert r.json()["name"] == "Keyring YubiKey" and r.json()["transports"] == ["usb"]
+    # a challenge is single use
+    assert client.post("/api/auth/passkeys", json={"challenge_id": opts["challenge_id"], "name": "again", "credential": key.register(opts["options"])}).status_code == 400
+    assert [k["name"] for k in client.get("/api/auth/passkeys").json()] == ["Keyring YubiKey"]
+
+    client.post("/api/auth/logout")
+    assert client.get("/api/auth/me").json() == {"username": None, "signed_in": False, "two_factor": False, "passkeys": True}
+    # the key alone signs in
+    opts = client.post("/api/auth/passkey/options").json()
+    assert [c["id"] for c in opts["options"]["allowCredentials"]] == [key.b64u(key.cred_id)]
+    r = client.post("/api/auth/passkey/login", json={"challenge_id": opts["challenge_id"], "credential": key.sign(opts["options"])})
+    assert r.status_code == 200, r.text
+    assert client.get("/api/auth/me").json()["signed_in"] is True
+    assert client.get("/api/auth/passkeys").json()[0]["last_used_at"]
+    client.post("/api/auth/logout")
+    # the same challenge cannot be reused, an unverified touch (no PIN) is refused, and so is a stranger's key
+    assert client.post("/api/auth/passkey/login", json={"challenge_id": opts["challenge_id"], "credential": key.sign(opts["options"])}).status_code == 401
+    opts = client.post("/api/auth/passkey/options").json()
+    assert client.post("/api/auth/passkey/login", json={"challenge_id": opts["challenge_id"], "credential": key.sign(opts["options"], verified=False)}).status_code == 401
+    stranger = SoftKey("testserver", "http://testserver")
+    opts = client.post("/api/auth/passkey/options").json()
+    assert client.post("/api/auth/passkey/login", json={"challenge_id": opts["challenge_id"], "credential": stranger.sign(opts["options"])}).status_code == 401
+    # a signature for another site is refused
+    elsewhere = SoftKey("evil.example", "https://evil.example")
+    elsewhere.priv, elsewhere.cred_id = key.priv, key.cred_id
+    opts = client.post("/api/auth/passkey/options").json()
+    assert client.post("/api/auth/passkey/login", json={"challenge_id": opts["challenge_id"], "credential": elsewhere.sign(opts["options"])}).status_code == 401
+    # failures count toward the shared login throttle
+    assert len(auth_routes._fails["testclient"]) == 4
+    auth_routes._fails.clear()
+    # remove the key while signed in; the password still works
+    assert client.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 200
+    assert client.delete(f"/api/auth/passkeys/{key_id}").status_code == 204
+    assert client.get("/api/auth/passkeys").json() == []
+    assert client.get("/api/auth/me").json()["passkeys"] is False

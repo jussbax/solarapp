@@ -229,3 +229,9 @@ table.matrix input { padding: 4px 6px; min-height: 0; }
 table.kv th { width: 90px; text-transform: none; letter-spacing: 0; font-size: 13px; }
 input[type='file'] { max-width: 100%; min-height: 0; font-size: 14px; }
 .row > .narrow { max-width: 100%; }
+
+/* login: the security key first, the password under it */
+.passkey-box { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.passkey-box .primary { width: 100%; }
+.passkey-box .toggle.link { align-self: flex-start; }
+.passkey-box.alone { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }

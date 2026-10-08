@@ -16,3 +16,4 @@ openpyxl>=3.1
 qrcode>=7.4
 defusedxml>=0.7
 pyotp>=2.9
+webauthn>=3.0

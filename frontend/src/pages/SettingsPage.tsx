@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api'
 import PricingSettings from '../components/PricingSettings'
+import SignInSecurity from '../components/SignInSecurity'
 import { PROFILE_FIELDS, type AppSettings, type DataStatus } from '../types'
 import { fmtDateTime } from '../fmt'
 
@@ -79,6 +80,7 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
           </>
         )}
       </form>
+      <SignInSecurity />
       <div className="card">
         <h2>Pricing settings</h2>
         <PricingSettings />

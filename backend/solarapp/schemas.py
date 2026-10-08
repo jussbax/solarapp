@@ -314,6 +314,17 @@ class LoginIn(BaseModel):
     code: str = Field(default="", max_length=16)   # authenticator code or backup code, when two-factor login is on
 
 
+class PasskeyRegisterIn(BaseModel):
+    challenge_id: str = Field(max_length=64)
+    name: str = Field(default="", max_length=60)
+    credential: dict[str, Any]   # the browser's PublicKeyCredential as JSON
+
+
+class PasskeyLoginIn(BaseModel):
+    challenge_id: str = Field(max_length=64)
+    credential: dict[str, Any]
+
+
 class SettingsOut(BaseModel):
     """Company profile; every key in profile.PROFILE_FIELDS."""
     model_config = ConfigDict(extra="allow")

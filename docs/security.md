@@ -24,6 +24,28 @@ lives in `data/twofactor.json`, never in `.env`.
 With this in place, Cloudflare Access (below) is an optional extra layer,
 not the only lock.
 
+## Security keys and passkeys
+
+A hardware key (YubiKey or similar) or a passkey on your phone signs you in
+with one touch: no password, no code. The key proves possession and its PIN
+or fingerprint proves it is you, so it counts as both factors, and the
+browser only releases a signature for the exact hostname the key was
+registered on, so a look-alike site gets nothing.
+
+1. Sign in with the password and the code, open Settings › Sign-in
+   security, name the key and press "Add a security key". The browser asks
+   for the key's PIN (a new key asks you to set one) and a touch.
+2. Register a second key and keep it somewhere safe, or keep the backup
+   codes: a lost key is removed from the same list, and the password with
+   the code still works.
+3. Passkeys need https and a real hostname. They work on
+   `solar.pldevinc.com` through the tunnel and on `localhost`, not on an IP
+   address on the office network.
+
+Wrong or unknown keys count toward the same login throttle, and every
+sign-in names its method (`method=password` or `method=passkey`) in the
+audit log.
+
 ## Cloudflare (both hostnames)
 
 1. Account: turn on two-factor authentication. The account controls DNS,

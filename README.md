@@ -121,9 +121,10 @@ the token or to a signed-in user.
 5. Switch on two-factor login for the back office:
    `docker compose exec solarapp python -m solarapp.twofactor setup`, scan
    the QR code with an authenticator app and keep the backup codes. The
-   login page then asks for the code after the password. Cloudflare Access
-   in front of `solar.pldevinc.com` is optional on top (see
-   `docs/security.md`).
+   login page then asks for the code after the password. Then add your
+   hardware key or phone passkey in Settings › Sign-in security: it signs
+   you in with one touch. Cloudflare Access in front of
+   `solar.pldevinc.com` is optional on top (see `docs/security.md`).
 
 Then follow `docs/security.md` for the Cloudflare rules (rate limits, WAF,
 Access, the www redirect), the server checklist, backups and the monthly

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, LargeBinary
 from sqlmodel import Field, SQLModel
 
 
@@ -107,3 +107,19 @@ class MaterialItem(SQLModel, table=True):
     panel_width_m: Optional[float] = None
     active: bool = True
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class Passkey(SQLModel, table=True):
+    """A registered security key or phone passkey (WebAuthn credential) that signs the owner in on its own."""
+    __tablename__ = "passkeys"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = ""
+    credential_id: bytes = Field(sa_column=Column(LargeBinary, nullable=False, unique=True))
+    public_key: bytes = Field(sa_column=Column(LargeBinary, nullable=False))
+    sign_count: int = 0
+    transports: str = ""     # how the browser reached it: usb, nfc, ble, internal, hybrid
+    aaguid: str = ""         # the authenticator model, when it says
+    backed_up: bool = False  # a synced passkey (phone cloud) rather than a single hardware key
+    created_at: datetime = Field(default_factory=utcnow)
+    last_used_at: Optional[datetime] = None

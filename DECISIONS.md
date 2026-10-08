@@ -617,5 +617,12 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   a roof), with eight one-time backup codes for a lost phone, a replay
   guard per 30 s window, wrong codes counted by the login throttle, and
   the secret kept in `data/twofactor.json` (0600), never in `.env`.
-  Cloudflare Access stays as an optional outer layer. Passkeys (WebAuthn)
-  are the next step if codes become a nuisance.
+  Cloudflare Access stays as an optional outer layer.
+- Passkeys (WebAuthn) sign in on their own: a hardware key or phone passkey
+  with user verification required is possession plus PIN or fingerprint,
+  and it is bound to the hostname, so it is stronger than password plus
+  code, not weaker. Keys are added from Settings while signed in; the
+  login lists the registered credential ids (public identifiers) so
+  non-resident keys work too; challenges are single use and expire in
+  five minutes; failures share the login throttle. The password and code
+  stay as the fallback, so a lost key never locks the owner out.
