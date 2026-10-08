@@ -39,15 +39,15 @@ B a bank, O the owner internally.
 
 | # | Deliverable | For | Status |
 |---|---|---|---|
-| 6 | Sizing report: PV, battery, inverter, coverage, monthly balance, assumptions | C, P, B | Exists; needs losses after the panels, an hourly-year battery check with autonomy, and allocation to the face the panels will sit on |
-| 7 | Array layout drawing per face: panels, rails, feet, strings, setbacks, obstacles, dimensions | W, L, D, C | Missing (numbers only) |
+| 6 | Sizing report: PV, battery, inverter, coverage, monthly balance, assumptions | C, P, B | Exists, with losses after the panels, the battery balanced over the hourly year with autonomy and loss-of-load, and the panels allocated to the best faces |
+| 7 | Array layout drawing per face: panels, rails, feet, strings, setbacks, obstacles, dimensions | W, L, D, C | Partial: a plan drawing per face with panels, strips, obstacles, strings and the used panels, on the roof check and the proposal; rails and feet not yet drawn |
 | 8 | String design table: panels per string per MPPT, Voc cold, Vmp hot, Isc, margins | P, D | Missing |
 | 9 | Single-line diagram: array, strings, DC protection and disconnect, SPDs, inverter, battery, AC disconnect, breakers, point of interconnection, two-way meter, grounding | L, D, P | Missing |
 | 10 | Design analysis sheet: conductor ampacity and derating, OCPD per circuit, voltage drop, EGC and GEC, conduit fill | P, L | Partial: gauges and drop computed, no OCPD coordination, no grounding conductors, no printout |
 | 11 | Grounding, bonding and surge detail | P, L | Partial (BOQ lines only) |
 | 12 | Mounting and structural check: roof type, fastener schedule, uplift and dead load | P, W | Missing |
-| 13 | Equipment data and certificates: datasheets, the inverter's anti-islanding certificate, battery BMS, warranties | D, L, C | Missing (no document store, no certificate field) |
-| 14 | Bill of materials (BOM): every item, code, spec, quantity, role, with manual edits | W, O | Exists |
+| 13 | Equipment data and certificates: datasheets, the inverter's anti-islanding certificate, battery BMS, warranties | D, L, C | Partial: electrical data, a grid-interactive flag and the certificate text on each item; no datasheet files yet |
+| 14 | Bill of materials (BOM): every item, code, spec, quantity, role, with manual edits | W, O | Exists, exports as CSV and XLSX |
 | 15 | Bill of quantities (BOQ) and internal cost build-up: the BOM priced | O | Exists |
 | 16 | Proposal: price, system, savings, payment schedule, acceptance | C, B | Exists |
 | 17 | Customer economics: bill before and after, payback, NPV, IRR | C, B | Exists |
@@ -66,7 +66,7 @@ B a bank, O the owner internally.
 | # | Deliverable | For | Status |
 |---|---|---|---|
 | 22 | Pickup list per supplier with cash | O | Exists |
-| 23 | Program of works and Gantt chart: dated tasks and milestones with dependencies; the customer's schedule | C, W, O | Partial: schedule and hourly plan exist; no Gantt, no dependencies, durations unvalidated |
+| 23 | Program of works and Gantt chart: dated tasks and milestones with dependencies; the customer's schedule | C, W, O | Partial: schedule, hourly plan with duration floors and a Gantt chart; dependencies and the DU sequence still to do |
 | 24 | Crew day plan, method statement and safety plan | W | Partial (hour plan); safety content missing |
 | 25 | Cashflow and payment schedule | O, B | Exists |
 | 26 | Site diary, progress, change orders | O | PM module, out of scope |
@@ -209,7 +209,7 @@ Being fixed now, no decision needed (the spot-clean batch):
   button placement, pricing inputs grid, k under each reading, route matrix
   hint); a nudge to add a second key.
 
-Waiting for the owner's go-ahead (scope or judgement):
+Approved on 8 October and built (see DECISIONS.md: the boundary, the drawings, the engineering numbers): A, B and items 4, 6 and 8 of the engineering order, plus the data groundwork of item 1 (electrical fields, grid-interactive flag, default inverter per kind). Still open:
 
 - A. The separation (section 5): leads inbox and funnel out of the project
   list; stages split; stage pill in the page head; nav "Projects, Materials,
@@ -221,8 +221,10 @@ Waiting for the owner's go-ahead (scope or judgement):
   savings, documents card with state and dates; phone layouts for the BOM,
   the month tables and the payment editor; a label map and a table editor
   in the pricing settings. About three days.
-- C. Engineering correctness, in the order that unlocks signed plans and DU
-  approval (section 7).
+- C. The rest of the engineering order (section 7): the string design table
+  and the circuit design sheet first, then the plans data pack, the DU
+  pack, the commissioning and handover templates, the roof construction
+  fields, the tax lines and the credit carry-over.
 
 ## 7. The engineering build order and the decisions it needs
 
