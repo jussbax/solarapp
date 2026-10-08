@@ -24,7 +24,7 @@ function Num({ label, value, onChange, hint, step, min, width = 150 }: { label: 
   )
 }
 
-function PaymentPlanEditor({ plan, defaults, onChange }: { plan: PaymentPlan | null; defaults: PaymentPlan | undefined; onChange: (p: PaymentPlan | null) => void }) {
+export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = false }: { plan: PaymentPlan | null; defaults: PaymentPlan | undefined; onChange: (p: PaymentPlan | null) => void; hideDefaultLink?: boolean }) {
   const base: PaymentPlan = plan ?? defaults ?? { milestones: [], installments: 0, installment_share: 0, installment_interval_days: 30, installment_start_event: 'commissioning', installment_first_offset_days: 30 }
   const set = (p: Partial<PaymentPlan>) => onChange({ ...base, ...p })
   const setM = (i: number, p: Partial<PaymentMilestone>) => set({ milestones: base.milestones.map((m, j) => (j === i ? { ...m, ...p } : m)) })
@@ -35,8 +35,8 @@ function PaymentPlanEditor({ plan, defaults, onChange }: { plan: PaymentPlan | n
       <div className="inline" style={{ justifyContent: 'space-between', width: '100%' }}>
         <b>Payment terms</b>
         <span className="muted">
-          {plan ? 'custom for this job' : known ? 'company default' : 'company default (shown after the first compute)'}{' '}
-          {plan && (
+          {hideDefaultLink ? '' : plan ? 'custom for this job' : known ? 'company default' : 'company default (shown after the first calculation)'}{' '}
+          {plan && !hideDefaultLink && (
             <button type="button" className="toggle link" onClick={() => onChange(null)}>
               use default
             </button>
@@ -169,7 +169,7 @@ export function ProgramResults({ program, programUrl, stale }: { program: Progra
   const chart = cf.weekly.map((w) => ({ week: d(w.week), In: Math.round(w.inflow), Out: Math.round(w.outflow), Balance: Math.round(w.balance) }))
   return (
     <div>
-      {stale && <div className="banner warn">Inputs were edited after this calculation. Save and compute again to refresh the program.</div>}
+      {stale && <div className="banner warn">Inputs changed since the last calculation. Press Calculate to refresh the program.</div>}
       {program.warnings.map((w, i) => (
         <div key={w.code + i} className={`banner ${w.code === 'install_before_permit' || w.code === 'schedule_overrun' ? 'warn' : 'info'}`}>
           {w.message}
@@ -203,7 +203,7 @@ export function ProgramResults({ program, programUrl, stale }: { program: Progra
       </div>
       <div className="actions" style={{ position: 'static', border: 0, padding: '4px 0' }}>
         <a href={stale ? undefined : programUrl} onClick={(e) => stale && e.preventDefault()}>
-          <button disabled={stale} title={stale ? 'Save and compute first' : ''}>
+          <button disabled={stale} title={stale ? 'Calculate first' : ''}>
             Program of works PDF (internal)
           </button>
         </a>

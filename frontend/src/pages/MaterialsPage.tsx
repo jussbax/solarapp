@@ -101,6 +101,8 @@ export default function MaterialsPage() {
   const [error, setError] = useState<string | null>(null)
   const [keepConfig, setKeepConfig] = useState(true)
   const [report, setReport] = useState<ImportReport | null>(null)
+  const [sort, setSort] = useState<{ key: 'code' | 'category' | 'name' | 'supplier' | 'list_price'; dir: 1 | -1 }>({ key: 'code', dir: 1 })
+  const [limit, setLimit] = useState(50)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const refreshMeta = useCallback(() => {
@@ -111,9 +113,20 @@ export default function MaterialsPage() {
   const search = useCallback(() => {
     api
       .materials({ q, category: category || undefined, supplier: supplier || undefined, include_inactive: inactive, limit: 400 })
-      .then(setItems)
+      .then((r) => {
+        setItems(r)
+        setLimit(50)
+      })
       .catch((e) => setError(e.message))
   }, [q, category, supplier, inactive])
+  const sorted = [...items].sort((a, b) => {
+    const x = a[sort.key] ?? ''
+    const y = b[sort.key] ?? ''
+    return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))) * sort.dir
+  })
+  const shown = sorted.slice(0, limit)
+  const sortBy = (key: typeof sort.key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }))
+  const arrow = (key: typeof sort.key) => (sort.key === key ? (sort.dir === 1 ? ' ▲' : ' ▼') : '')
 
   useEffect(() => {
     refreshMeta()
@@ -190,7 +203,7 @@ export default function MaterialsPage() {
         ))}
       </datalist>
       <div className="card">
-        <h2>Materials database</h2>
+        <h2>Materials list</h2>
         <div className="muted">
           {status ? `${status.item_count} items from ${status.supplier_count} suppliers` : '-'}
           {status?.imported_from && ` · last import ${status.imported_from}${status.imported_at ? ` on ${new Date(status.imported_at).toLocaleString()}` : ''}`}. The app is the master:
@@ -224,7 +237,7 @@ export default function MaterialsPage() {
             </select>
           </div>
           <div className="narrow inline" style={{ paddingBottom: 8 }}>
-            <input type="checkbox" checked={inactive} onChange={(e) => setInactive(e.target.checked)} style={{ width: 'auto' }} /> show inactive
+            <input type="checkbox" checked={inactive} onChange={(e) => setInactive(e.target.checked)} style={{ width: 'auto' }} /> Show inactive
           </div>
           <div className="narrow inline" style={{ paddingBottom: 4 }}>
             <button type="button" className="primary" onClick={() => setCreating(blankItem())}>
@@ -256,16 +269,19 @@ export default function MaterialsPage() {
             </div>
           </div>
         )}
-        <div className="table-wrap" style={{ marginTop: 10 }}>
-          <table>
+        <div className="muted" style={{ marginTop: 10 }}>
+          {items.length === 0 ? '' : `${items.length} ${items.length === 1 ? 'item' : 'items'}${items.length >= 400 ? ' (first 400; narrow the search)' : ''}`}
+        </div>
+        <div className="table-wrap table-sticky" style={{ marginTop: 6 }}>
+          <table className="materials">
             <thead>
               <tr>
-                <th>Code</th>
-                <th>Category</th>
-                <th>Item</th>
-                <th>Supplier</th>
+                <th className="sortable" onClick={() => sortBy('code')}>Code{arrow('code')}</th>
+                <th className="sortable" onClick={() => sortBy('category')}>Category{arrow('category')}</th>
+                <th className="sortable" onClick={() => sortBy('name')}>Item{arrow('name')}</th>
+                <th className="sortable" onClick={() => sortBy('supplier')}>Supplier{arrow('supplier')}</th>
                 <th className="num">Rating</th>
-                <th className="num">List price</th>
+                <th className="num sortable" onClick={() => sortBy('list_price')}>List price{arrow('list_price')}</th>
                 <th>Unit</th>
                 <th className="num">Weight (kg)</th>
                 <th>Panel size</th>
@@ -273,7 +289,12 @@ export default function MaterialsPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((it) =>
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="muted">No items match. Try part of the code or name.</td>
+                </tr>
+              )}
+              {shown.map((it) =>
                 editing && editing.code === it.code ? (
                   <tr key={it.code}>
                     <td colSpan={10}>
@@ -290,9 +311,9 @@ export default function MaterialsPage() {
                   </tr>
                 ) : (
                   <tr key={it.code} style={it.active ? undefined : { opacity: 0.5 }}>
-                    <td className="code">{it.code}</td>
-                    <td>{it.category}</td>
-                    <td>
+                    <td className="code" data-label="Code">{it.code}</td>
+                    <td data-label="Category">{it.category}</td>
+                    <td data-label="Item" className="cell-main">
                       {it.name}
                       {it.spec && (
                         <div className="muted" style={{ fontSize: 11 }}>
@@ -300,24 +321,24 @@ export default function MaterialsPage() {
                         </div>
                       )}
                     </td>
-                    <td>{it.supplier}</td>
-                    <td className="num">{it.rating != null ? `${it.rating} ${it.rating_unit}` : ''}</td>
-                    <td className="num">{php(it.list_price)}</td>
-                    <td>{it.unit}</td>
-                    <td className="num">{it.weight_kg ? it.weight_kg.toFixed(2) : ''}</td>
-                    <td>
+                    <td data-label="Supplier">{it.supplier}</td>
+                    <td className="num" data-label="Rating">{it.rating != null ? `${it.rating} ${it.rating_unit}` : ''}</td>
+                    <td className="num" data-label="List price">{php(it.list_price)}</td>
+                    <td data-label="Unit">{it.unit}</td>
+                    <td className="num" data-label="Weight (kg)">{it.weight_kg ? it.weight_kg.toFixed(2) : ''}</td>
+                    <td data-label="Panel size">
                       {it.category === 'Solar Panel'
                         ? it.panel_length_m && it.panel_width_m
-                          ? `${it.panel_length_m} x ${it.panel_width_m} m`
-                          : <span className="badge bad">size?</span>
+                          ? `${it.panel_length_m} × ${it.panel_width_m} m`
+                          : <span className="badge bad">no size</span>
                         : ''}
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
+                    <td style={{ whiteSpace: 'nowrap' }} className="cell-actions">
                       <button type="button" className="toggle link" onClick={() => setEditing(it)}>
-                        edit
+                        Edit
                       </button>
                       <button type="button" className="toggle link" onClick={() => toggleActive(it)}>
-                        {it.active ? 'deactivate' : 'activate'}
+                        {it.active ? 'Deactivate' : 'Activate'}
                       </button>
                     </td>
                   </tr>
@@ -326,7 +347,13 @@ export default function MaterialsPage() {
             </tbody>
           </table>
         </div>
-        {items.length >= 400 && <div className="muted">Showing the first 400 matches; narrow the search.</div>}
+        {sorted.length > limit && (
+          <div style={{ marginTop: 8 }}>
+            <button type="button" onClick={() => setLimit((l) => l + 50)}>
+              Show 50 more ({sorted.length - limit} left)
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="card">

@@ -58,13 +58,13 @@ export default function PanelsEditor({
                   <input value={p.name} onChange={(e) => update(i, { name: e.target.value, code: p.code ?? null })} placeholder="e.g. Canadian 550W" />
                   {p.code ? (
                     <div className="muted" style={{ fontSize: 11 }}>
-                      DB {p.code}{' '}
+                      List item {p.code}{' '}
                       <button type="button" className="toggle link" onClick={() => update(i, { code: null })}>
                         unlink
                       </button>
                     </div>
                   ) : (
-                    <div className="muted" style={{ fontSize: 11 }}>not linked to the materials DB (priced by wattage)</div>
+                    <div className="muted" style={{ fontSize: 11 }}>not linked to the materials list; priced by wattage</div>
                   )}
                 </td>
                 <td>
@@ -101,7 +101,7 @@ export default function PanelsEditor({
           Add candidate panel
         </button>{' '}
         <button type="button" onClick={() => setPicking((v) => !v)}>
-          Add from materials DB
+          Add from materials list
         </button>
         <span className="muted" style={{ marginLeft: 10 }}>
           Leave "Use" unticked to use the panel with the most kWp.

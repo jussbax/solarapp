@@ -44,11 +44,11 @@ export default function ReadingsEditor({
                 </select>
               </div>
               <div>
-                <label>Label</label>
+                <label>Set name (optional)</label>
                 <input value={s.label} onChange={(e) => update(i, { label: e.target.value })} placeholder="optional" />
               </div>
               <div>
-                <label>Date and time (local)</label>
+                <label>Date and time</label>
                 <input type="datetime-local" value={s.measured_at ?? ''} onChange={(e) => update(i, { measured_at: e.target.value || null })} />
               </div>
               <div>
@@ -62,7 +62,7 @@ export default function ReadingsEditor({
                 </select>
               </div>
               <div>
-                <label>Ambient air temp (C, optional)</label>
+                <label>Air temperature (°C, optional)</label>
                 <NumberInput value={s.ambient_temp_c} onChange={(v) => update(i, { ambient_temp_c: v })} allowEmpty placeholder="estimate" />
               </div>
               <div className="narrow">
@@ -76,9 +76,9 @@ export default function ReadingsEditor({
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th className="num">Irradiance (W/m2)</th>
+                    <th className="num">Sunlight (W/m²)</th>
                     <th className="num">MPPT power (W)</th>
-                    <th className="num">Panel temp (C, probe, optional)</th>
+                    <th className="num">Panel temperature (°C, optional)</th>
                     {r && <th className="num">k</th>}
                     {r && <th className="num">k site</th>}
                   </tr>
@@ -105,9 +105,9 @@ export default function ReadingsEditor({
             </div>
             {r && (
               <div className="muted" style={{ marginTop: 6 }}>
-                k = <b>{fmt(r.k_raw)}</b>, site factor k_site = <b>{fmt(r.k_site)}</b>, avg irradiance {fmt(r.avg_irradiance_wm2, 0)} W/m2, panel {fmt(r.avg_module_temp_c, 1)} C{r.module_temp_source !== 'measured' ? ` (${r.module_temp_source})` : ''},
-                ambient {r.ambient_temp_c != null ? `${fmt(r.ambient_temp_c, 1)} C (${r.ambient_source})` : 'n/a'}, rise{' '}
-                {r.rise_per_kw != null ? `${fmt(r.rise_per_kw, 1)} C per kW/m2` : 'n/a'}.{' '}
+                k = <b>{fmt(r.k_raw)}</b>, site factor k_site = <b>{fmt(r.k_site)}</b>, sunlight {fmt(r.avg_irradiance_wm2, 0)} W/m², panel {fmt(r.avg_module_temp_c, 1)} °C{r.module_temp_source !== 'measured' ? ` (${r.module_temp_source})` : ''},
+                ambient {r.ambient_temp_c != null ? `${fmt(r.ambient_temp_c, 1)} °C (${r.ambient_source})` : 'n/a'}, rise{' '}
+                {r.rise_per_kw != null ? `${fmt(r.rise_per_kw, 1)} °C per kW/m²` : 'n/a'}.{' '}
                 {selectedIndex === i && <span className="badge good">used for the site</span>} {r.low_confidence && <span className="badge bad">low confidence</span>}
                 {r.warnings.length > 0 && (
                   <ul className="warnings">

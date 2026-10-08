@@ -96,7 +96,7 @@ export function PricingResults({
     return <div className="banner warn">{pricing.reason}</div>
   }
   if (!pricing.totals || !pricing.customer) {
-    return <div className="banner warn">This pricing was saved by an older version of the app. Save and compute to refresh it.</div>
+    return <div className="banner warn">This pricing was saved by an older version of the app. Press Calculate to refresh it.</div>
   }
   const lines = pricing.lines ?? []
   const t = pricing.totals!
@@ -129,7 +129,7 @@ export function PricingResults({
 
   return (
     <div>
-      {stale && <div className="banner warn">Inputs were edited after this calculation. Save and compute again to refresh the price.</div>}
+      {stale && <div className="banner warn">Inputs changed since the last calculation. Press Calculate to refresh the price.</div>}
       {(pricing.warnings ?? []).map((w, i) => (
         <div key={w.code + i} className={`banner ${['missing_item', 'no_inverter', 'no_battery', 'ats', 'ac_breaker'].includes(w.code) ? 'bad' : 'warn'}`}>
           {w.message}
@@ -166,7 +166,7 @@ export function PricingResults({
       </div>
       <div className="actions" style={{ position: 'static', border: 0, padding: '4px 0' }}>
         <a href={stale ? undefined : quotationUrl} onClick={(e) => stale && e.preventDefault()}>
-          <button disabled={stale} title={stale ? 'Save and compute first' : ''}>
+          <button disabled={stale} title={stale ? 'Calculate first' : ''}>
             Proposal PDF
           </button>
         </a>
@@ -220,7 +220,7 @@ export function PricingResults({
         )}
       </h3>
       <div className="muted" style={{ marginBottom: 6 }}>
-        Change a quantity or remove a line, then Save and compute to reprice. Generated quantities are kept as the baseline, so edits survive a recompute.
+        Change a quantity or remove a line, then press Calculate to reprice. Generated quantities are kept as the baseline, so edits survive a recalculation.
         {pricing.choices && (
           <>
             {' '}

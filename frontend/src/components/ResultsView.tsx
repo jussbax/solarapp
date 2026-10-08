@@ -16,11 +16,11 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
   const chart = results.months.map((m, i) => ({ month: m, 'This roof': Math.round(prod.monthly_kwh[i]), 'PVGIS reference': Math.round(ref.monthly_kwh[i]) }))
   const k = results.k
   const best = results.best_panel
-  if (!selected) return <div className="banner warn">The selected panel is no longer in the list. Save and compute again.</div>
+  if (!selected) return <div className="banner warn">The selected panel is no longer in the list. Press Calculate again.</div>
 
   return (
     <div>
-      {stale && <div className="banner warn">Inputs were edited after this calculation. Save and compute again to refresh.</div>}
+      {stale && <div className="banner warn">Inputs changed since the last calculation. Press Calculate to refresh.</div>}
       {results.warnings.map((w) => (
         <div key={w.code} className={`banner ${w.code === 'synthetic_data' ? 'bad' : 'warn'}`}>
           {w.message}

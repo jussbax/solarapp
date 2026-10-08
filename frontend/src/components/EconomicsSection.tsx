@@ -82,9 +82,9 @@ export function EconomicsResults({ eco }: { eco: EconomicsBlock }) {
           </div>
         </div>
         <div className="kpi">
-          <div className="label">Payback</div>
-          <div className="value">{eco.payback_years != null ? `${eco.payback_years.toFixed(1)} yrs` : `> ${a.analysis_years} yrs`}</div>
-          <div className="sub">{eco.discounted_payback_years != null ? `${eco.discounted_payback_years.toFixed(1)} yrs discounted at ${(a.discount_rate * 100).toFixed(0)}%` : 'no discounted payback in the period'}</div>
+          <div className="label">Pays for itself in</div>
+          <div className="value">{eco.payback_years != null ? `${eco.payback_years.toFixed(1)} years` : `more than ${a.analysis_years} years`}</div>
+          <div className="sub">{eco.discounted_payback_years != null ? `${eco.discounted_payback_years.toFixed(1)} years discounted at ${(a.discount_rate * 100).toFixed(0)}%` : 'no discounted payback in the period'}</div>
         </div>
         <div className="kpi">
           <div className="label">Net over {a.analysis_years} years</div>
@@ -94,7 +94,7 @@ export function EconomicsResults({ eco }: { eco: EconomicsBlock }) {
           </div>
         </div>
         <div className="kpi">
-          <div className="label">Cost of solar energy</div>
+          <div className="label">Cost per kWh of solar</div>
           <div className="value">{eco.lcoe_php_per_kwh != null ? `₱${eco.lcoe_php_per_kwh.toFixed(2)}/kWh` : '-'}</div>
           <div className="sub">lifetime cost over lifetime production; {eco.co2_t_per_year?.toFixed(1)} t CO2 avoided a year</div>
         </div>

@@ -7,7 +7,7 @@ const n0 = (v: number) => Math.round(v).toLocaleString()
 const n1 = (v: number) => v.toFixed(1)
 const n2 = (v: number) => v.toFixed(2)
 const pct = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
-const KIND_LABEL: Record<string, string> = { off_grid: 'Off-grid, full battery, no grid import', net_metering: 'Net metering', combination: 'Net metering + battery' }
+const KIND_LABEL: Record<string, string> = { off_grid: 'Off-grid (battery, no grid)', net_metering: 'Net metering (no battery)', combination: 'Net metering + battery (hybrid)' }
 
 export default function AuditResults({ audit, sizing, panelName, panelWp }: { audit: AuditBlock; sizing: SizingBlock | null; panelName: string; panelWp: number }) {
   const avb = audit.audit_vs_bill
@@ -39,7 +39,7 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
       {sizing && (
         <div className="kpis">
           <div className="kpi">
-            <div className="label">Recommended PV</div>
+            <div className="label">Recommended solar</div>
             <div className="value">{n2(sizing.kwp)} kWp</div>
             <div className="sub">
               {sizing.panels} x {panelWp} W {panelName}
@@ -71,7 +71,7 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
             </div>
           </div>
           <div className="kpi">
-            <div className="label">{offGrid ? 'Unserved' : 'Grid'}</div>
+            <div className="label">{offGrid ? 'Unserved' : 'From the grid'}</div>
             <div className="value">{n0(offGrid ? sizing.annual_unserved_kwh : sizing.annual_import_kwh)} kWh</div>
             <div className="sub">
               {offGrid ? `per year not covered, ${n0(sizing.annual_curtailed_kwh)} kWh surplus unused` : `imported per year, ${n0(sizing.annual_export_kwh)} exported`}
@@ -111,14 +111,14 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
 
       {avb && (
         <>
-          <h3>Audit versus bill</h3>
+          <h3>Audit vs bill</h3>
           <table>
             <thead>
               <tr>
                 <th>Bill</th>
                 <th className="num">Billed kWh</th>
                 <th className="num">Audit as typed</th>
-                <th className="num">Reconciled</th>
+                <th className="num">Scaled to bill</th>
               </tr>
             </thead>
             <tbody>
@@ -154,7 +154,7 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
               <th className="num">Qty</th>
               <th className="num">W</th>
               <th className="num">Duty</th>
-              <th className="num">h/use day</th>
+              <th className="num">Hours per use day</th>
               <th className="num">Days/wk</th>
               <th className="num">kWh/day typed</th>
               <th className="num">kWh/day used</th>

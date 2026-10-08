@@ -118,14 +118,12 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
           <thead>
             <tr>
               <th>Appliance</th>
-              <th>Brand</th>
-              <th>Model</th>
-              <th>Type</th>
-              <th className="num">Watts</th>
+              <th>Category</th>
+              <th className="num">W (nameplate)</th>
               <th className="num">Qty</th>
-              <th className="num">Duty</th>
+              <th className="num">Duty factor</th>
               <th>Status</th>
-              <th className="num">Windows</th>
+              <th className="num">When used</th>
               <th></th>
             </tr>
           </thead>
@@ -137,21 +135,19 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
               const hoursPerUseDay = useDays ? a.windows.reduce((s, w) => s + windowHours(w) * w.days.length, 0) / useDays : 0
               return [
                 <tr key={a.id}>
-                  <td style={{ minWidth: 180 }}>
+                  <td className="cell-main cell-sticky" style={{ minWidth: 200 }} data-label="Appliance">
                     <NameWithSuggestions
                       value={a.name}
                       onChange={(name) => updateApp(i, { name })}
                       onPick={(cat) => updateApp(i, { name: cat.name, brand: cat.brand, model: cat.model, category: cat.category, input_power_w: cat.input_power_w })}
                     />
+                    <div className="inline sub-fields">
+                      <input value={a.brand} placeholder="Brand" onChange={(e) => updateApp(i, { brand: e.target.value })} />
+                      <input value={a.model} placeholder="Model" onChange={(e) => updateApp(i, { model: e.target.value })} />
+                    </div>
                   </td>
-                  <td>
-                    <input value={a.brand} onChange={(e) => updateApp(i, { brand: e.target.value })} style={{ minWidth: 90 }} />
-                  </td>
-                  <td>
-                    <input value={a.model} onChange={(e) => updateApp(i, { model: e.target.value })} style={{ minWidth: 90 }} />
-                  </td>
-                  <td>
-                    <select value={a.category} onChange={(e) => updateApp(i, { category: e.target.value })} title={c?.note} style={{ minWidth: 170 }}>
+                  <td data-label="Category">
+                    <select value={a.category} onChange={(e) => updateApp(i, { category: e.target.value })} title={c?.note} style={{ minWidth: 150 }}>
                       {cats.map((x) => (
                         <option key={x.id} value={x.id}>
                           {x.label}
@@ -159,31 +155,31 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
                       ))}
                     </select>
                   </td>
-                  <td>
+                  <td data-label="W (nameplate)">
                     <NumberInput value={a.input_power_w} onChange={(v) => updateApp(i, { input_power_w: v ?? 0 })} min={0} style={{ width: 80 }} />
                   </td>
-                  <td>
+                  <td data-label="Qty">
                     <NumberInput value={a.quantity} onChange={(v) => updateApp(i, { quantity: Math.max(1, Math.round(v ?? 1)) })} min={1} step={1} style={{ width: 60 }} />
                   </td>
-                  <td>
+                  <td data-label="Duty factor">
                     <NumberInput value={a.duty_factor} onChange={(v) => updateApp(i, { duty_factor: v })} allowEmpty min={0.01} max={1} step={0.05} placeholder={c ? c.duty.toFixed(2) : ''} style={{ width: 70 }} />
                   </td>
-                  <td>
+                  <td data-label="Status">
                     <select value={a.status} onChange={(e) => updateApp(i, { status: e.target.value as ApplianceEntry['status'] })} style={{ minWidth: 100 }}>
-                      <option value="existing">existing</option>
-                      <option value="future">future</option>
-                      <option value="retiring">to remove</option>
+                      <option value="existing">In use</option>
+                      <option value="future">Planned</option>
+                      <option value="retiring">Being removed</option>
                     </select>
                   </td>
-                  <td className="num">
+                  <td className="num" data-label="When used">
                     <button type="button" className="small" style={{ whiteSpace: 'nowrap' }} onClick={() => setOpenId(open ? null : a.id)}>
-                      {a.windows.length} ({hoursPerUseDay.toFixed(1)} h x {useDays} d/wk) {open ? '▴' : '▾'}
+                      {a.windows.length} {a.windows.length === 1 ? 'window' : 'windows'} · {hoursPerUseDay.toFixed(1)} h × {useDays} d/wk {open ? '▴' : '▾'}
                     </button>
                   </td>
-                  <td>
+                  <td className="cell-actions">
                     <span className="inline">
                       <button type="button" className="small" onClick={() => duplicateApp(i)} title="Duplicate">
-                        copy
+                        Copy
                       </button>
                       <button type="button" className="danger small" onClick={() => setApps(audit.appliances.filter((_, j) => j !== i))}>
                         Remove
@@ -193,7 +189,7 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
                 </tr>,
                 open ? (
                   <tr key={a.id + '-w'} className="window-editor">
-                    <td colSpan={10}>
+                    <td colSpan={8} className="cell-full">
                       {c && <div className="muted" style={{ marginBottom: 6 }}>{c.label}: {c.note}</div>}
                       {a.windows.map((w, k) => (
                         <WindowRow
@@ -214,39 +210,40 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
           </tbody>
         </table>
       </div>
+      {audit.appliances.length === 0 && <div className="muted" style={{ marginTop: 6 }}>No appliances yet. Add the big ones first: aircon, refrigerator, pump.</div>}
       <button type="button" onClick={addApp} style={{ marginTop: 8 }}>
         Add appliance
       </button>
 
       <h3>Electricity bill</h3>
       <div className="table-wrap">
-        <table>
+        <table className="bills">
           <thead>
             <tr>
               <th>Billing month</th>
               <th className="num">kWh</th>
               <th className="num">Days in period</th>
-              <th className="num">Amount (PHP)</th>
-              <th>Utility</th>
+              <th className="num">Amount (₱)</th>
+              <th>Electric company</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {audit.bills.map((b, i) => (
               <tr key={b.id}>
-                <td>
+                <td data-label="Billing month">
                   <input type="month" value={b.billing_month} onChange={(e) => updateBill(i, { billing_month: e.target.value })} />
                 </td>
-                <td>
+                <td data-label="kWh">
                   <NumberInput value={b.kwh} onChange={(v) => updateBill(i, { kwh: v ?? 0 })} min={0} />
                 </td>
-                <td>
-                  <NumberInput value={b.days} onChange={(v) => updateBill(i, { days: v == null ? null : Math.round(v) })} allowEmpty min={20} max={40} step={1} placeholder="calendar" />
+                <td data-label="Days in period">
+                  <NumberInput value={b.days} onChange={(v) => updateBill(i, { days: v == null ? null : Math.round(v) })} allowEmpty min={20} max={40} step={1} placeholder="auto" />
                 </td>
-                <td>
+                <td data-label="Amount (₱)">
                   <NumberInput value={b.amount_php} onChange={(v) => updateBill(i, { amount_php: v })} allowEmpty min={0} placeholder="optional" />
                 </td>
-                <td>
+                <td data-label="Electric company">
                   <input value={b.utility} onChange={(e) => updateBill(i, { utility: e.target.value })} placeholder="Meralco, BATELEC II..." />
                 </td>
                 <td>
@@ -259,6 +256,7 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
           </tbody>
         </table>
       </div>
+      {audit.bills.length === 0 && <div className="muted" style={{ marginTop: 6 }}>No bill yet. Add the latest bill: month, kWh and amount.</div>}
       <div className="row" style={{ marginTop: 8 }}>
         <div className="narrow">
           <button type="button" onClick={() => setBills([...audit.bills, newBill()])}>
@@ -266,7 +264,7 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
           </button>
         </div>
         <label className="inline narrow" style={{ marginBottom: 0 }}>
-          <input type="checkbox" checked={audit.reconcile} onChange={(e) => onChange({ ...audit, reconcile: e.target.checked })} style={{ width: 'auto' }} /> Reconcile the audit to the bill
+          <input type="checkbox" checked={audit.reconcile} onChange={(e) => onChange({ ...audit, reconcile: e.target.checked })} style={{ width: 'auto' }} /> Scale the audit to match the bill
         </label>
       </div>
 
@@ -275,20 +273,20 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
         <div className="narrow" style={{ width: 220 }}>
           <label>System type</label>
           <select value={audit.system.kind} onChange={(e) => setSystem({ kind: e.target.value as SystemSettings['kind'] })}>
-            <option value="off_grid">Full battery, no grid import (off-grid)</option>
-            <option value="net_metering">Net metering</option>
-            <option value="combination">Net metering + battery</option>
+            <option value="net_metering">Net metering (no battery)</option>
+            <option value="combination">Net metering + battery (hybrid)</option>
+            <option value="off_grid">Off-grid (battery, no grid)</option>
           </select>
         </div>
         {audit.system.kind === 'off_grid' && (
           <div className="narrow" style={{ width: 150 }}>
-            <label>Worst-month PV margin</label>
+            <label>Off-grid margin (× worst month)</label>
             <NumberInput value={audit.system.offgrid_pv_margin} onChange={(v) => setSystem({ offgrid_pv_margin: v ?? 1.25 })} min={1} max={2} step={0.05} />
           </div>
         )}
 
         <div className="narrow" style={{ width: 160 }}>
-          <label>Inverter sizes (kW)</label>
+          <label>Inverter sizes available (kW)</label>
           <input
             defaultValue={audit.system.inverter_sizes_kw.join(', ')}
             onBlur={(e) => {
@@ -298,19 +296,19 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
           />
         </div>
         <div className="narrow" style={{ width: 120 }}>
-          <label>Surge (x rated)</label>
+          <label>Surge allowance (× rated)</label>
           <NumberInput value={audit.system.inverter_surge_factor} onChange={(v) => setSystem({ inverter_surge_factor: v ?? 2 })} min={1} max={4} step={0.1} />
         </div>
         <div className="narrow" style={{ width: 120 }}>
-          <label>Max PV / inverter</label>
+          <label>Max PV-to-inverter ratio</label>
           <NumberInput value={audit.system.pv_ratio_max} onChange={(v) => setSystem({ pv_ratio_max: v ?? 1.3 })} min={1} max={2} step={0.05} />
         </div>
         <div className="narrow" style={{ width: 110 }}>
-          <label>Battery depth of discharge</label>
+          <label>Battery usable share (DoD)</label>
           <NumberInput value={audit.system.battery_dod} onChange={(v) => setSystem({ battery_dod: v ?? 0.85 })} min={0.1} max={1} step={0.05} />
         </div>
         <div className="narrow" style={{ width: 100 }}>
-          <label>Round-trip eff.</label>
+          <label>Battery efficiency</label>
           <NumberInput value={audit.system.battery_efficiency} onChange={(v) => setSystem({ battery_efficiency: v ?? 0.92 })} min={0.5} max={1} step={0.01} />
         </div>
       </div>

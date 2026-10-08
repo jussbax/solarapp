@@ -132,6 +132,9 @@ login for everything, then a bypass policy for these paths only:
 the API and the documents need the Cloudflare login before the app's own
 login.
 
+Messenger templates, ad angles and offer notes for the funnel are in
+`docs/marketing.md`.
+
 ## Brand
 
 Colours and font live in `frontend/src/styles.css` (CSS variables at the top)

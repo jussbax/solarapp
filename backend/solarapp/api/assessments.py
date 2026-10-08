@@ -171,9 +171,9 @@ def customer_report(
 ) -> Response:
     a = _get(session, assessment_id)
     if not a.results:
-        raise HTTPException(status_code=409, detail="Compute the assessment first.")
+        raise HTTPException(status_code=409, detail="Calculate first.")
     if (a.results.get("dataset") or {}).get("synthetic"):
-        raise HTTPException(status_code=409, detail="Customer PDF is disabled while synthetic test data is in use.")
+        raise HTTPException(status_code=409, detail="Customer documents are disabled while test weather data is in use.")
     company = company_settings(session, settings)
     pdf = build_customer_pdf(AssessmentDoc.model_validate(a.doc), a.results, company, stale=a.results_stale)
     name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
@@ -189,9 +189,9 @@ def customer_quotation(
     a = _get(session, assessment_id)
     pricing = (a.results or {}).get("pricing") or {}
     if not pricing.get("available"):
-        raise HTTPException(status_code=409, detail="Compute the assessment with pricing first.")
+        raise HTTPException(status_code=409, detail="Calculate first. Pricing needs the panel linked to the materials list.")
     if a.results_stale:
-        raise HTTPException(status_code=409, detail="Inputs changed since the last compute. Save and compute again first.")
+        raise HTTPException(status_code=409, detail="Inputs changed since the last calculation. Calculate again first.")
     company = company_settings(session, settings)
     pdf = build_quotation_pdf(AssessmentDoc.model_validate(a.doc), a.results, company, proposal_no=f"P-{a.created_at.year}-{a.id:04d}")
     name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
@@ -207,7 +207,7 @@ def program_of_works(
     a = _get(session, assessment_id)
     program = (a.results or {}).get("program") or {}
     if not program.get("available"):
-        raise HTTPException(status_code=409, detail="Compute the assessment with pricing first.")
+        raise HTTPException(status_code=409, detail="Calculate first. Pricing needs the panel linked to the materials list.")
     company = company_settings(session, settings)
     pdf = build_program_pdf(AssessmentDoc.model_validate(a.doc), a.results, company)
     name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
@@ -224,9 +224,9 @@ def client_card(
     """Phone-sized image of the roof check result for the customer."""
     a = _get(session, assessment_id)
     if not a.results:
-        raise HTTPException(status_code=409, detail="Compute the assessment first.")
+        raise HTTPException(status_code=409, detail="Calculate first.")
     if (a.results.get("dataset") or {}).get("synthetic"):
-        raise HTTPException(status_code=409, detail="The client card is disabled while synthetic test data is in use.")
+        raise HTTPException(status_code=409, detail="The card is disabled while test weather data is in use.")
     company = company_settings(session, settings)
     png = build_client_card(AssessmentDoc.model_validate(a.doc), a.results, company, next_step=next_step[:120], public_url=settings.public_url)
     name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")

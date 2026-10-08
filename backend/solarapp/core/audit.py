@@ -180,7 +180,7 @@ def build_profile(a: Appliance) -> ApplianceProfile:
                 if 1 <= m <= 12 and 0 <= d <= 6:
                     on_minutes[m - 1, d] |= mask
     if not a.windows:
-        warnings.append({"code": "no_windows", "message": f"{a.name}: no usage windows, so it contributes nothing."})
+        warnings.append({"code": "no_windows", "message": f"{a.name}: no usage window, so it adds nothing. Add a window or remove the appliance."})
     minutes_per_hour = on_minutes.reshape(12, 7, 24, 60).sum(axis=3)
     energy = minutes_per_hour / 60.0 * avg_w
     active_hour = minutes_per_hour > 0
@@ -261,7 +261,7 @@ def run_audit(appliances: list[Appliance], bills: list[Bill], reconcile: bool = 
     audit_vs_bill: Optional[dict] = None
     valid_bills = [b for b in bills if b.kwh > 0]
     if not valid_bills:
-        warnings.append({"code": "no_bills", "message": "No electricity bill entered; the audit is used as typed, without reconciliation."})
+        warnings.append({"code": "no_bills", "message": "No bill entered, so the audit is used as typed. Add the latest bill to check it against real usage."})
     elif existing:
         billed = sum(b.kwh for b in valid_bills)
         est_u = est_f = 0.0
@@ -296,7 +296,7 @@ def run_audit(appliances: list[Appliance], bills: list[Bill], reconcile: bool = 
                     scale[p.appliance.id] = s_all * (s_u if p.appliance.uncertain else 1.0)
         if abs(gap_pct) > GAP_WARN_PCT:
             direction = "over" if gap_pct > 0 else "under"
-            warnings.append({"code": "audit_gap", "message": f"The audit as typed {direction}states the bill by {abs(gap_pct):.0f}% ({audit_total:,.0f} vs {billed:,.0f} kWh)."})
+            warnings.append({"code": "audit_gap", "message": f"The audit as typed is {abs(gap_pct):.0f}% {'above' if direction == 'over' else 'below'} the bill ({audit_total:,.0f} vs {billed:,.0f} kWh). Reconciliation scales it to the bill."})
         if floor_hit:
             warnings.append({"code": "reconcile_floor", "message": f"Uncertain appliances were scaled down to the {UNCERTAIN_FLOOR:.0%} floor and the remaining gap was spread over every appliance. Re-check the aircon and refrigerator hours."})
         if ceiling_hit:

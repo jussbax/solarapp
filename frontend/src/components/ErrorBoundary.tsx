@@ -23,10 +23,10 @@ export default class ErrorBoundary extends Component<{ children: ReactNode; titl
         {this.props.title ?? 'This part'} could not be shown. The results were probably saved by an older version of the app.{' '}
         {this.props.onRecalculate ? (
           <button type="button" className="small" onClick={this.props.onRecalculate} style={{ marginLeft: 6 }}>
-            Save and compute
+            Calculate
           </button>
         ) : (
-          'Save and compute to refresh them.'
+          'Press Calculate to refresh them.'
         )}
         <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>{String(this.state.error.message)}</div>
       </div>

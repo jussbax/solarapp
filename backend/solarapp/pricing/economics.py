@@ -112,7 +112,7 @@ def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig) -> di
     if y1_savings <= 0:
         warnings.append({"code": "no_savings", "message": "The sized system saves nothing on the bill; check the audit and tariff."})
     if not off_grid and any(x["import_kwh"] * tariff < x["export_kwh"] * export_rate for x in monthly):
-        warnings.append({"code": "export_credit_capped", "message": "In some months the export credit exceeds the bill; the credit beyond zero is not carried over here, so savings are slightly understated."})
+        warnings.append({"code": "export_credit_capped", "message": "In some months the export credit is bigger than the bill. The extra credit is not carried over, so savings are slightly understated."})
     if off_grid and sum(x["unserved_kwh"] for x in monthly) > 0:
         warnings.append({"code": "unserved", "message": f"Off-grid: about {sum(x['unserved_kwh'] for x in monthly):,.0f} kWh a year would go unserved; savings count only the energy served."})
 

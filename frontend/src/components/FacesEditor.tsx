@@ -20,12 +20,18 @@ export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; on
     <div>
       {faces.map((f, i) => (
         <div key={f.id} className="set-card">
-          <div className="row">
-            <div className="narrow" style={{ width: 150 }}>
+          <div className="card-head">
+            <b>{f.name || `Roof ${i + 1}`}</b>
+            <button type="button" className="toggle link danger" onClick={() => remove(i)} disabled={faces.length <= 1}>
+              Remove face
+            </button>
+          </div>
+          <div className="face-grid">
+            <div>
               <label>Name</label>
               <input value={f.name} onChange={(e) => update(i, { name: e.target.value })} />
             </div>
-            <div className="narrow" style={{ width: 130 }}>
+            <div>
               <label>Shape</label>
               <select value={f.shape} onChange={(e) => update(i, { shape: e.target.value as FaceShape })}>
                 {SHAPES.map((s) => (
@@ -35,25 +41,25 @@ export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; on
                 ))}
               </select>
             </div>
-            <div className="narrow" style={{ width: 110 }}>
+            <div>
               <label>Eave length (m)</label>
               <NumberInput value={f.length_m} onChange={(v) => update(i, { length_m: v ?? 0 })} min={0} step={0.1} />
             </div>
             {f.shape === 'hip' && (
-              <div className="narrow" style={{ width: 110 }}>
+              <div>
                 <label>Ridge length (m)</label>
                 <NumberInput value={f.ridge_m} onChange={(v) => update(i, { ridge_m: v })} allowEmpty min={0} step={0.1} placeholder="top edge" />
               </div>
             )}
-            <div className="narrow" style={{ width: 110 }}>
+            <div>
               <label>Slope length (m)</label>
               <NumberInput value={f.width_m} onChange={(v) => update(i, { width_m: v ?? 0 })} min={0} step={0.1} />
             </div>
-            <div className="narrow" style={{ width: 90 }}>
+            <div>
               <label>Tilt (°)</label>
               <NumberInput value={f.tilt_deg} onChange={(v) => update(i, { tilt_deg: v ?? 0 })} min={0} max={90} />
             </div>
-            <div className="narrow" style={{ width: 90 }}>
+            <div>
               <label>Facing</label>
               <select value={compassLabel(f.azimuth_deg)} onChange={(e) => update(i, { azimuth_deg: COMPASS.find((c) => c.label === e.target.value)!.deg })}>
                 {COMPASS.map((c) => (
@@ -63,24 +69,24 @@ export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; on
                 ))}
               </select>
             </div>
-            <div className="narrow" style={{ width: 100 }}>
+            <div>
               <label>Facing (°)</label>
               <NumberInput value={f.azimuth_deg} onChange={(v) => update(i, { azimuth_deg: (((v ?? 0) % 360) + 360) % 360 })} min={0} max={359.9} />
             </div>
-            <div className="narrow" style={{ width: 110 }}>
-              <label>Panels left out</label>
-              <NumberInput value={f.panels_left_out} onChange={(v) => update(i, { panels_left_out: Math.max(0, Math.round(v ?? 0)) })} min={0} step={1} />
-            </div>
-            <div className="narrow" style={{ width: 100 }}>
-              <label>Panel count (override)</label>
-              <NumberInput value={f.panel_count_override} onChange={(v) => update(i, { panel_count_override: v == null ? null : Math.max(0, Math.round(v)) })} allowEmpty min={0} step={1} placeholder="auto" />
-            </div>
-            <div className="narrow inline" style={{ paddingBottom: 4 }}>
-              <button type="button" className="danger" onClick={() => remove(i)} disabled={faces.length <= 1}>
-                Remove
-              </button>
-            </div>
           </div>
+          <details className="more">
+            <summary>More: panels left out, count override</summary>
+            <div className="face-grid" style={{ marginTop: 6 }}>
+              <div>
+                <label>Panels left out</label>
+                <NumberInput value={f.panels_left_out} onChange={(v) => update(i, { panels_left_out: Math.max(0, Math.round(v ?? 0)) })} min={0} step={1} />
+              </div>
+              <div>
+                <label>Panel count (override)</label>
+                <NumberInput value={f.panel_count_override} onChange={(v) => update(i, { panel_count_override: v == null ? null : Math.max(0, Math.round(v)) })} allowEmpty min={0} step={1} placeholder="auto" />
+              </div>
+            </div>
+          </details>
           <div className="muted" style={{ marginTop: 4 }}>
             {f.shape === 'rect' && 'Eave along the bottom edge, slope from eave to ridge.'}
             {f.shape === 'hip' && 'A hip face narrows toward the ridge: give the bottom edge, the top edge and the slope between them.'}

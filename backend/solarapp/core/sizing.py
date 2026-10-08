@@ -199,11 +199,11 @@ def size_system(
     monthly, profiles, tot = r["monthly"], r["profiles"], r["tot"]
 
     if roof_limited and off_grid:
-        warnings.append({"code": "roof_limited", "message": f"Off-grid needs about {max(target_kwp, kwp):.1f} kWp or more but the roof holds {roof_max_kwp:.2f} kWp; about {tot['imported']:,.0f} kWh a year would go unserved."})
+        warnings.append({"code": "roof_limited", "message": f"Off-grid needs about {max(target_kwp, kwp):.1f} kWp but the roof holds {roof_max_kwp:.2f} kWp. About {tot['imported']:,.0f} kWh a year would go unserved. Consider net metering with a battery, or cutting load."})
     elif roof_limited:
         warnings.append({"code": "roof_limited", "message": f"Net-zero needs about {target_kwp:.1f} kWp but the roof holds {roof_max_kwp:.2f} kWp; the system is sized to what the roof can provide."})
     if panels == 0:
-        warnings.append({"code": "no_pv", "message": "No panels fit or there is no consumption to cover."})
+        warnings.append({"code": "no_pv", "message": "Nothing to size: no panels fit, or the audit has no consumption."})
 
     served = tot["direct"] + tot["discharge"]
     coverage_pct = served / tot["consumption"] * 100.0 if tot["consumption"] > 0 else 0.0
@@ -216,7 +216,7 @@ def size_system(
     required = max(peak_load_kw, surge_req, pv_req)
     inv_kw, inv_units = pick_inverter(required, inverter) if required > 0 else (min(inverter.sizes_kw), 1)
     if inv_units > 1:
-        warnings.append({"code": "inverter_parallel", "message": f"Requirement of {required:.1f} kW exceeds the largest catalogue size; {inv_units} x {inv_kw:g} kW in parallel."})
+        warnings.append({"code": "inverter_parallel", "message": f"The load needs {required:.1f} kW, more than the largest inverter in the list, so {inv_units} × {inv_kw:g} kW in parallel are used."})
     binding = "peak load" if required == peak_load_kw else ("motor surge" if required == surge_req else "PV array")
 
     return {

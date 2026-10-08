@@ -147,11 +147,11 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     if inverter is None and r.default_inverter_code:
         inverter = catalog.get(r.default_inverter_code)
         if inverter is None:
-            warnings.append({"code": "default_inverter", "message": f"Default inverter {r.default_inverter_code} is not in the materials database; the cheapest that fits is used."})
+            warnings.append({"code": "default_inverter", "message": f"Default inverter {r.default_inverter_code} is not in the materials list; the cheapest that fits is used."})
     if inverter is None and inv_options:
         inverter = inv_options[0][0]
     if inverter is None:
-        warnings.append({"code": "no_inverter", "message": f"No hybrid inverter of {req.inverter_kw:g} kW or more in the materials database."})
+        warnings.append({"code": "no_inverter", "message": f"No hybrid inverter of {req.inverter_kw:g} kW or more in the materials list. Add one on the Materials page."})
     else:
         if inverter.rating and (inverter.rating_unit or "").lower() == "kw":
             units = max(units, int(math.ceil(required / inverter.rating - 1e-9)))
@@ -175,7 +175,7 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         elif bat_options:
             battery, battery_units, _ = bat_options[0]
         if battery is None:
-            warnings.append({"code": "no_battery", "message": "No battery in the materials database fits the required kWh."})
+            warnings.append({"code": "no_battery", "message": "No battery in the materials list covers the required kWh. Add one with its kWh rating on the Materials page."})
         else:
             lines.append(BomLine(battery.code, battery_units, "battery", f"{battery_units} x {battery.rating:g} kWh = {battery_units * battery.rating:g} kWh"))
         choices["battery_options"] = [{"code": i.code, "name": i.name, "rating_kwh": i.rating, "units": n, "total_kwh": n * i.rating, "supplier": i.supplier, "landed": c} for i, n, c in bat_options[:8]]
@@ -207,7 +207,7 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     pv_run = req.pv_run_m if req.pv_run_m is not None else w.pv_run_m
     pv_gauge, pv_drop, pv_ok = pick_gauge(i_string, pv_run, v_string, w.dc_drop_limit, w.pv_cable_ampacity, cfg)
     if not pv_ok:
-        warnings.append({"code": "pv_cable", "message": f"PV cable: {pv_drop:.1%} drop at {pv_run:g} m even with {pv_gauge} mm2; shorten the run or use a larger cable."})
+        warnings.append({"code": "pv_cable", "message": f"PV cable: {pv_drop:.1%} drop at {pv_run:g} m even with {pv_gauge} mm²; shorten the run or use a larger cable."})
     lines += [
         BomLine(r.pv_cable_red.get(pv_gauge, r.pv_cable_red["4"]), strings * pv_run, "pv_cable_red", f"{strings} strings x {pv_run:g} m, {pv_gauge} mm2, {pv_drop:.1%} drop"),
         BomLine(r.pv_cable_black.get(pv_gauge, r.pv_cable_black["4"]), strings * pv_run, "pv_cable_black", f"{strings} strings x {pv_run:g} m"),
@@ -220,7 +220,7 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     gnd_run = req.grounding_run_m if req.grounding_run_m is not None else w.grounding_run_m
     ac_gauge, ac_drop, ac_ok = pick_gauge(i_ac, ac_run, w.ac_voltage, w.ac_drop_limit, w.thhn_ampacity, cfg)
     if not ac_ok:
-        warnings.append({"code": "ac_cable", "message": f"AC circuit: {i_ac:.0f} A needs more than {ac_gauge} mm2 THHN at {ac_run:g} m."})
+        warnings.append({"code": "ac_cable", "message": f"AC circuit: {i_ac:.0f} A needs more than {ac_gauge} mm² THHN at {ac_run:g} m. Shorten the AC run or add a larger THHN size to the list."})
     thhn_code = r.thhn.get(ac_gauge) or next(iter(r.thhn.values()))
     lines.append(BomLine(thhn_code, units * (ac_run + gnd_run), "thhn", f"{ac_run:g} m circuits + {gnd_run:g} m grounding per inverter, {ac_gauge} mm2 for {i_ac:.0f} A, {ac_drop:.1%} drop"))
 
@@ -229,7 +229,7 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         i_bat = inv_kw * 1000.0 / w.battery_voltage
         bat_gauge, _, bat_ok = pick_gauge(i_bat, 1.0, w.battery_voltage, 0.5, w.battery_cable_ampacity, cfg)
         if not bat_ok:
-            warnings.append({"code": "battery_cable", "message": f"Battery cable: {i_bat:.0f} A exceeds the largest lug pair in the DB."})
+            warnings.append({"code": "battery_cable", "message": f"Battery cable: {i_bat:.0f} A is more than the largest lug pair in the list. Add a larger one."})
         lines.append(BomLine(r.battery_cable_pair.get(bat_gauge, r.battery_cable_pair["35"]), w.battery_pairs_per_battery * battery_units, "battery_cable", f"{bat_gauge} mm2 lug pairs for {i_bat:.0f} A"))
         amps_req = i_bat * w.continuous_factor
         bb = _by_amps(r.battery_breaker_pattern, amps_req, catalog, cfg) or catalog.get(r.battery_breaker_fallback)
@@ -246,11 +246,11 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         if alt:
             ats = alt
         else:
-            warnings.append({"code": "ats", "message": f"No ATS rated for {i_ac_req:.0f} A in the materials database."})
+            warnings.append({"code": "ats", "message": f"No transfer switch (ATS) rated for {i_ac_req:.0f} A in the materials list. Add one on the Materials page."})
     if ats:
         lines.append(BomLine(ats.code, units, "ats", f"transfer switch, {i_ac_req:.0f} A continuous"))
     if r.ac_breaker_amps < i_ac_req:
-        warnings.append({"code": "ac_breaker", "message": f"Default AC breaker ({r.ac_breaker_amps:g} A) is below the {i_ac_req:.0f} A required; choose a larger breaker."})
+        warnings.append({"code": "ac_breaker", "message": f"Default AC breaker ({r.ac_breaker_amps:g} A) is below the {i_ac_req:.0f} A needed. Choose a larger one under Pricing settings › BOQ item roles."})
     lines.append(BomLine(r.ac_breaker, units * r.ac_breakers_per_inverter, "ac_breaker", "DU disconnect, grid-inverter, inverter-load, grid-load"))
     lines.append(BomLine(r.ac_spd, units * r.ac_spds_per_inverter, "ac_spd", "one per AC breaker"))
 
@@ -266,7 +266,7 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     ]
     for l in lines:
         if catalog.get(l.code) is None:
-            warnings.append({"code": "missing_item", "message": f"Role {l.role}: code {l.code} is not in the materials database."})
+            warnings.append({"code": "missing_item", "message": f"Code {l.code} (used for {l.role}) is not in the materials list. Add it on the Materials page or change the role in Pricing settings."})
     choices.update({
         "strings": strings, "panels_per_string": per_string, "string_current_a": i_string, "string_voltage_v": v_string,
         "pv_gauge": pv_gauge, "pv_drop": pv_drop, "ac_current_a": i_ac, "ac_gauge": ac_gauge, "ac_drop": ac_drop,

@@ -44,9 +44,9 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
     sky = prepare_sky(tmy, doc.lat, doc.lon, cell.elevation_m, cell.time_offset_h)
     warnings: list[dict] = []
     if cell.distance_km > 40:
-        warnings.append(_warn("far_cell", f"Nearest weather cell is {cell.distance_km:.0f} km away."))
+        warnings.append(_warn("far_cell", f"The nearest weather record is {cell.distance_km:.0f} km from the pin. Results are less certain; check that the pin is on the house."))
     if pvgis.synthetic:
-        warnings.append(_warn("synthetic_data", "SYNTHETIC weather data in use. Results are for testing only."))
+        warnings.append(_warn("synthetic_data", "Test weather data is in use. Results are not real. Download the real dataset (see README) before trusting them."))
 
     # Shade: wall strips per face and the hourly beam factor
     sun_el = (90.0 - sky.zenith.to_numpy(dtype=float))
@@ -65,7 +65,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         shade_block[f.id] = {"walls": [w.to_dict() for w in wall_details], "obstacles": obstacles}
         for w in wall_details:
             if w.whole_face:
-                warnings.append(_warn("wall_shades_face", f"{f.name}: the wall on the {w.edge} side shades the whole face in the main hours."))
+                warnings.append(_warn("wall_shades_face", f"{f.name}: the wall on the {w.edge} side shades the whole face at midday. Leave this face out, or check the wall height."))
 
     # Panel candidates and layout
     panel_results = []
@@ -87,7 +87,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
     selected = panel_results[selected_idx]
     selected_panel = doc.panels[selected_idx]
     if selected["total_count"] == 0:
-        warnings.append(_warn("no_panels_fit", "No panel fits on the roof faces with the chosen panel and setback."))
+        warnings.append(_warn("no_panels_fit", "No panel fits. Check the face sizes, reduce the setback, or try a smaller panel."))
 
     # k factor
     set_results: list[kfactor.ReadingSetResult] = []
@@ -115,7 +115,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
     else:
         thermal = ThermalModel()
     if sr.low_confidence:
-        warnings.append(_warn("low_confidence_k", f"The selected reading set '{sr.label}' is low confidence; see its warnings."))
+        warnings.append(_warn("low_confidence_k", f"The reading set used for the site ('{sr.label}') is low confidence. Open it under Roof readings to see why, or retake it in steady sun."))
 
     face_specs = [
         FaceSpec(f.id, f.name, f.tilt_deg, f.azimuth_deg, selected["faces"][f.id]["count"], beam_by_face[f.id]) for f in doc.faces

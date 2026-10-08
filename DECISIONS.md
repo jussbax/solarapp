@@ -506,3 +506,35 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   contact line and a QR code to the estimate page tagged utm_source=card,
   so a forwarded card becomes a measured lead. The QR needs
   SOLARAPP_PUBLIC_URL; without it the card prints the contact line only.
+
+## Back office: steps, phone ergonomics, dense editors
+
+- The assessment page is four steps instead of one 14,000 px scroll: On
+  site (site, roof faces, panel options, roof readings), Energy audit,
+  Pricing and program (pricing, savings and schedule inputs), Results. The
+  step lives in the URL hash so a reload or a shared link keeps it, the
+  action bar sits under every step, and a calculation opens Results. A new
+  record shows a checklist (map pin, a roof face, a panel, readings
+  optional) and Calculate stays disabled with its reason until the first
+  three are there. Delete moved from the action bar into the Site card.
+- Results open with an "At a glance" strip (recommended system, contract
+  price, monthly bill before and after, payback, installation date) whose
+  tiles scroll to their card. Stale results are dimmed under one banner
+  with a Calculate button, instead of a banner per card that scrolls away.
+- "Calculate" is the verb everywhere (button, messages, API errors); the
+  copy audit's glossary and style sheet drove the labels: materials list,
+  needs recalculating, °, °C, W/m², mm², US spelling, no "(s)" plurals,
+  and warnings that say what to do next (which setting, which page).
+- Phones: every control is at least 44 px tall with 16 px text under
+  640 px, toggles 36 px, the roof-face fields sit in a two-column grid with
+  the rarely used fields under "More", and the appliance, bill and
+  materials tables turn into stacked cards with labels (CSS only, from
+  data-label attributes), so nothing scrolls sideways.
+- Materials list: sortable columns, a count, an empty state, fifty rows
+  at a time with "Show 50 more", a sticky header, codes that do not wrap.
+- Pricing settings: labels with units and one-line help for the keys the
+  owner meets, percentages edited as percent, time inputs for the site
+  day, the route km and toll matrices as grids with the stops as headers,
+  the payment terms through the same editor as the assessment, a chip
+  that counts edited sections, Discard, and the same leave-page guard as
+  the assessment.

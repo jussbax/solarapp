@@ -159,7 +159,7 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
     pairs = int(lb["pairs"])
     persons = int(lb["persons"])
     if pairs <= 0 or persons <= 0:
-        return {"days": 0, "segments": [], "hourly": [], "frame": {}, "warnings": [{"code": "no_crew", "message": "No installation crew in the labour calculation."}]}
+        return {"days": 0, "segments": [], "hourly": [], "frame": {}, "warnings": [{"code": "no_crew", "message": "Labor settings give no crew. Check Pricing settings › Labor day rates."}]}
     roof_persons = 2 * pairs
     ground_persons = max(persons - roof_persons, 1)
     days = max(int(math.ceil(float(lb["days"]) - 1e-9)), 1)
@@ -244,9 +244,9 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
     finish = max(roof_done, ground_tl.now())
     planned_days = max(max(s["day"] for s in segments) + 1, 1) if segments else days
     if planned_days > days:
-        warnings.append({"code": "schedule_overrun", "message": f"The hour-by-hour plan needs {planned_days} day(s) against {days} paid day(s) in the labour calculation; the roof and ground streams are unbalanced."})
+        warnings.append({"code": "schedule_overrun", "message": f"The hour-by-hour plan needs {planned_days} {'day' if planned_days == 1 else 'days'} but labor is priced for {days}. Raise Max installation days or Max roof pairs under Pricing inputs."})
     elif finish[0] == planned_days - 1 and finish[1] < _hhmm(frame["work_end"]) - 60:
-        warnings.append({"code": "early_finish", "message": f"The crew finishes about {_clock(finish[1])} on the last day; the labour calculation still pays {days} full day(s)."})
+        warnings.append({"code": "early_finish", "message": f"The crew finishes about {_clock(finish[1])} on the last day; labor is still priced at {days} full {'day' if days == 1 else 'days'}."})
     # fixed parts of each day
     for d in range(planned_days):
         segments.append({"day": d, "stream": "all", "task": "Travel from base", "start": _hhmm(frame["depart"]), "end": _hhmm(frame["arrive"]), "crew": persons})
@@ -306,7 +306,7 @@ def build_program(doc: AssessmentDoc, results: dict, cfg: PricingConfig, today: 
     permit_approved = permit_prep_end + timedelta(days=permit_days)
     install_start = date.fromisoformat(pj.install_date) if pj.install_date else permit_approved + timedelta(days=pr.install_gap_after_permit_days)
     if install_start < permit_approved:
-        warnings.append({"code": "install_before_permit", "message": f"Installation on {install_start.isoformat()} is before the expected permit approval on {permit_approved.isoformat()}."})
+        warnings.append({"code": "install_before_permit", "message": f"Installation on {install_start.strftime('%-d %b %Y')} is before the expected permit approval on {permit_approved.strftime('%-d %b %Y')}. Move the installation date or shorten the permit days."})
     sourcing = install_start - timedelta(days=pr.sourcing_days_before_install)
     install_end = install_start + timedelta(days=n_days - 1)
     commissioning = install_end + timedelta(days=pr.commissioning_offset_days)
@@ -353,7 +353,7 @@ def build_program(doc: AssessmentDoc, results: dict, cfg: PricingConfig, today: 
     shares = sum(m.share for m in plan.milestones) + (plan.installment_share if plan.installments > 0 else 0.0)
     scale = 1.0 / shares if shares > 0 else 0.0
     if abs(shares - 1.0) > 1e-6:
-        warnings.append({"code": "payment_shares", "message": f"Payment shares add up to {shares * 100:.0f}%; they are scaled to the contract price."})
+        warnings.append({"code": "payment_shares", "message": f"Payment shares add up to {shares * 100:.0f}%, not 100%. They are scaled to the contract price; fix them under Payment terms."})
     payments: list[dict] = []
     for m in plan.milestones:
         if m.share <= 0:

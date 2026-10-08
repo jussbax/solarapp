@@ -115,7 +115,7 @@ def evaluate_reading_set(
             low_confidence=True, valid=False,
         )
     if len(rows) < 3:
-        warnings.append(Warning_("few_readings", f"Only {len(rows)} usable reading(s); three are expected."))
+        warnings.append(Warning_("few_readings", f"Only {len(rows)} usable {'reading' if len(rows) == 1 else 'readings'}; take 3 for a reliable factor."))
 
     rating = s.test_panel_rating_w * s.calibration_factor
     k_raw_values = [r.power_w / (rating * r.irradiance_wm2 / 1000.0) for r in rows]
@@ -131,7 +131,7 @@ def evaluate_reading_set(
         ambient, ambient_source = float(ambient_estimate_c), "estimated"
         warnings.append(Warning_(
             "ambient_estimated",
-            f"No ambient temperature recorded; typical air temperature {ambient:.1f} C for that month and hour was used.",
+            f"No air temperature recorded; the typical {ambient:.1f} °C for that month and hour was used.",
         ))
     else:
         ambient, ambient_source = None, "none"
@@ -143,13 +143,13 @@ def evaluate_reading_set(
         amb_for_model = ambient if ambient is not None else ASSUMED_AMBIENT_C
         if ambient is None:
             ambient_source = "assumed"
-            warnings.append(Warning_("ambient_assumed", f"No ambient temperature available; {ASSUMED_AMBIENT_C:.0f} C assumed for the module temperature estimate."))
+            warnings.append(Warning_("ambient_assumed", f"No air temperature and no date set; {ASSUMED_AMBIENT_C:.0f} °C assumed. Enter the date and time for a better estimate."))
         warnings.append(Warning_(
             "module_temp_estimated",
             "Panel temperature not recorded; estimated with the PVGIS thermal model, so the roof's own heating cannot be measured and the PVGIS thermal model is used in the simulation.",
         ))
     elif ambient is None:
-        warnings.append(Warning_("no_ambient", "No ambient temperature available; PVGIS default thermal model used."))
+        warnings.append(Warning_("no_ambient", "No air temperature recorded, so the standard heat model is used."))
     temps: list[float] = []
     for r in rows:
         if r.module_temp_c is not None:
@@ -172,19 +172,19 @@ def evaluate_reading_set(
         if not plausible:
             warnings.append(Warning_(
                 "rise_implausible",
-                f"Module temperature rise of {rise:.1f} C per kW/m2 is outside {RISE_RANGE_C_PER_KW[0]:.0f}-{RISE_RANGE_C_PER_KW[1]:.0f}; PVGIS default thermal model used.",
+                f"Panel heating of {rise:.1f} °C per kW/m² is outside the usual {RISE_RANGE_C_PER_KW[0]:.0f}–{RISE_RANGE_C_PER_KW[1]:.0f}. Check the probe reading. The standard heat model is used.",
             ))
 
     if avg_g < LOW_IRRADIANCE_WM2:
-        warnings.append(Warning_("low_irradiance", f"Average irradiance {avg_g:.0f} W/m2 is below {LOW_IRRADIANCE_WM2:.0f} W/m2."))
+        warnings.append(Warning_("low_irradiance", f"Sun was weak ({avg_g:.0f} W/m², under {LOW_IRRADIANCE_WM2:.0f}). Retake near midday in clear sky."))
     if spread > MAX_SPREAD_FRACTION:
         warnings.append(Warning_("unstable_irradiance", f"Irradiance readings spread by {spread*100:.0f}%, above {MAX_SPREAD_FRACTION*100:.0f}%: a cloud was passing. Wait for steady sun and retake."))
     if (s.sky_condition or "").strip().lower() in CLOUDY_SKY:
-        warnings.append(Warning_("cloudy_sky", f"Sky condition recorded as {s.sky_condition}."))
+        warnings.append(Warning_("cloudy_sky", f"Sky recorded as {s.sky_condition}, so the factor is less reliable. Retake in clear sky if you can."))
 
     k_site = float(np.mean(k_site_values))
     if not (K_SITE_RANGE[0] <= k_site <= K_SITE_RANGE[1]):
-        warnings.append(Warning_("k_site_out_of_range", f"Site factor {k_site:.3f} is outside the expected range {K_SITE_RANGE[0]:.2f}-{K_SITE_RANGE[1]:.2f}."))
+        warnings.append(Warning_("k_site_out_of_range", f"Site factor {k_site:.2f} is outside the usual {K_SITE_RANGE[0]:.2f}–{K_SITE_RANGE[1]:.2f}. Check the test panel rating, the calibration factor and the readings."))
 
     low_conf = any(w.code in {"low_irradiance", "unstable_irradiance", "cloudy_sky", "k_site_out_of_range", "few_readings"} for w in warnings)
 

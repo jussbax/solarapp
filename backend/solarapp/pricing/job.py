@@ -88,7 +88,7 @@ def apply_edits(lines: list[BomLine], doc: AssessmentDoc, catalog: Catalog) -> t
         if e.qty <= 0:
             continue
         if catalog.get(e.code) is None:
-            warnings.append({"code": "missing_item", "message": f"Added item {e.code} is not in the materials database."})
+            warnings.append({"code": "missing_item", "message": f"Added item {e.code} is not in the materials list."})
             continue
         existing = next((i for i, l in enumerate(out) if l.code == e.code), None)
         if existing is not None:
@@ -166,7 +166,7 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
         "generated_bom": generated,
         "choices": boq.choices,
         "pin_distance": pin,
-        "warnings": warnings + [{"code": "missing_item", "message": f"Code {c} is not in the materials database."} for c in priced["missing_codes"]],
+        "warnings": warnings + [{"code": "missing_item", "message": f"Code {c} is not in the materials list."} for c in priced["missing_codes"]],
         "quotation_validity_days": cfg.job.quotation_validity_days,
     })
     return priced
