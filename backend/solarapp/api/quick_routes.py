@@ -14,7 +14,6 @@ import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlmodel import Session
@@ -25,13 +24,14 @@ from ..core.dataset import PvgisDataset
 from ..core.quick import GOAL_LABEL, PATTERN_LABEL, quick_estimate
 from ..core.towns import towns_payload
 from ..db import get_engine, get_session
-from ..models import Assessment, QuickEstimateLog
+from ..models import Lead, QuickEstimateLog
 from ..notify import lead_notice, send_lead_notice, smtp_configured
 from ..pricing.job import PricingContext
 from ..pricing.store import load_catalog, load_config
 from ..profile import company_profile, public_profile, warranty_lines
-from ..schemas import AssessmentDoc, BillEntry, EnergyAudit, LeadInfo, ProgramJob, QuickLead, QuickRequest
+from ..schemas import QuickLead, QuickRequest
 from .deps import get_pvgis
+from .leads import source_label as _source_label
 
 log = logging.getLogger("solarapp.audit")
 # no "message us on Facebook" here: the page adds that itself, and only when the profile has a link to message
@@ -123,15 +123,6 @@ def _ctx(session: Session) -> PricingContext:
     return PricingContext(load_catalog(session), load_config(session))
 
 
-def _source_label(src) -> str:
-    if src.utm_source:
-        return src.utm_source + (f"/{src.utm_campaign}" if src.utm_campaign else "")
-    if src.referrer:
-        host = urlparse(src.referrer).netloc
-        return host or "referral"
-    return "direct"
-
-
 def _log_estimate(row: QuickEstimateLog) -> None:
     """Written after the response is sent, so the visitor never waits on the database."""
     try:
@@ -185,7 +176,7 @@ def estimate(body: QuickRequest, request: Request, tasks: BackgroundTasks, sessi
 
 @router.post("/lead")
 def lead(body: QuickLead, request: Request, tasks: BackgroundTasks, session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> dict:
-    """Keep the visitor's details as a lead on the job list, with the four answers and what they saw."""
+    """Keep the visitor's details in the leads inbox (not the project list), with the four answers and what they saw."""
     cfg = load_config(session)
     if not cfg.quick.enabled:
         raise HTTPException(status_code=404, detail=UNAVAILABLE)
@@ -207,26 +198,25 @@ def lead(body: QuickLead, request: Request, tasks: BackgroundTasks, session: Ses
              f"Uses power {PATTERN_LABEL[body.pattern]}. Bill: about {kwh:,.0f} kWh"
              f"{' (₱' + format(body.monthly_php, ',.0f') + ')' if body.monthly_php else ''}.{seen} "
              f"Location: {where['label']}{'; pin placed by the customer, confirm on the visit' if not body.town else ''}.")
-    address = body.address.strip() or (f"{where['town']}, {where['province']}" if where["town"] else "")
-    doc = AssessmentDoc(
-        customer_name=body.name.strip(), address=address, notes=notes, lat=where["lat"], lon=where["lon"],
-        audit=EnergyAudit(bills=[BillEntry(id="lead", billing_month=now.strftime("%Y-%m"), kwh=float(kwh) if kwh else 0.0, amount_php=body.monthly_php)], system={"kind": body.goal}),
-        program=ProgramJob(stage="lead"),
-        lead=LeadInfo(contact=body.contact.strip(), town=where["label"], preferred_time=body.preferred_time, consent=body.consent, notice_version=body.notice_version,
-                      created_at=now.isoformat(), source=body.source, estimate=est),
+    # the snapshot also keeps what the visitor typed, so "Start assessment" can prefill the first bill
+    snapshot = est.model_copy(update={"goal": est.goal or body.goal, "monthly_kwh": float(kwh) if kwh else None, "monthly_php": body.monthly_php, "pattern": body.pattern})
+    pin = not body.town  # a pin from the phone's location; a listed town carries no pin (the town centre is looked up when needed)
+    row = Lead(
+        name=body.name.strip(), contact=body.contact.strip(), town=where["town"], province=where["province"], address=body.address.strip(),
+        lat=where["lat"] if pin else None, lon=where["lon"] if pin else None, preferred_time=body.preferred_time, consent=body.consent,
+        notice_version=body.notice_version, source=body.source.model_dump(mode="json"), estimate=snapshot.model_dump(mode="json"), notes=notes, status="new",
     )
-    a = Assessment(customer_name=doc.customer_name, address=doc.address, doc=doc.model_dump(mode="json"))
-    session.add(a)
+    session.add(row)
     session.commit()
-    session.refresh(a)
-    log.info("lead created id=%s ip=%s source=%s", a.id, client_ip(request), _source_label(body.source))
+    session.refresh(row)
+    log.info("lead created id=%s ip=%s source=%s", row.id, client_ip(request), _source_label(body.source))
     if smtp_configured(settings):
-        link = f"{settings.public_url.rstrip('/')}/assessments/{a.id}" if settings.public_url else f"assessment #{a.id}"
+        link = f"{settings.public_url.rstrip('/')}/leads/{row.id}" if settings.public_url else f"lead #{row.id}"
         promise = (company_profile(session, settings).get("callback_promise") or "").strip() or "within one working day"
         subject, text = lead_notice(
-            name=doc.customer_name, contact=body.contact.strip(), preferred_time=body.preferred_time, wants=wants, uses=PATTERN_LABEL[body.pattern],
-            kwh=float(kwh), monthly_php=body.monthly_php, estimate=est, place=where["label"], pin_placed=not body.town, address=body.address.strip(),
+            name=row.name, contact=row.contact, preferred_time=body.preferred_time, wants=wants, uses=PATTERN_LABEL[body.pattern],
+            kwh=float(kwh), monthly_php=body.monthly_php, estimate=est, place=where["label"], pin_placed=pin, address=body.address.strip(),
             source=_source_label(body.source), link=link, promise=promise,
         )
         tasks.add_task(send_lead_notice, settings, subject, text)
-    return {"ok": True, "id": a.id, "goal_label": GOAL_LABEL[body.goal]}
+    return {"ok": True, "id": row.id, "goal_label": GOAL_LABEL[body.goal]}

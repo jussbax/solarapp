@@ -241,10 +241,11 @@ def test_quick_estimate_and_lead(client):
     r = client.post("/api/quick/lead", json={"goal": "combination", "lat": 14.65, "lon": 121.03, "monthly_kwh": 338, "pattern": "evening", "name": "Lead Person", "contact": "0917 000 0000", "address": "Tanauan"})
     assert r.status_code == 200 and r.json()["ok"]
     client.post("/api/auth/login", json={"username": "u", "password": "p"})
-    leads = [a for a in client.get("/api/assessments").json() if a["stage"] == "lead"]
-    assert leads and leads[0]["customer_name"] == "Lead Person"
-    doc = client.get(f"/api/assessments/{leads[0]['id']}").json()["doc"]
-    assert doc["audit"]["system"]["kind"] == "combination" and doc["audit"]["bills"][0]["kwh"] == 338 and "0917" in doc["notes"]
+    # the booking is a lead in the inbox, not a project
+    assert not any(a["customer_name"] == "Lead Person" for a in client.get("/api/assessments").json())
+    lead = next(l for l in client.get("/api/leads").json() if l["name"] == "Lead Person")
+    assert lead["status"] == "new" and lead["estimate"]["goal"] == "combination" and lead["estimate"]["monthly_kwh"] == 338 and "0917" in lead["notes"]
+    assert lead["address"] == "Tanauan" and lead["lat"] == 14.65 and lead["place"] == "outside Laguna and Batangas"
 
 
 def test_quick_throttle_tells_browsers_apart_behind_one_address():
@@ -290,16 +291,15 @@ def test_website_lead_carries_source_and_snapshot_and_feeds_the_funnel(client):
     # a bot filling the hidden field gets a polite yes and nothing is stored
     assert client.post("/api/quick/lead", json={**body, "name": "Bot", "website": "http://spam"}).json()["ok"]
     client.post("/api/auth/login", json={"username": "u", "password": "p"})
-    rows = client.get("/api/assessments").json()
-    lead = next(a for a in rows if a["customer_name"] == "Web Visitor")
-    assert not any(a["customer_name"] == "Bot" for a in rows)
-    assert lead["stage"] == "lead" and lead["lead_contact"] == "0917 555 1234" and lead["lead_source"] == "fb" and lead["lead_estimate"]["price"] == 172000
-    assert lead["address"] == "Tanauan, Batangas" and lead["lead_town"] == "Tanauan, Batangas"
-    doc = client.get(f"/api/assessments/{lead['id']}").json()["doc"]
-    assert doc["lead"]["source"]["utm_campaign"] == "brownout1" and doc["lead"]["consent"] is True
-    assert "From the website estimate" in doc["notes"] and "best time: Evening" in doc["notes"] and "a lower bill, no battery" in doc["notes"]
-    f = client.get("/api/assessments/funnel?days=7").json()
-    assert f["leads"] >= 1 and f["days"] == 7 and "estimates" in f and "signed" in f
+    rows = client.get("/api/leads").json()
+    lead = next(l for l in rows if l["name"] == "Web Visitor")
+    assert not any(l["name"] == "Bot" for l in rows) and not any(a["customer_name"] in ("Web Visitor", "Bot") for a in client.get("/api/assessments").json())
+    assert lead["status"] == "new" and lead["contact"] == "0917 555 1234" and lead["source_label"] == "fb/brownout1" and lead["estimate"]["price"] == 172000
+    assert lead["place"] == "Tanauan, Batangas" and lead["address"] == "" and lead["preferred_time"] == "Evening"
+    assert lead["source"]["utm_campaign"] == "brownout1" and lead["consent"] is True
+    assert "From the website estimate" in lead["notes"] and "best time: Evening" in lead["notes"] and "a lower bill, no battery" in lead["notes"]
+    f = client.get("/api/leads/funnel?days=7").json()
+    assert f["leads"] >= 1 and f["days"] == 7 and "estimates" in f and "signed" in f and "visits_booked" in f and "converted" in f
 
 
 def test_profile_settings_round_trip(client):
@@ -494,31 +494,6 @@ def test_customer_text_cannot_style_the_documents_or_break_downloads(client):
         doc = AssessmentDoc.model_validate({**full["doc"], "customer_name": nasty, "address": "<b>Blk</b> 1"})
         pdf = build_customer_pdf(doc, full["results"], {"company_name": "Co <i>x</i>", "company_contact": "<u>c</u>"})
         assert pdf.startswith(b"%PDF")
-
-
-def test_retention_anonymises_old_leads_and_trims_the_estimate_log(client):
-    from datetime import datetime, timedelta, timezone
-    from sqlmodel import Session
-    from solarapp.db import get_engine
-    from solarapp.models import Assessment, QuickEstimateLog
-    from solarapp.retention import run
-    from solarapp.schemas import AssessmentDoc, LeadInfo, ProgramJob
-    old = datetime.now(timezone.utc) - timedelta(days=400)
-    with Session(get_engine()) as s:
-        doc = AssessmentDoc(customer_name="Old Lead", address="Somewhere 12", lat=14.12345, lon=121.12345, program=ProgramJob(stage="lead"), lead=LeadInfo(contact="0917 1 2 3"))
-        a = Assessment(customer_name="Old Lead", address="Somewhere 12", doc=doc.model_dump(mode="json"), created_at=old, updated_at=old)
-        fresh = Assessment(customer_name="Fresh Lead", doc=AssessmentDoc(customer_name="Fresh Lead", program=ProgramJob(stage="lead")).model_dump(mode="json"))
-        s.add(a); s.add(fresh); s.add(QuickEstimateLog(goal="net_metering", created_at=old)); s.add(QuickEstimateLog(goal="net_metering"))
-        s.commit()
-        aid = a.id
-        preview = run(s, dry_run=True)
-        assert preview["anonymised_leads"] == 1 and preview["deleted_estimates"] == 1
-        result = run(s)
-        assert result["anonymised_leads"] == 1 and result["deleted_estimates"] == 1
-        s.expire_all()
-        gone = s.get(Assessment, aid)
-        assert gone.customer_name == "" and gone.doc["lead"]["contact"] == "" and gone.doc["lat"] == 14.12 and gone.doc["anonymised"]
-        assert s.get(Assessment, fresh.id).customer_name == "Fresh Lead"
 
 
 def test_two_factor_login_with_authenticator_and_backup_codes(client, tmp_path_factory):

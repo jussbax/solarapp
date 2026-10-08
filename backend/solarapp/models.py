@@ -61,6 +61,35 @@ class QuickEstimateLog(SQLModel, table=True):
     visitor: str = ""
 
 
+class Lead(SQLModel, table=True):
+    """A website booking: the leads inbox. Not a project; "Start assessment" creates the project from it.
+
+    A future CRM module takes this table over; the engineering project keeps only ``lead_id``.
+    """
+    __tablename__ = "leads"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=utcnow, index=True)
+    updated_at: datetime = Field(default_factory=utcnow)
+    name: str = ""
+    contact: str = ""
+    town: str = ""
+    province: str = ""
+    address: str = ""
+    lat: Optional[float] = None       # the visitor's pin, when they used their phone's location
+    lon: Optional[float] = None
+    preferred_time: str = ""
+    consent: bool = False
+    notice_version: str = ""          # the privacy line the visitor was shown
+    source: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))    # utm, fbclid, referrer, page
+    estimate: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))  # what the visitor saw (LeadEstimate)
+    notes: str = ""                   # the plain-words summary the website route composes; the owner may edit it
+    status: str = Field(default="new", index=True)   # new | contacted | visit_booked | converted | closed
+    project_id: Optional[int] = None  # the assessment it became
+    closed_reason: str = ""
+    anonymised_at: Optional[datetime] = None  # set by the retention run
+
+
 class AppSetting(SQLModel, table=True):
     __tablename__ = "app_settings"
 

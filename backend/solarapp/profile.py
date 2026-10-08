@@ -35,6 +35,8 @@ PROFILE_FIELDS: list[tuple[str, str, str]] = [
     ("privacy_note", "Privacy line under the booking form", "We use your name and number only to arrange your visit and send your estimate. We keep them for up to 12 months unless you become a customer, and we never sell them or share them beyond the services that process them for us. Message us to see or delete your details."),
 ]
 PROFILE_KEYS = [k for k, _, _ in PROFILE_FIELDS]
+# fields only the website uses (the Settings page groups them under "Website"); the proposal fields stay with the documents
+WEBSITE_KEYS = ["messenger", "facebook", "brands", "callback_promise", "privacy_note"]
 # fields the public estimate page may show; the rest stay internal
 PUBLIC_KEYS = [
     "company_name", "address", "phone", "messenger", "facebook", "email", "owner_name", "pee_name", "pee_license", "service_area", "brands",

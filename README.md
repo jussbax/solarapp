@@ -70,11 +70,13 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
     town (Laguna and Batangas) or the phone's location, monthly use, usage
     pattern. Returns the bill before and after, payback, price and the
     system from the same engines with typical-roof assumptions, shows the
-    battery as a priced add-on, and books the free roof visit as a lead on
-    the job list with its source (UTM tags, referrer) and what the visitor
-    saw. The same page ships as an embeddable widget for the website (see
-    below). The job list shows the funnel for the last 30 days: estimates
-    run, leads, visits, proposals, signed.
+    battery as a priced add-on, and books the free roof visit as a lead in
+    the back office's Leads inbox (separate from the project list) with its
+    source (UTM tags, referrer) and what the visitor saw; "Start assessment"
+    turns a lead into a project with the customer, the town or pin and the
+    bill prefilled. The same page ships as an embeddable widget for the
+    website (see below). The Leads page shows the funnel for the last 30
+    days: estimates run, leads, visits booked, converted.
 
 ## The website and the estimate
 
@@ -130,7 +132,10 @@ the token or to a signed-in user.
 
 Then follow `docs/security.md` for the Cloudflare rules (rate limits, WAF,
 Access, the www redirect), the server checklist, backups and the monthly
-retention run. Note that the compose file now requires
+retention run (`python -m solarapp.retention`: leads in the inbox that never
+became a project lose their name, contact, address and precise pin after
+twelve months, the estimate log is trimmed after ninety days, and projects
+are never anonymised). Note that the compose file now requires
 `SOLARAPP_INTERNAL_TOKEN` in `.env`, refuses the example password, runs
 both processes as an unprivileged user (`sudo chown -R 10001:10001 data`
 once) and publishes no host ports; use `docker-compose.lan.yml` for a
@@ -154,15 +159,15 @@ The script calls the server it was loaded from. From a different origin,
 list that origin in `SOLARAPP_PUBLIC_ORIGINS` on the private app and point
 the script at it with `data-api`. Links to the estimate can carry UTM tags
 (`?utm_source=fb&utm_medium=ad&utm_campaign=brownout1`); they are stored
-with the lead and counted on the job list. The widget raises a
+with the lead and counted on the Leads page. The widget raises a
 `pld-estimate` browser event (`estimate_shown`, `lead_submitted`) and pushes
 `pld_estimate_shown` / `pld_lead_submitted` to `window.dataLayer` when one
 exists, so a Meta Pixel or Google Tag on the website can fire Lead events.
 
 **Lead notices:** set `SOLARAPP_SMTP_*` and `SOLARAPP_NOTIFY_EMAIL` in `.env`
-to get an email for each booking (Gmail works with an app password). Without
-it, leads simply appear at the top of the job list with their contact and
-what they saw.
+to get an email for each booking (Gmail works with an app password); the
+email links to the lead in the Leads inbox. Without it, leads simply appear
+at the top of the inbox with their contact and what they saw.
 
 Messenger templates, ad angles and offer notes for the funnel are in
 `docs/marketing.md`.

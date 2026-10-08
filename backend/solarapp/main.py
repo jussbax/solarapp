@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from sqlmodel import Session
 
-from .api import appliances, assessments, auth_routes, data_routes, pricing_routes, quick_routes, settings_routes
+from .api import appliances, assessments, auth_routes, data_routes, leads, pricing_routes, quick_routes, settings_routes
 from .config import Settings, get_settings
 from .core.dataset import NasaReference, PvgisDataset
 from .db import init_engine
@@ -57,6 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = init_engine(settings.database_path)
         with Session(engine) as session:
             ensure_seeded(session)
+            leads.migrate_lead_assessments(session)  # lead-stage assessments saved before the inbox existed move there (idempotent)
         app.state.pvgis = PvgisDataset(settings.data_dir)
         app.state.nasa = NasaReference(settings.data_dir)
         yield
@@ -126,6 +127,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(auth_routes.router)
     app.include_router(assessments.router)
+    app.include_router(leads.router)
     app.include_router(settings_routes.router)
     app.include_router(data_routes.router)
     app.include_router(appliances.router)
