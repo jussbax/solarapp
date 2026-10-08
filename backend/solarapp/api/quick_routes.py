@@ -83,6 +83,7 @@ def quick_status(session: Session = Depends(get_session), settings: Settings = D
         "warranty": warranty_lines(profile),
         "towns": towns_payload(),
         "public_url": settings.public_url,
+        "estimate_url": settings.estimate_url,
     }
 
 

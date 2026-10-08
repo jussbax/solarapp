@@ -228,6 +228,6 @@ def client_card(
     if (a.results.get("dataset") or {}).get("synthetic"):
         raise HTTPException(status_code=409, detail="The card is disabled while test weather data is in use.")
     company = company_settings(session, settings)
-    png = build_client_card(AssessmentDoc.model_validate(a.doc), a.results, company, next_step=next_step[:120], public_url=settings.public_url)
+    png = build_client_card(AssessmentDoc.model_validate(a.doc), a.results, company, next_step=next_step[:120], public_url=settings.estimate_url)
     name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
     return Response(png, media_type="image/png", headers={"Content-Disposition": f'inline; filename="roof-check-{name}.png"'})

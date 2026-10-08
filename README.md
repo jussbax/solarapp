@@ -79,7 +79,39 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
 ## The estimate on your website
 
 The estimate is meant to live on the company website; the back office stays
-private. Two ways to put it there:
+private.
+
+**Before the website exists: the estimate page is the website.** Route the
+domain to the same tunnel and tell the app which hostname is public:
+
+1. In `/etc/cloudflared/config.yml`, add two ingress entries above the
+   catch-all, pointing at the same service as `solar.pldevinc.com`:
+
+   ```yaml
+     - hostname: pldevinc.com
+       service: http://localhost:8000
+     - hostname: www.pldevinc.com
+       service: http://localhost:8000
+   ```
+
+2. Create the DNS records for the tunnel (replace the tunnel name):
+
+   ```
+   sudo cloudflared tunnel route dns <tunnel-name> pldevinc.com
+   sudo cloudflared tunnel route dns <tunnel-name> www.pldevinc.com
+   sudo systemctl restart cloudflared
+   ```
+
+3. In `.env`, set `SOLARAPP_PUBLIC_HOST=pldevinc.com` and
+   `SOLARAPP_PUBLIC_URL=https://solar.pldevinc.com`, then
+   `docker compose up -d --build`.
+
+On `pldevinc.com` the app serves the estimate at the root and answers 404
+to everything else: no login page, no API, no documents. The card's QR code
+and the ads point at `https://pldevinc.com`. The back office stays at
+`solar.pldevinc.com`.
+
+**With a real website later**, two ways to put the estimate on it:
 
 **Script widget (preferred, works on WordPress, Webflow, Framer and any
 builder that allows custom HTML):** put this where the estimate should
@@ -105,6 +137,8 @@ Either way, set in `.env`:
 SOLARAPP_PUBLIC_ORIGINS=https://pldevinc.com,https://www.pldevinc.com
 SOLARAPP_PUBLIC_URL=https://solar.pldevinc.com
 ```
+
+and drop `SOLARAPP_PUBLIC_HOST` once the website takes over the domain.
 
 The first allows the website's origin to call `/api/quick/*` (nothing else
 is reachable cross-origin, and the login cookie never travels with those

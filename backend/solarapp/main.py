@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -37,6 +37,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # No credentials are allowed cross-origin, so the login cookie never travels with these calls.
         app.add_middleware(CORSMiddleware, allow_origins=settings.origins, allow_credentials=False, allow_methods=["GET", "POST"],
                            allow_headers=["Content-Type", "X-Visitor", "X-Source"], max_age=3600)
+    public_hosts = set(settings.public_hosts)
+    PUBLIC_PATHS = ("/api/quick/", "/assets/", "/widget/", "/brand/", "/favicon", "/apple-touch-icon", "/api/health")
+
+    @app.middleware("http")
+    async def estimate_only_host(request: Request, call_next):
+        """On the public hostname only the estimate and what it needs exist; the login, the API and the documents do not."""
+        host = (request.headers.get("host") or "").split(":")[0].lower()
+        if public_hosts and host in public_hosts:
+            path = request.url.path
+            if path not in ("/", "/estimate", "/estimate/") and not path.startswith(PUBLIC_PATHS):
+                return JSONResponse({"detail": "Not found"}, status_code=404)
+        return await call_next(request)
+
     app.include_router(auth_routes.router)
     app.include_router(assessments.router)
     app.include_router(settings_routes.router)
@@ -52,6 +65,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     static = settings.static_dir or Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
     index = static / "index.html"
     estimate_page = static / "estimate.html"
+
+    def estimate_html() -> Response:
+        """The public page, with absolute addresses in its link-preview tags when the public address is known."""
+        html = estimate_page.read_text(encoding="utf-8")
+        base = settings.estimate_url.rstrip("/").removesuffix("/estimate") if settings.estimate_url else ""
+        if base:
+            html = html.replace('content="/brand/', f'content="{base}/brand/')
+        return Response(html, media_type="text/html", headers={"Cache-Control": "no-cache"})
+
     if index.is_file():
         if (static / "assets").is_dir():
             app.mount("/assets", StaticFiles(directory=static / "assets"), name="assets")
@@ -62,8 +84,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         def spa(path: str, request: Request):
             if path.startswith("api/"):
                 return JSONResponse({"detail": "Not found"}, status_code=404)
-            if path in ("estimate", "estimate/", "quick") and estimate_page.is_file():
-                return FileResponse(estimate_page)  # public page: its own bundle, no login shell
+            host = (request.headers.get("host") or "").split(":")[0].lower()
+            if estimate_page.is_file() and (path in ("estimate", "estimate/", "quick") or (path == "" and host in public_hosts)):
+                return estimate_html()  # public page: its own bundle, no login shell
             candidate = static / path
             if path and candidate.is_file():
                 return FileResponse(candidate)

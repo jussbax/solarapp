@@ -129,21 +129,26 @@ heading is "How much solar does your house need?"):
 - **Reservation deposit.** ₱10,000, deducted from the downpayment, holds
   the price 30 days past the 15-day validity. Low risk, converts "thinking
   about it".
-- **Instalments.** Only advertise "from ₱X a month" if you actually offer
-  it. The app supports instalment plans under Payment terms; a bank loan
-  at about 1% a month add-on on a ₱172,000 system is about ₱4,500 a month,
-  more than the ₱3,900 monthly saving, so do not claim "cash-flow positive
-  from day one". The safe line without financing: "Pay the price of about
-  45 months of your bill, then about 20 years of near-free power."
+- **Financing.** Not offered yet; it will be its own module. Until then, no
+  "from ₱X a month" line anywhere. The safe frame is "pay the price of
+  about 45 months of your bill, then about 20 years of near-free power."
 - **Trust devices to fill in under Settings.** Phone, Messenger link,
   Facebook page, owner's name, the PEE's name and PRC number, warranties,
   brands, where you install, where to pay. The estimate page and the
   documents print what is filled in.
 
-## Embedding the estimate on the website
+## Where the estimate lives
 
-See the README section "The estimate on your website". In short: a page
-such as pldevinc.com/estimate with
+**Now, before the website exists:** the estimate page is the website.
+Point `pldevinc.com` at the app's tunnel and set
+`SOLARAPP_PUBLIC_HOST=pldevinc.com` in the server's `.env`: that hostname
+serves the estimate at its root and refuses everything else (the login,
+the API and the documents stay on `solar.pldevinc.com`). Ads, posts and
+the card's QR code then point at `https://pldevinc.com`. The README has
+the tunnel steps.
+
+**Later, with a real website:** embed the widget on a page such as
+pldevinc.com/estimate with
 
 ```html
 <div id="pld-solar-estimate"></div>

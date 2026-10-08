@@ -538,3 +538,11 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   the payment terms through the same editor as the assessment, a chip
   that counts edited sections, Discard, and the same leave-page guard as
   the assessment.
+- Before the website exists, the estimate page is the website:
+  `SOLARAPP_PUBLIC_HOST` names a hostname (pldevinc.com) on which the app
+  serves the estimate at the root and answers 404 to everything else, so
+  the same server and tunnel carry the public page without exposing the
+  login, the API or the documents there. The card's QR code and the ads
+  point at that address; the back office keeps its own hostname.
+  Financing and instalments are a future module and stay out of the
+  marketing text until then.

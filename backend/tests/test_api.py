@@ -310,3 +310,20 @@ def test_profile_settings_round_trip(client):
     client.post("/api/auth/logout")
     pub = client.get("/api/quick/status").json()["profile"]
     assert pub["phone"] == "0917 000 1111" and "payment_details" not in pub
+
+
+def test_estimate_only_host_refuses_the_back_office(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from solarapp.config import Settings
+    from solarapp.main import create_app
+    settings = Settings(data_dir=tmp_path, app_username="u", app_password="p", secret_key="s" * 32, public_host="https://www.pldevinc.com/", public_url="https://solar.pldevinc.com")
+    assert settings.public_hosts == ["pldevinc.com", "www.pldevinc.com"] and settings.estimate_url == "https://pldevinc.com"
+    with TestClient(create_app(settings)) as c:
+        # on the public hostname only the estimate's routes answer
+        assert c.get("/api/quick/status", headers={"host": "pldevinc.com"}).status_code == 200
+        assert c.get("/api/health", headers={"host": "www.pldevinc.com"}).status_code == 200
+        assert c.post("/api/auth/login", json={"username": "u", "password": "p"}, headers={"host": "pldevinc.com"}).status_code == 404
+        assert c.get("/api/assessments", headers={"host": "pldevinc.com"}).status_code == 404
+        # the back office hostname is untouched
+        assert c.post("/api/auth/login", json={"username": "u", "password": "p"}, headers={"host": "solar.pldevinc.com"}).status_code == 200
+        assert "estimate_url" in c.get("/api/quick/status").json()

@@ -217,7 +217,7 @@ def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_ste
         contact.append(_handle(company["messenger"]))
     if company.get("facebook"):
         contact.append(_handle(company["facebook"]))
-    qr = _qr(f"{public_url.rstrip('/')}/estimate?utm_source=card&utm_medium=messenger", 200) if public_url else None
+    qr = _qr(f"{public_url.rstrip('/')}?utm_source=card&utm_medium=messenger", 200) if public_url else None  # public_url is the estimate's own address
     text_w = W - 2 * P - (240 if qr else 0)
     d.rectangle([P, y, W - P, y + 2], fill=LINE)
     y0 = y + 24
