@@ -155,6 +155,8 @@ def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig) -> di
             "tariff_php_per_kwh": tariff, "tariff_source": tariff_source, "export_rate_php_per_kwh": export_rate, "tariff_escalation": esc,
             "degradation": deg, "analysis_years": years, "discount_rate": disc, "battery_life_years": bat_life, "inverter_life_years": inv_life,
             "om_per_year": om, "battery_replacement_cost": battery_cost, "inverter_replacement_cost": inverter_cost, "co2_kg_per_kwh": e.co2_kg_per_kwh,
+            # the sizing's balance is at the meter (system losses applied), so savings and production here are too
+            "loss_factor": float(sizing.get("loss_factor") or 1.0),
         },
         "contract": contract,
         "kind": sizing["kind"],

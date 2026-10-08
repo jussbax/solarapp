@@ -10,13 +10,15 @@ const SECTION_LABELS: Record<string, string> = {
   truck: 'Truck and freight run', handling: 'Handling at base', route: 'Route: stops, km and toll', categories: 'Categories: wastage and markup tiers',
   labor: 'Labor day rates', roof: 'Roof work', ground: 'Ground work', hauling: 'Hauling', mobdemob: 'Crew transport (mob/demob)', tools: 'Tools', job: 'Job level: fees, markups, VAT, rounding',
   job_defaults: 'Job defaults', wiring: 'Wiring rules and voltage drop', roles: 'BOM item roles (codes the generator uses)',
-  program: 'Program of works: site day, durations, payment terms', economics: 'Savings: tariff, export credit, escalation, lifetimes', quick: 'Website estimate',
+  program: 'Program of works: site day, durations, payment terms', economics: 'Savings: tariff, export credit, escalation, lifetimes',
+  system_losses: 'System losses after the panels (figures at the meter)', sizing: 'System sizing: battery autonomy', quick: 'Website estimate',
 }
 const SKIP = new Set(['imported_from', 'imported_at'])
 // percentages are stored as fractions (0.12) and edited as percent (12)
 const PCT_KEYS = new Set([
   'vat', 'agent_commission', 'freight_markup', 'services_markup', 'ocm_share', 'tariff_escalation', 'degradation', 'discount_rate', 'om_share_per_year',
   'dc_drop_limit', 'ac_drop_limit', 'installment_share', 'dealer_discount', 'payment_fee', 'wastage', 'markup', 'roof_factor', 'k_site',
+  'inverter', 'wiring', 'soiling', 'other',
 ])
 const TIME_KEYS = new Set(['depart_time', 'lunch_start'])
 // label, unit and one-line help for the keys the owner meets most; the rest are title-cased
@@ -64,7 +66,14 @@ const META: Record<string, { label: string; unit?: string; help?: string }> = {
   'roles.rail_length_m': { label: 'Rail length', unit: 'm' },
   'roles.l_feet_per_rail': { label: 'L-feet per rail' },
   'roles.mc4_pairs_per_string': { label: 'MC4 pairs per string' },
-  'roles.default_inverter_code': { label: 'Default inverter (code)', help: 'Felicity 6 kW eco-hybrid by default; parallel units as needed.' },
+  'roles.default_inverter_code_grid': { label: 'Default inverter for net metering (code)', help: 'Must be marked grid-interactive on the Materials page (the electric company asks for the anti-islanding listing). Set at import to the first grid-interactive hybrid in the workbook; blank = the cheapest grid-interactive unit that fits. Parallel units as needed.' },
+  'roles.default_inverter_code_offgrid': { label: 'Default inverter for off-grid (code)', help: 'Felicity 6 kW eco-hybrid by default; blank = the cheapest hybrid that fits. Parallel units as needed.' },
+  'program.min_task_minutes': { label: 'Minimum task durations', unit: 'minutes', help: 'A floor for the hour-by-hour plan (commissioning, battery, inverter), in minutes; the labor price is not changed. When the floors push the plan past the priced days the program warns.' },
+  'system_losses.inverter': { label: 'Inverter', unit: '% of energy kept', help: 'DC to AC conversion in the inverter: the datasheet\'s weighted efficiency.' },
+  'system_losses.wiring': { label: 'Wiring', unit: '% of energy kept', help: 'DC and AC cable runs, connectors and terminations.' },
+  'system_losses.soiling': { label: 'Soiling', unit: '% of energy kept', help: 'Dust and dirt on the panels between rains; verify locally (a rice-field roof collects more in the dry season).' },
+  'system_losses.other': { label: 'Other', unit: '% of energy kept', help: 'Module mismatch, availability and anything else after the panels. The four multiply: the array is sized on energy at the meter and the customer documents print that figure.' },
+  'sizing.days_of_autonomy': { label: 'Days of autonomy', unit: 'evenings', help: 'The evenings the battery must carry without sun; your choice. 1 = the night deficit of the worst typical day (the rule until now), 2 = twice that. The balance over a real year of weather then reports how often it still runs out.' },
   'roles.ac_breaker_amps': { label: 'Default AC breaker', unit: 'A' },
   'program.depart_time': { label: 'Leave base at' },
   'program.lunch_start': { label: 'Lunch at' },

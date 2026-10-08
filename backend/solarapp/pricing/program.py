@@ -73,10 +73,11 @@ class Timeline:
         left = float(minutes)
         while left > 1e-6:
             if self.i >= len(self.windows):
-                # ran out of planned days: extend with a copy of the last window on a new day
-                last = self.windows[-1]
-                self.windows.append(Window(last.day + 1, last.start, last.end))
-                self.pos = last.start
+                # ran out of planned days: extend with a copy of the last day's windows (morning and afternoon) on a new day
+                last_day = self.windows[-1].day
+                extra = [Window(w.day + 1, w.start, w.end) for w in self.windows if w.day == last_day]
+                self.windows += extra
+                self.pos = extra[0].start
             w = self.windows[self.i]
             avail = w.end - self.pos
             if avail <= 0:
@@ -186,6 +187,13 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
     ground_tasks = [("Unload and hand off materials", float(lb.get("handoff_mh", 0)))]
     ground_tasks += [(lab, float(g.get(k, 0))) for k, lab in labels if float(g.get(k, 0)) > 0]
     energize = ("Energize, test and commission", float(g.get("energize", 0)))
+    # floors for the plan only (wall-clock minutes a task takes at the least); the labour price is untouched
+    floors = dict(cfg.program.min_task_minutes or {})
+    floor_for = {
+        "Mount the hybrid inverter": float(floors.get("inverter", 0)), "Mount the grid-tie inverter": float(floors.get("inverter", 0)),
+        "Anchor and connect the battery": float(floors.get("battery", 0)), energize[0]: float(floors.get("commissioning", 0)),
+    }
+    floored: list[dict] = []
 
     segments: list[dict] = []
     roof_tl = Timeline([Window(w.day, w.start, w.end) for w in windows])
@@ -207,6 +215,7 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
             if after(roof_done, ground_tl.now()):
                 ground_tl.advance_to(*roof_done)
         left = mh * 60.0
+        task_first_segment = len(segments)
         while left > 1e-6:
             now = ground_tl.now()
             crew = persons if after(now, roof_done) else ground_persons
@@ -241,6 +250,14 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
             for d, a, b in ground_tl.take(chunk_work / crew):
                 segments.append({"day": d, "stream": "ground", "task": task, "start": a, "end": b, "crew": crew})
             left -= chunk_work
+        # the floor: wall-clock minutes the task takes at the least, whatever the crew; the rest is topped up here
+        floor_min = floor_for.get(task, 0.0)
+        elapsed = sum(s["end"] - s["start"] for s in segments[task_first_segment:])
+        if floor_min > 0 and elapsed + 1e-6 < floor_min:
+            crew = persons if after(ground_tl.now(), roof_done) else ground_persons
+            for d, a, b in ground_tl.take(floor_min - elapsed):
+                segments.append({"day": d, "stream": "ground", "task": task, "start": a, "end": b, "crew": crew, "floored": True})
+            floored.append({"task": task, "priced_minutes": int(round(elapsed)), "minutes": int(floor_min)})
     finish = max(roof_done, ground_tl.now())
     planned_days = max(max(s["day"] for s in segments) + 1, 1) if segments else days
     if planned_days > days:
@@ -265,6 +282,7 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
         "days": planned_days, "paid_days": days, "crew": {"persons": persons, "roof_pairs": pairs, "roof_persons": roof_persons, "ground_persons": ground_persons, "description": lb.get("crew", "")},
         "finish_time": _clock(finish[1]), "segments": segments, "hourly": hourly, "frame": frame, "warnings": warnings,
         "man_hours": {"roof": lb["roof_mh"], "ground": lb["ground_mh"], "handoff": lb.get("handoff_mh", 0), "total": lb["total_mh"]},
+        "task_floors": {"minutes": floors, "applied": floored},
     }
 
 

@@ -1,6 +1,7 @@
 """Documents: one stale rule for every document, per-row k values that follow the rows as typed, the no-fit guard,
 the card's saved next step, and the proposal's wording (the battery from the BOM, customer item names, the tools
 charge folded into installation, same-day payments, the website estimate carried forward)."""
+import re
 import shutil
 import subprocess
 from copy import deepcopy
@@ -182,7 +183,8 @@ def test_proposal_prints_the_bom_battery_plain_item_names_and_the_website_estima
     names = [i["name"] for i in pr["customer"]["sections"][0]["items"] if i["main"]]
     assert names[0].startswith("Solar panels: ") and " × 585 W (" in names[0]
     assert any(n.startswith("Hybrid inverter: ") and " kW (" in n for n in names)
-    assert any(n.startswith("Lithium battery (LiFePO4): ") and f"{kwh:.0f} kWh (" in n for n in names)
+    # one unit prints "12 kWh (supplier)", several print "2 × 6 kWh (12 kWh in all) (supplier)"; sized at the meter this job takes two
+    assert any(n.startswith(("Lithium battery (LiFePO4): ", "Battery: ")) and (f"{kwh:.0f} kWh (" in n or f"({kwh:.0f} kWh in all)" in n) for n in names)
     assert not any("Monofacial" in n or "BMS" in n or "eco-hybrid" in n for n in names)
     crew = next(i for i in pr["customer"]["sections"][1]["items"] if i["key"] == "labor")["name"]
     assert "skilled technicians" in crew or "1 skilled technician," in crew
@@ -213,7 +215,8 @@ def test_proposal_prints_the_bom_battery_plain_item_names_and_the_website_estima
     assert "Quantities are based on your roof check" in text and "roof assessment" not in text
     assert "ERC certificate of compliance" in text and "ERC Certificate" not in text and "Two-way meter from your electric company" in text
     assert "Savings against your bill today" in text
-    assert "technician," not in text or "skilled technicians" in text
+    # crew plurals: "1 skilled technician, 2 helpers" or "2 skilled technicians, 3 helpers" (this job takes one pair: two 6 kWh packs carry lighter than one 10 kWh pack)
+    assert re.search(r"\b1 skilled technician, |\b[2-9] skilled technicians, ", text) and "1 skilled technicians" not in text
 
 
 def test_roof_check_prints_the_readings_and_keeps_the_closing_notes_together(client):

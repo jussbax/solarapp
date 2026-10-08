@@ -109,9 +109,12 @@ class FaceSimulation:
     specific_yield_kwh_per_kwp: float
     hourly_profile_kw: list[list[float]]  # [12][24] average kW by local hour
     shade_loss_pct: float = 0.0           # share of the year's beam irradiance lost to shade
+    hourly_kw: Optional[np.ndarray] = field(default=None, repr=False, compare=False)  # the real hourly year (8,760 values), not serialised
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d.pop("hourly_kw", None)
+        return d
 
 
 @dataclass
@@ -129,9 +132,17 @@ class SimulationResult:
     k_site: float
     thermal: str
     hourly_profile_kw: list[list[float]]  # [12][24] average kW by local hour, all faces
+    # the real hourly year behind the averages: kW per hour, with each hour's local month (1-12) and hour (0-23);
+    # kept for the battery balance over the year, never serialised
+    hourly_kw: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
+    hour_month: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
+    hour_local: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict:
         d = asdict(self)
+        for k in ("hourly_kw", "hour_month", "hour_local"):
+            d.pop(k, None)
+        d["faces"] = [f.to_dict() for f in self.faces]
         return d
 
 
@@ -204,6 +215,7 @@ def simulate_face(tmy: pd.DataFrame, sky: SkyContext, face: FaceSpec, panel_wp: 
         specific_yield_kwh_per_kwp=(annual / kwp) if kwp > 0 else 0.0,
         hourly_profile_kw=hourly_profile(power_w, sky.month, sky.hour),
         shade_loss_pct=shade_loss,
+        hourly_kw=np.asarray(power_w, dtype=float) / 1000.0,
     )
 
 
@@ -242,6 +254,8 @@ def simulate(
         k_site=k_site,
         thermal=thermal.describe(),
         hourly_profile_kw=profile.round(5).tolist(),
+        hourly_kw=sum((f.hourly_kw for f in face_results if f.hourly_kw is not None), np.zeros(len(tmy.index))),
+        hour_month=np.asarray(sky.month), hour_local=np.asarray(sky.hour),
     )
 
 

@@ -10,8 +10,9 @@ import numpy as np
 from .core import audit as audit_core
 from .core import kfactor, layout, shade
 from .core.dataset import NasaReference, PvgisDataset
-from .core.sizing import BatterySpec, InverterRules, OffGridRules, size_system
+from .core.sizing import BatterySpec, InverterRules, OffGridRules, plan_from_faces, size_system
 from .core.simulation import FaceSpec, ThermalModel, prepare_sky, simulate, typical_air_temperature
+from .pricing.config import PricingConfig
 from .pricing.job import PricingContext, price_assessment
 from .pricing.economics import build_economics
 from .pricing.program import build_program
@@ -158,7 +159,8 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         if fs.shade_loss_pct >= 5:
             warnings.append(_warn("shade_loss", f"{fs.name}: shade takes about {fs.shade_loss_pct:.0f}% of the direct sun over the year."))
 
-    audit_block, sizing_block = compute_audit_and_sizing(doc, measured, selected, selected_panel.watt_peak)
+    cfg = pricing.config if pricing is not None else PricingConfig()
+    audit_block, sizing_block = compute_audit_and_sizing(doc, measured, selected, selected_panel.watt_peak, cfg)
 
     def set_to_dict(r: kfactor.ReadingSetResult, s) -> dict:
         d = asdict(r)
@@ -215,6 +217,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         "economics": None,
         "warnings": warnings,
     }
+    add_ac_figures(results["production"], cfg.system_losses.factor)
     if pricing is not None:
         try:
             results["pricing"] = price_assessment(doc, results, pricing)
@@ -231,8 +234,23 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
     return results
 
 
-def compute_audit_and_sizing(doc: AssessmentDoc, production, selected_panel_result: dict, panel_wp: float) -> tuple[Optional[dict], Optional[dict]]:
-    """Energy audit and system sizing, when the document carries appliances."""
+def add_ac_figures(production: dict, loss_factor: float) -> None:
+    """Contract C2: the simulation stays "at the panels"; the figures at the meter (after the inverter, wiring,
+    soiling and other losses) sit beside them for the customer documents."""
+    production["loss_factor"] = loss_factor
+    production["annual_kwh_ac"] = production["annual_kwh"] * loss_factor
+    production["monthly_kwh_ac"] = [v * loss_factor for v in production["monthly_kwh"]]
+    production["avg_monthly_kwh_ac"] = production["avg_monthly_kwh"] * loss_factor
+    for f in production.get("faces") or []:
+        f["annual_kwh_ac"] = f["annual_kwh"] * loss_factor
+        f["monthly_kwh_ac"] = [v * loss_factor for v in f["monthly_kwh"]]
+
+
+def compute_audit_and_sizing(doc: AssessmentDoc, production, selected_panel_result: dict, panel_wp: float, cfg: Optional[PricingConfig] = None) -> tuple[Optional[dict], Optional[dict]]:
+    """Energy audit and system sizing, when the document carries appliances. The sizing works on energy at the
+    meter (the system losses applied to the per-kWp profile) and places the sized panels on the roof best face
+    first, simulating that allocation over the real hourly year."""
+    cfg = cfg or PricingConfig()
     a = doc.audit
     if not a.appliances:
         return None, None
@@ -266,14 +284,28 @@ def compute_audit_and_sizing(doc: AssessmentDoc, production, selected_panel_resu
     kwp = production.system_kwp
     if kwp <= 0:
         return audit_block, None
-    per_kwp = np.array(production.hourly_profile_kw) / kwp
+    loss = cfg.system_losses.factor
+    per_kwp = np.array(production.hourly_profile_kw) / kwp * loss   # at the meter
+    faces_in = []
+    for fs in production.faces:
+        lr = selected_panel_result["faces"].get(fs.face_id) or {}
+        best = lr.get("best") or {}
+        rows = [int(r) for r in (best.get("rows") or []) if int(r) > 0]
+        if not rows and best.get("along_length") and best.get("along_width"):
+            rows = [int(best["along_length"])] * int(best["along_width"])
+        faces_in.append({
+            "face_id": fs.face_id, "name": fs.name, "panel_count": fs.panel_count, "hourly_profile_kw": fs.hourly_profile_kw,
+            "specific_yield_kwh_per_kwp": fs.specific_yield_kwh_per_kwp, "rows": rows, "hourly_kw": fs.hourly_kw,
+        })
+    plan = plan_from_faces(faces_in, loss, production.hour_month, production.hour_local)
     s = a.system
     sizing = size_system(
         np.asarray(res.load_kw), per_kwp, roof_max_panels=int(selected_panel_result["total_count"]), panel_wp=panel_wp, kind=s.kind,
         peak_load_kw=res.peak_kw,
         largest_motor_kw=res.largest_motor_kw, largest_motor_multiplier=res.largest_motor_multiplier,
-        battery=BatterySpec(s.battery_dod, s.battery_efficiency),
+        battery=BatterySpec(s.battery_dod, s.battery_efficiency, days_of_autonomy=cfg.sizing.days_of_autonomy),
         inverter=InverterRules(list(s.inverter_sizes_kw), s.inverter_surge_factor, s.pv_ratio_max),
         offgrid=OffGridRules(s.offgrid_pv_margin),
+        plan=plan,
     )
     return audit_block, sizing

@@ -51,6 +51,7 @@ class BoqRequest:
     inverter_units: int = 1
     inverter_required_kw: Optional[float] = None   # the sizing requirement; sets the units of a fixed model
     battery_kwh: float = 0.0
+    kind: str = "combination"                      # off_grid, net_metering or combination: grid kinds need a grid-interactive inverter
     strings_override: Optional[int] = None
     inverter_code: Optional[str] = None
     battery_code: Optional[str] = None
@@ -84,13 +85,21 @@ def _cheapest(items: list[Item], catalog: Catalog, cfg: PricingConfig, units_fn=
     return out
 
 
-def select_inverter(kw: float, catalog: Catalog, cfg: PricingConfig) -> list[tuple[Item, int, float]]:
+def select_inverter(kw: float, catalog: Catalog, cfg: PricingConfig, kind: str = "combination") -> list[tuple[Item, int, float]]:
+    """Hybrid inverters at or above kw, cheapest first. Anything with net metering (every kind but off_grid) needs
+    a unit marked grid-interactive: an off-grid type cannot export and the DU asks for the anti-islanding listing."""
+    grid = kind != "off_grid"
     cands = [
         i for i in catalog.by_category("Inverter")
         if i.is_hybrid_inverter and (i.rating_unit or "").lower() == "kw" and i.rating and i.rating >= kw - 1e-9
         and not _excluded(i, cfg.roles.inverter_exclude_words)
+        and (not grid or i.grid_interactive is True)
     ]
     return _cheapest(cands, catalog, cfg)
+
+
+def _grid_flag(item: Item) -> str:
+    return "yes" if item.grid_interactive is True else "no" if item.grid_interactive is False else "unknown"
 
 
 def select_battery(kwh: float, catalog: Catalog, cfg: PricingConfig) -> list[tuple[Item, int, float]]:
@@ -126,6 +135,39 @@ def _by_amps(pattern: str, amps_required: float, catalog: Catalog, cfg: PricingC
     return ok[0][1]
 
 
+def battery_current_check(battery: Item, units: int, inverter: Optional[Item], inverter_units: int, i_rated: float, i_max: float) -> tuple[int, list[dict]]:
+    """E6: the battery bank's continuous current against what the inverter draws. Below the current at the
+    inverter's rated output the bank cannot run the house from the battery at full power; below the inverter's
+    own maximum (when the item carries it) it works at rated power but not at the inverter's limit. Both are
+    warnings that name the fix (a unit in parallel or a battery rated higher); the units are the owner's call,
+    since a second pack is a large part of the price. Without a continuous rating on the item, a reminder."""
+    warnings: list[dict] = []
+    if units <= 0 or battery.rating is None:
+        return units, warnings
+    if not battery.continuous_a:
+        if inverter is not None and inverter.battery_max_a:
+            warnings.append({"code": "battery_current_unknown", "message": (
+                f"{battery.code} {battery.name} has no continuous current on its item; the inverter can draw up to {inverter.battery_max_a:g} A from the battery. "
+                f"Type the battery's continuous current on the Materials page to check it.")})
+        return units, warnings
+    kw = f"about {battery.continuous_a * 51.2 / 1000:.1f} kW"
+    rated_total = i_rated * max(inverter_units, 1)
+    max_total = i_max * max(inverter_units, 1)
+    cont_total = units * float(battery.continuous_a)
+    over = f" over {units} units" if units > 1 else ""
+    if cont_total < rated_total - 1e-9:
+        needed = int(math.ceil(rated_total / float(battery.continuous_a) - 1e-9))
+        warnings.append({"code": "battery_current_units", "message": (
+            f"{battery.code} delivers {cont_total:.0f} A continuous{over} ({kw}) and the inverter draws about {rated_total:.0f} A at rated output, "
+            f"so it cannot run the house from the battery at full power. Use {needed} units in parallel ({needed * float(battery.rating):g} kWh) "
+            f"or a battery rated at least {rated_total:.0f} A continuous; set it under Pricing inputs › Battery.")})
+    elif cont_total < max_total - 1e-9:
+        warnings.append({"code": "battery_current", "message": (
+            f"{battery.code}: {cont_total:.0f} A continuous{over} against the inverter's maximum battery current of {max_total:.0f} A. "
+            f"It runs the inverter at rated output ({rated_total:.0f} A) but not at the inverter's limit; verify with the datasheets or add a unit.")})
+    return units, warnings
+
+
 def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqResult:
     w, r = cfg.wiring, cfg.roles
     lines: list[BomLine] = []
@@ -137,34 +179,64 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         raise ValueError(f"Panel {req.panel_code} is not in the materials database.")
     lines.append(BomLine(panel.code, req.panel_count, "panel", f"{req.panel_count} x {panel.name}"))
 
-    # inverter: the per-job override, else the default model, else the cheapest hybrid that fits
-    inv_options = select_inverter(req.inverter_kw, catalog, cfg)
+    # inverter: the per-job override, else the default model for this system kind, else the cheapest hybrid that
+    # fits. A grid job (net metering, with or without a battery) takes only a grid-interactive unit.
+    grid_job = req.kind != "off_grid"
+    inv_options = select_inverter(req.inverter_kw, catalog, cfg, req.kind)
     inverter: Optional[Item] = None
     units = max(req.inverter_units, 1)
     required = req.inverter_required_kw or req.inverter_kw * units
     if req.inverter_code:
         inverter = catalog.get(req.inverter_code)
-    if inverter is None and r.default_inverter_code:
-        inverter = catalog.get(r.default_inverter_code)
-        if inverter is None:
-            warnings.append({"code": "default_inverter", "message": f"Default inverter {r.default_inverter_code} is not in the materials list; the cheapest that fits is used."})
+    default_code = r.default_inverter_for(req.kind)
+    if inverter is None and default_code:
+        cand = catalog.get(default_code)
+        if cand is None:
+            warnings.append({"code": "default_inverter", "message": f"Default inverter {default_code} is not in the materials list; the cheapest that fits is used."})
+        elif grid_job and cand.grid_interactive is not True:
+            why = "is an off-grid type" if cand.grid_interactive is False else "is not marked grid-interactive"
+            warnings.append({"code": "default_inverter_not_grid", "message": (
+                f"The default inverter {cand.code} {cand.name} {why}, so it is skipped on this net-metering job and the cheapest grid-interactive "
+                f"inverter that fits is used. Set a grid default under Pricing settings › BOM item roles, or mark the inverter grid-interactive on the Materials page.")})
+        else:
+            inverter = cand
     if inverter is None and inv_options:
         inverter = inv_options[0][0]
     if inverter is None:
-        warnings.append({"code": "no_inverter", "message": f"No hybrid inverter of {req.inverter_kw:g} kW or more in the materials list. Add one on the Materials page."})
+        what = "grid-interactive hybrid inverter" if grid_job else "hybrid inverter"
+        warnings.append({"code": "no_inverter", "message": f"No {what} of {req.inverter_kw:g} kW or more in the materials list. Add one on the Materials page" + (" and mark it grid-interactive." if grid_job else ".")})
     else:
+        if grid_job and inverter.grid_interactive is False:
+            warnings.append({"code": "inverter_not_grid_interactive", "hard": True, "message": (
+                f"{inverter.code} {inverter.name} is an off-grid type: it cannot export and the electric company will not accept it for net metering. "
+                f"Choose a grid-interactive inverter under Pricing inputs, or mark this one on the Materials page if its datasheet says otherwise.")})
+        elif grid_job and inverter.grid_interactive is None:
+            warnings.append({"code": "inverter_certificate_unknown", "hard": True, "message": (
+                f"{inverter.code} {inverter.name} is not marked grid-interactive: confirm the inverter's anti-islanding certificate before the net-metering application, "
+                f"then set Grid-interactive and its certifications on the Materials page.")})
         if inverter.rating and (inverter.rating_unit or "").lower() == "kw":
             units = max(units, int(math.ceil(required / inverter.rating - 1e-9)))
         note = f"{inverter.rating:g} kW hybrid" + (f", {units} in parallel for {required:g} kW" if units > 1 else "")
+        if grid_job:
+            note += f", grid-interactive: {_grid_flag(inverter)}"
         lines.append(BomLine(inverter.code, units, "inverter", note))
-    opts = [{"code": i.code, "name": i.name, "rating_kw": i.rating, "supplier": i.supplier, "landed": c} for i, n, c in inv_options[:6]]
+
+    def _opt(i: Item, c: float) -> dict:
+        return {"code": i.code, "name": i.name, "rating_kw": i.rating, "supplier": i.supplier, "landed": c,
+                "grid_interactive": i.grid_interactive, "certifications": i.certifications or ""}
+    opts = [_opt(i, c) for i, n, c in inv_options[:6]]
     if inverter and inverter.code not in [o["code"] for o in opts]:
-        opts.insert(0, {"code": inverter.code, "name": inverter.name, "rating_kw": inverter.rating, "supplier": inverter.supplier, "landed": landed_cost(inverter, catalog, cfg).landed * units})
+        opts.insert(0, _opt(inverter, landed_cost(inverter, catalog, cfg).landed * units))
     choices["inverter_options"] = opts
     choices["inverter_units"] = units
+    choices["inverter_grid_interactive"] = inverter.grid_interactive if inverter else None
+    choices["inverter_certifications"] = (inverter.certifications or "") if inverter else ""
+    choices["inverter_battery_max_a"] = inverter.battery_max_a if inverter else None
     inv_kw = float(inverter.rating) if inverter and inverter.rating else req.inverter_kw
+    i_bat = inv_kw * 1000.0 / w.battery_voltage            # per inverter, at rated output from the battery
+    i_bat_max = float(inverter.battery_max_a) if (inverter and inverter.battery_max_a) else i_bat   # the inverter's own limit when known
 
-    # battery
+    # battery: cheapest combination at or above the kWh, then the current check against the inverter
     battery_units = 0
     battery: Optional[Item] = None
     if req.battery_kwh > 0:
@@ -177,8 +249,11 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         if battery is None:
             warnings.append({"code": "no_battery", "message": "No battery in the materials list covers the required kWh. Add one with its kWh rating on the Materials page."})
         else:
+            battery_units, bat_warnings = battery_current_check(battery, battery_units, inverter, units, i_bat, i_bat_max)
+            warnings += bat_warnings
             lines.append(BomLine(battery.code, battery_units, "battery", f"{battery_units} x {battery.rating:g} kWh = {battery_units * battery.rating:g} kWh"))
-        choices["battery_options"] = [{"code": i.code, "name": i.name, "rating_kwh": i.rating, "units": n, "total_kwh": n * i.rating, "supplier": i.supplier, "landed": c} for i, n, c in bat_options[:8]]
+        choices["battery_options"] = [{"code": i.code, "name": i.name, "rating_kwh": i.rating, "units": n, "total_kwh": n * i.rating, "supplier": i.supplier, "landed": c, "continuous_a": i.continuous_a} for i, n, c in bat_options[:8]]
+        choices["battery_continuous_a"] = battery.continuous_a if battery else None
 
     # mounting per row
     rails = splices = end_clamps = mid_clamps = 0
@@ -224,17 +299,26 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     thhn_code = r.thhn.get(ac_gauge) or next(iter(r.thhn.values()))
     lines.append(BomLine(thhn_code, units * (ac_run + gnd_run), "thhn", f"{ac_run:g} m circuits + {gnd_run:g} m grounding per inverter, {ac_gauge} mm2 for {i_ac:.0f} A, {ac_drop:.1%} drop"))
 
-    # battery cable and breaker
+    # battery cable and breaker: sized on the inverter's battery current (its own maximum when the item carries it,
+    # else the rated output over the battery voltage); the breaker at or above 1.25 times that and, when the battery's
+    # continuous rating is known, at or below it
     if battery_units > 0:
-        i_bat = inv_kw * 1000.0 / w.battery_voltage
-        bat_gauge, _, bat_ok = pick_gauge(i_bat, 1.0, w.battery_voltage, 0.5, w.battery_cable_ampacity, cfg)
+        bat_gauge, _, bat_ok = pick_gauge(i_bat_max, 1.0, w.battery_voltage, 0.5, w.battery_cable_ampacity, cfg)
         if not bat_ok:
-            warnings.append({"code": "battery_cable", "message": f"Battery cable: {i_bat:.0f} A is more than the largest lug pair in the list. Add a larger one."})
-        lines.append(BomLine(r.battery_cable_pair.get(bat_gauge, r.battery_cable_pair["35"]), w.battery_pairs_per_battery * battery_units, "battery_cable", f"{bat_gauge} mm2 lug pairs for {i_bat:.0f} A"))
-        amps_req = i_bat * w.continuous_factor
+            warnings.append({"code": "battery_cable", "message": f"Battery cable: {i_bat_max:.0f} A is more than the largest lug pair in the list. Add a larger one."})
+        lines.append(BomLine(r.battery_cable_pair.get(bat_gauge, r.battery_cable_pair["35"]), w.battery_pairs_per_battery * battery_units, "battery_cable", f"{bat_gauge} mm2 lug pairs for {i_bat_max:.0f} A"))
+        amps_req = i_bat_max * w.continuous_factor
+        upper = battery_units * float(battery.continuous_a) if (battery and battery.continuous_a) else None
         bb = _by_amps(r.battery_breaker_pattern, amps_req, catalog, cfg) or catalog.get(r.battery_breaker_fallback)
         if bb:
-            lines.append(BomLine(bb.code, units, "battery_breaker", f"for {amps_req:.0f} A continuous"))
+            bb_amps = bb.amps_in_name()
+            if upper is not None and bb_amps is not None and bb_amps > upper + 1e-9:
+                warnings.append({"code": "battery_breaker", "message": (
+                    f"Battery breaker: the inverter side needs at least {amps_req:.0f} A (1.25 × {i_bat_max:.0f} A) but the battery is rated {upper:.0f} A continuous"
+                    f"{' over ' + str(battery_units) + ' units' if battery_units > 1 else ''}, so the {bb_amps:.0f} A breaker is above the battery's rating. "
+                    f"Use a battery (or more units in parallel) rated at least {amps_req:.0f} A continuous, or confirm the limit with the maker.")})
+            basis = f"1.25 × {i_bat_max:.0f} A inverter battery current" + (f", battery rated {upper:.0f} A" if upper is not None else "")
+            lines.append(BomLine(bb.code, units, "battery_breaker", f"for {amps_req:.0f} A ({basis})"))
 
     # protection
     lines.append(BomLine(r.dc_breaker, strings, "dc_breaker", "1 per string"))
@@ -272,5 +356,6 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         "pv_gauge": pv_gauge, "pv_drop": pv_drop, "ac_current_a": i_ac, "ac_gauge": ac_gauge, "ac_drop": ac_drop,
         "inverter_code": inverter.code if inverter else None, "battery_code": battery.code if battery else None, "battery_units": battery_units,
         "rows": [{"panels": x.panels, "length_m": x.length_m} for x in req.rows],
+        "kind": req.kind, "battery_current_a": i_bat_max, "battery_breaker_min_a": i_bat_max * w.continuous_factor,
     })
     return BoqResult([l for l in lines if l.qty > 0], choices, warnings)

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Area, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import type { AuditBlock, SizingBlock } from '../types'
+import type { AuditBlock, BatteryAutonomy, SizingBlock } from '../types'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const n0 = (v: number) => Math.round(v).toLocaleString()
@@ -27,11 +27,15 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
     [surplusLabel]: prof ? +(prof.export[h] + prof.curtailed[h]).toFixed(3) : 0,
   }))
   const warnings = [...audit.warnings, ...(sizing?.warnings ?? [])]
+  const autonomy = sizing ? (sizing.battery as SizingBlock['battery'] & BatteryAutonomy).days_of_autonomy ?? null : null
+  const evenings = autonomy != null ? `${autonomy} ${autonomy === 1 ? 'evening' : 'evenings'} without sun` : ''
+  const hy = sizing?.hourly_year
+  const loss = sizing?.loss_factor ?? 1
 
   return (
     <div>
       {warnings.map((w, i) => (
-        <div key={w.code + i} className={`banner ${['roof_limited', 'reconcile_floor', 'reconcile_ceiling', 'audit_gap'].includes(w.code) ? 'warn' : 'info'}`}>
+        <div key={w.code + i} className={`banner ${['roof_limited', 'reconcile_floor', 'reconcile_ceiling', 'audit_gap', 'autonomy_not_met'].includes(w.code) ? 'warn' : 'info'}`}>
           {w.message}
         </div>
       ))}
@@ -59,7 +63,7 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
             <div className="value">{sizing.battery.installed_kwh > 0 ? `${n1(sizing.battery.installed_kwh)} kWh` : 'none'}</div>
             <div className="sub">
               {sizing.battery.installed_kwh > 0
-                ? `${n1(sizing.battery.usable_kwh)} kWh usable at ${Math.round(sizing.battery.depth_of_discharge * 100)}% depth of discharge, carries what solar cannot`
+                ? `${n1(sizing.battery.usable_kwh)} kWh usable at ${Math.round(sizing.battery.depth_of_discharge * 100)}% depth of discharge, ${evenings ? `sized for ${evenings}` : 'carries what solar cannot'}`
                 : KIND_LABEL[sizing.kind]}
             </div>
           </div>
@@ -67,7 +71,8 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
             <div className="label">Consumption covered</div>
             <div className="value">{n0(sizing.coverage_pct)}%</div>
             <div className="sub">
-              {n0(sizing.annual_consumption_kwh)} kWh/yr used, {n0(sizing.annual_production_kwh)} kWh/yr produced
+              {n0(sizing.annual_consumption_kwh)} kWh/yr used, {n0(sizing.annual_production_kwh)} kWh/yr at the meter
+              {loss < 1 ? ` (${n0(sizing.annual_production_dc_kwh ?? sizing.annual_production_kwh / loss)} at the panels)` : ''}
             </div>
           </div>
           <div className="kpi">
@@ -77,6 +82,23 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
               {offGrid ? `per year not covered, ${n0(sizing.annual_curtailed_kwh)} kWh surplus unused` : `imported per year, ${n0(sizing.annual_export_kwh)} exported`}
             </div>
           </div>
+          {hy?.available && sizing.kind !== 'net_metering' && (
+            <div className="kpi">
+              <div className="label">{offGrid ? 'Hours without power' : 'Hours the grid steps in'}</div>
+              <div className="value">{n0(hy.loss_of_load_hours ?? 0)} h</div>
+              <div className="sub">
+                on {n0(hy.loss_of_load_days ?? 0)} {hy.loss_of_load_days === 1 ? 'day' : 'days'} over a real year of weather ({n0(hy.unserved_kwh ?? 0)} kWh)
+                {evenings ? `; battery for ${evenings}` : ''}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {sizing?.faces && sizing.faces.length > 0 && (
+        <div className="muted" style={{ marginTop: 6 }}>
+          Panels on the roof, best face first:{' '}
+          {sizing.faces.map((f) => `${f.name} ${f.panels} of ${f.capacity} (rows ${f.rows.join(', ')}; ${n0(f.specific_yield_kwh_per_kwp)} kWh per kWp at the panels)`).join('; ')}.
+          Production is the sum over these panels, not the whole-roof blend.
         </div>
       )}
 
@@ -275,7 +297,9 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
           </div>
           <div className="muted" style={{ marginTop: 6 }}>
             {KIND_LABEL[sizing.kind]}
-            {sizing.offgrid && ` (worst month produces ${sizing.offgrid.pv_margin}x consumption; the battery carries the night, no autonomy allowance)`}. Yield {n0(sizing.annual_yield_kwh_per_kwp)} kWh per kWp per year from this roof's measured simulation. Self-consumption {n0(sizing.self_consumption_pct)}% of production.
+            {sizing.offgrid && ` (worst month produces ${sizing.offgrid.pv_margin}x consumption; the battery is sized for ${evenings || 'the night'})`}. Yield {n0(sizing.system_yield_kwh_per_kwp ?? sizing.annual_yield_kwh_per_kwp)} kWh per kWp per year at the meter on the faces the panels occupy (whole roof {n0(sizing.annual_yield_kwh_per_kwp)}), from this roof's measured simulation
+            {loss < 1 ? ` with ${Math.round((1 - loss) * 100)}% system losses applied` : ''}. Self-consumption {n0(sizing.self_consumption_pct)}% of production.
+            {hy?.available ? ` Month totals and the typical days come from the balance over the real hourly year (${n0(hy.hours ?? 0)} hours).` : ''}
             Inverter check: peak {n1(sizing.inverter.peak_load_kw)} kW, surge {n1(sizing.inverter.surge_requirement_kw)} kW at {sizing.inverter.surge_factor}x, PV {n1(sizing.inverter.pv_requirement_kw)} kW at {sizing.inverter.pv_ratio_max}x.
           </div>
         </>

@@ -73,6 +73,8 @@ class PricedLine:
     rating_unit: str
     is_hybrid_inverter: bool
     found: bool = True
+    grid_interactive: Optional[bool] = None   # inverters: may export (anti-islanding certified); None = unknown
+    certifications: str = ""                  # inverters: the listing printed on the proposal and the DU pack
 
     def to_dict(self) -> dict:
         return self.__dict__.copy()
@@ -94,6 +96,7 @@ def price_lines(bom: list[BomLine], catalog: Catalog, cfg: PricingConfig) -> lis
             unit=item.unit, qty=line.qty, landed_unit=lc.landed, markup_tier=lc.markup_tier, landed=landed, markup=markup,
             selling=landed + markup, truck_share=0.0 if delivers else line.qty * lc.truck_share, weight_kg=item.weight_kg,
             rating=item.rating, rating_unit=item.rating_unit, is_hybrid_inverter=item.is_hybrid_inverter,
+            grid_interactive=item.grid_interactive, certifications=item.certifications or "",
         ))
     return out
 

@@ -6,15 +6,38 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from ..models import AppSetting, MaterialItem, MaterialSupplier, utcnow
-from .catalog import Catalog, Item, Supplier
+from .catalog import ELECTRICAL_FIELDS, Catalog, Item, Supplier
 from .config import PricingConfig
 from .importer import ImportResult, read_workbook
 
 CONFIG_KEY = "pricing_config"
 SEED_PATH = Path(__file__).resolve().parent.parent.parent / "data_seed" / "PLD_Materials_DB.xlsx"
+# fields the owner types in the app that a re-import must not blank out when the workbook has no value for them
+KEEP_WHEN_BLANK = ("panel_length_m", "panel_width_m") + ELECTRICAL_FIELDS
+
+
+def ensure_material_columns(session: Session) -> list[str]:
+    """SQLite keeps the table it was created with; columns added to MaterialItem since (the electrical data)
+    are added here at startup so an existing database keeps working. Returns the columns added."""
+    present = {row[1] for row in session.exec(text("PRAGMA table_info(material_items)")).all()}
+    if not present:
+        return []
+    added: list[str] = []
+    for col in MaterialItem.__table__.columns:
+        if col.name in present:
+            continue
+        kind = col.type.__class__.__name__.upper()
+        sql_type = "INTEGER" if kind in ("INTEGER", "BOOLEAN") else "REAL" if kind == "FLOAT" else "VARCHAR"
+        default = " DEFAULT ''" if sql_type == "VARCHAR" and not col.nullable else ""
+        session.exec(text(f"ALTER TABLE material_items ADD COLUMN {col.name} {sql_type}{default}"))
+        added.append(col.name)
+    if added:
+        session.commit()
+    return added
 
 
 def load_config(session: Session) -> PricingConfig:
@@ -66,7 +89,7 @@ def persist_import(session: Session, result: ImportResult, replace_config: bool 
             added += 1
         else:
             for k, v in data.items():
-                if k in ("panel_length_m", "panel_width_m") and v is None:
+                if k in KEEP_WHEN_BLANK and v in (None, ""):
                     continue
                 if k == "active":
                     continue
@@ -97,7 +120,8 @@ def import_workbook(session: Session, path: str | Path, replace_config: bool = T
 
 
 def ensure_seeded(session: Session) -> Optional[dict]:
-    """First run: load the seed workbook when the materials table is empty."""
+    """Startup: add any new material columns, then load the seed workbook when the materials table is empty."""
+    ensure_material_columns(session)
     if session.exec(select(MaterialItem.code)).first() is None and SEED_PATH.exists():
         return import_workbook(session, SEED_PATH)
     return None

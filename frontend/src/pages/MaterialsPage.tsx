@@ -11,7 +11,97 @@ function blankItem(): ItemDraft {
   return {
     code: '', category: 'Accessories', supplier: '', name: '', spec: '', unit: 'pc', sold_as: 'pc', list_price: 0, rating: null, rating_unit: '',
     weight_kg: 0, volume_m3: 0, weight_source: 'manual', storage: 0, price_list_date: '', remarks: '', panel_length_m: null, panel_width_m: null, active: true,
+    grid_interactive: null, certifications: '', max_pv_voltage_v: null, mppt_min_v: null, mppt_max_v: null, mppt_count: null, mppt_max_a: null, ac_input_a: null,
+    battery_max_a: null, continuous_a: null, voc_v: null, vmp_v: null, isc_a: null, imp_a: null, temp_coeff_voc_pct: null, temp_coeff_isc_pct: null,
   }
+}
+
+const isInverter = (cat: string) => cat === 'Inverter' || cat === 'All-in-one System'
+const gridLabel = (v: boolean | null | undefined) => (v === true ? 'yes' : v === false ? 'no' : 'unknown')
+
+/** Datasheet figures per category (contract C4): panels for the string design, inverters for the string and
+ *  circuit design and the net-metering rule, batteries for the current check against the inverter. */
+function ElectricalFields({ it, set }: { it: ItemDraft; set: (p: Partial<ItemDraft>) => void }) {
+  const num = (key: keyof ItemDraft, label: string, width = 120, step = 0.1) => (
+    <Field label={label} width={width}>
+      <NumberInput value={(it[key] as number | null | undefined) ?? null} onChange={(v) => set({ [key]: v } as Partial<ItemDraft>)} allowEmpty step={step} />
+    </Field>
+  )
+  if (it.category === 'Solar Panel') {
+    return (
+      <div className="row" style={{ marginTop: 6 }}>
+        {num('voc_v', 'Voc (V)', 100)}
+        {num('vmp_v', 'Vmp (V)', 100)}
+        {num('isc_a', 'Isc (A)', 100)}
+        {num('imp_a', 'Imp (A)', 100)}
+        {num('temp_coeff_voc_pct', 'Voc temp. coeff. (%/°C)', 170, 0.01)}
+        {num('temp_coeff_isc_pct', 'Isc temp. coeff. (%/°C)', 170, 0.01)}
+        <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>From the datasheet at STC; the string design uses Voc at the coldest cell and Vmp at the hottest.</div>
+      </div>
+    )
+  }
+  if (isInverter(it.category)) {
+    return (
+      <div className="row" style={{ marginTop: 6 }}>
+        {num('max_pv_voltage_v', 'Max PV voltage (V)', 140, 1)}
+        {num('mppt_min_v', 'MPPT min (V)', 110, 1)}
+        {num('mppt_max_v', 'MPPT max (V)', 110, 1)}
+        {num('mppt_count', 'MPPT inputs', 100, 1)}
+        {num('mppt_max_a', 'Max A per MPPT', 120)}
+        {num('ac_input_a', 'AC input (A)', 110)}
+        {num('battery_max_a', 'Battery max (A)', 120)}
+        <Field label="Grid-interactive" width={140}>
+          <select
+            value={it.grid_interactive === true ? 'yes' : it.grid_interactive === false ? 'no' : ''}
+            onChange={(e) => set({ grid_interactive: e.target.value === 'yes' ? true : e.target.value === 'no' ? false : null })}
+          >
+            <option value="">unknown</option>
+            <option value="yes">yes: may export (anti-islanding listed)</option>
+            <option value="no">no: off-grid type</option>
+          </select>
+        </Field>
+        <Field label="Certifications" width={260}>
+          <input value={it.certifications ?? ''} onChange={(e) => set({ certifications: e.target.value })} placeholder="IEC 61727 / 62116, UL 1741" />
+        </Field>
+        <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>
+          Net-metering jobs only take an inverter marked grid-interactive; the certificate prints on the proposal and goes to the electric company. Read from the
+          workbook remarks at import; verify against the datasheet.
+        </div>
+      </div>
+    )
+  }
+  if (it.category === 'Battery') {
+    return (
+      <div className="row" style={{ marginTop: 6 }}>
+        {num('continuous_a', 'Continuous discharge (A)', 180, 1)}
+        <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>Checked against the inverter's battery current: the bank must deliver the inverter's rated output, and the battery breaker stays at or below this rating.</div>
+      </div>
+    )
+  }
+  return null
+}
+
+function electricalSummary(it: MaterialItem): React.ReactNode {
+  if (isInverter(it.category)) {
+    const parts = [`Grid-interactive: ${gridLabel(it.grid_interactive)}`]
+    if (it.certifications) parts.push(it.certifications)
+    if (it.battery_max_a) parts.push(`battery ${it.battery_max_a} A`)
+    if (it.mppt_count) parts.push(`${it.mppt_count} MPPT${it.mppt_max_a ? ` × ${it.mppt_max_a} A` : ''}`)
+    return (
+      <>
+        <span className={`badge ${it.grid_interactive === true ? 'good' : it.grid_interactive === false ? 'neutral' : 'bad'}`}>{parts[0]}</span>
+        {parts.length > 1 && <div className="muted" style={{ fontSize: 11 }}>{parts.slice(1).join(' · ')}</div>}
+      </>
+    )
+  }
+  if (it.category === 'Battery') return it.continuous_a ? `${it.continuous_a} A continuous` : <span className="muted">no continuous A</span>
+  if (it.category === 'Solar Panel') {
+    const parts = []
+    if (it.voc_v) parts.push(`Voc ${it.voc_v} V`)
+    if (it.isc_a) parts.push(`Isc ${it.isc_a} A`)
+    return parts.length ? parts.join(' · ') : <span className="muted">no Voc/Isc</span>
+  }
+  return ''
 }
 
 function Field({ label, width = 160, children }: { label: string; width?: number; children: React.ReactNode }) {
@@ -83,6 +173,7 @@ function ItemForm({ it, set, codeEditable }: { it: ItemDraft; set: (p: Partial<I
           <input value={it.remarks} onChange={(e) => set({ remarks: e.target.value })} />
         </Field>
       </div>
+      <ElectricalFields it={it} set={set} />
     </div>
   )
 }
@@ -286,19 +377,20 @@ export default function MaterialsPage() {
                 <th>Unit</th>
                 <th className="num">Weight (kg)</th>
                 <th>Panel size</th>
+                <th>Electrical</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="muted">No items match. Try part of the code or name.</td>
+                  <td colSpan={11} className="muted">No items match. Try part of the code or name.</td>
                 </tr>
               )}
               {shown.map((it) =>
                 editing && editing.code === it.code ? (
                   <tr key={it.code}>
-                    <td colSpan={10}>
+                    <td colSpan={11}>
                       <ItemForm it={editing} set={(p) => setEditing({ ...editing, ...p })} codeEditable={false} />
                       <div style={{ marginTop: 8 }}>
                         <button type="button" className="primary" onClick={saveEdit}>
@@ -334,6 +426,7 @@ export default function MaterialsPage() {
                           : <span className="badge bad">no size</span>
                         : ''}
                     </td>
+                    <td data-label="Electrical">{electricalSummary(it)}</td>
                     <td style={{ whiteSpace: 'nowrap' }} className="cell-actions">
                       <button type="button" className="toggle link" onClick={() => setEditing(it)}>
                         Edit
