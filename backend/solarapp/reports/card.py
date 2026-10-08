@@ -57,11 +57,10 @@ def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_ste
     f_small, f_body, f_body_b, f_head, f_title, f_big = _font(600, 28), _font(400, 30), _font(600, 32), _font(700, 30), _font(700, 76), _font(700, 80)
     img = Image.new("RGB", (W, 3200), BG)
     d = ImageDraw.Draw(img)
-    # header band
-    d.rectangle([0, 0, W, 300], fill=INK)
-    d.rectangle([0, 300, W, 308], fill=GOLD)
+    # header band: height follows the customer line
     logo_path = ASSETS / "logo-mark.png"
     x0 = P
+    white = None
     if logo_path.exists():
         mark = Image.open(logo_path).convert("RGBA")
         white = Image.new("RGBA", mark.size, (255, 255, 255, 0))
@@ -69,20 +68,26 @@ def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_ste
         alpha = mark.split()[3]
         white.paste((255, 255, 255, 255), mask=alpha)
         white = white.resize((96, 96), Image.LANCZOS)
-        img.paste(white, (P, 56), white)
         x0 = P + 120
+    who = (doc.customer_name or "") + (f"  ·  {doc.address}" if doc.address else "")
+    who_lines = _wrap(d, who, f_body, W - 2 * P)[:2] if who else []
+    when = datetime.now().strftime("%B %d, %Y")
+    band_h = 230 + 40 * len(who_lines) + 44
+    d.rectangle([0, 0, W, band_h], fill=INK)
+    d.rectangle([0, band_h, W, band_h + 8], fill=GOLD)
+    if logo_path.exists():
+        img.paste(white, (P, 56), white)
     d.text((x0, 62), (company.get("company_name") or "PL Development Inc.").upper(), font=f_small, fill=GOLD)
     d.text((x0, 104), "Roof Potential Check", font=f_title, fill="#ffffff")
-    who = (doc.customer_name or "") + (f"  ·  {doc.address}" if doc.address else "")
-    d.text((P, 212), _wrap(d, who, f_body, W - 2 * P)[0] if who else "", font=f_body, fill="#b8b8b2")
-    when = datetime.now().strftime("%B %d, %Y")
-    d.text((P, 254), when, font=f_body, fill="#b8b8b2")
-    y = 308 + 56
+    for j, line in enumerate(who_lines):
+        d.text((P, 212 + j * 40), line, font=f_body, fill="#b8b8b2")
+    d.text((P, 212 + 40 * len(who_lines) + 4), when, font=f_body, fill="#b8b8b2")
+    y = band_h + 8 + 56
 
     # big numbers
     col_w = (W - 2 * P - 40) // 3
     monthly = round(prod["avg_monthly_kwh"] / 10) * 10
-    for i, (val, lab) in enumerate([(f"{prod['total_panels']}", "panels fit"), (f"{prod['system_kwp']:.2f}", "kWp system size"), (f"≈ {monthly:,.0f}", "kWh in a typical month")]):
+    for i, (val, lab) in enumerate([(f"{prod['total_panels']}", "panels fit"), (f"{prod['system_kwp']:.2f}", "kWp system size"), (f"{monthly:,.0f}", "kWh in a typical month, about")]):
         cx = P + i * (col_w + 20)
         d.rounded_rectangle([cx, y, cx + col_w, y + 190], radius=16, fill=FIELD)
         d.text((cx + 24, y + 22), val, font=f_big, fill=INK)
