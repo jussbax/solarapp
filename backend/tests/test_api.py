@@ -327,3 +327,22 @@ def test_estimate_only_host_refuses_the_back_office(tmp_path, monkeypatch):
         # the back office hostname is untouched
         assert c.post("/api/auth/login", json={"username": "u", "password": "p"}, headers={"host": "solar.pldevinc.com"}).status_code == 200
         assert "estimate_url" in c.get("/api/quick/status").json()
+
+
+def test_static_route_never_leaves_the_build_folder(tmp_path):
+    """A path with parent segments must not read files outside the built frontend."""
+    from fastapi.testclient import TestClient
+    from solarapp.config import Settings
+    from solarapp.main import create_app
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>app</html>")
+    (dist / "estimate.html").write_text("<html>estimate</html>")
+    (dist / "ok.txt").write_text("served")
+    (tmp_path / "secret.txt").write_text("private")
+    settings = Settings(data_dir=tmp_path / "data", app_username="u", app_password="p", secret_key="s" * 32, static_dir=dist)
+    with TestClient(create_app(settings)) as c:
+        assert c.get("/ok.txt").text == "served"
+        for probe in ("/..%2fsecret.txt", "/%2e%2e/secret.txt", "/assets/..%2f..%2fsecret.txt", "/a/..%2f..%2fsecret.txt"):
+            r = c.get(probe)
+            assert "private" not in r.text, probe

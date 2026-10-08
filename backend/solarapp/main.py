@@ -65,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     static = settings.static_dir or Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
     index = static / "index.html"
     estimate_page = static / "estimate.html"
+    static_root = static.resolve()
 
     def estimate_html() -> Response:
         """The public page, with absolute addresses in its link-preview tags when the public address is known."""
@@ -87,8 +88,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             host = (request.headers.get("host") or "").split(":")[0].lower()
             if estimate_page.is_file() and (path in ("estimate", "estimate/", "quick") or (path == "" and host in public_hosts)):
                 return estimate_html()  # public page: its own bundle, no login shell
-            candidate = static / path
-            if path and candidate.is_file():
+            # only files inside the build folder are ever served; a path that resolves outside it falls through to the app shell
+            candidate = (static / path).resolve()
+            if path and candidate.is_file() and static_root in candidate.parents:
                 return FileResponse(candidate)
             return FileResponse(index)
 
