@@ -99,12 +99,12 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
             <YAxis unit=" kW" />
             <Tooltip />
             <Legend />
-            <Area dataKey="Solar" fill="#f3d47a" stroke="#d9b24a" type="monotone" />
-            <Bar dataKey={deficitLabel} stackId="s" fill="#c0392b" />
-            <Bar dataKey="From battery" stackId="s" fill="#5b8def" />
+            <Area dataKey="Solar" fill="#C9A227" fillOpacity={0.35} stroke="#C9A227" type="monotone" />
+            <Bar dataKey={deficitLabel} stackId="s" fill="#c84f2b" />
+            <Bar dataKey="From battery" stackId="s" fill="#2f5fd8" />
             <Bar dataKey="To battery" stackId="t" fill="#a9c4f5" />
             <Bar dataKey={surplusLabel} stackId="t" fill="#cfd8d8" />
-            <Line dataKey="Load" stroke="#1d2b2b" strokeWidth={2} dot={false} type="monotone" />
+            <Line dataKey="Load" stroke="#111111" strokeWidth={2} dot={false} type="monotone" />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

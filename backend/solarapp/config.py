@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     app_username: str = "admin"
     app_password: str = "change-me"
     secret_key: str = "change-me-to-a-long-random-string"
-    company_name: str = "Your Solar Company"
-    company_contact: str = ""
+    company_name: str = "PL Development Inc."
+    company_contact: str = "Pila, Laguna"
     static_dir: Optional[Path] = None  # built frontend (dist); served at /
     session_hours: int = 24 * 14
 

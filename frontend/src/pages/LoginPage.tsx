@@ -23,6 +23,11 @@ export default function LoginPage({ onLogin }: { onLogin: (user: string) => void
 
   return (
     <form className="card login" onSubmit={submit}>
+      <div className="logo">
+        <img src="/brand/logo-mark.png" alt="PL Development" />
+        <span className="name">PL Development</span>
+        <span className="tag">Solar assessment</span>
+      </div>
       <h2>Sign in</h2>
       <div className="field">
         <label>Username</label>

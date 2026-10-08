@@ -20,16 +20,17 @@ from reportlab.lib.units import mm  # noqa: E402
 from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
 
 from ..schemas import AssessmentDoc  # noqa: E402
+from . import brand  # noqa: E402
 
 KIND_LABEL = {"off_grid": "Off-grid solar with battery (no grid import)", "net_metering": "Grid-tied solar with net metering", "combination": "Hybrid solar with battery and net metering"}
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-ACCENT = colors.HexColor("#2b7a78")
-ACCENT_LIGHT = colors.HexColor("#e6f2f2")
-INK = colors.HexColor("#222222")
-MUTED = colors.HexColor("#555555")
-LINE = colors.HexColor("#cfd8d8")
-# chart colours validated for colour-blind separation on a light surface
-C_NOW, C_SOLAR = "#c84f2b", "#0b9b8d"
+ACCENT = brand.BLACK
+ACCENT_LIGHT = brand.OFF_WHITE
+GOLD = brand.GOLD
+INK = brand.GRAY
+MUTED = brand.MUTED
+LINE = brand.LINE
+C_NOW, C_SOLAR = brand.C_ORANGE, brand.C_GOLD
 
 
 def php(v: float) -> str:
@@ -94,29 +95,32 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     pdf = SimpleDocTemplate(buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
                             title="Solar proposal", author=company.get("company_name", ""))
     ss = getSampleStyleSheet()
-    brand = ParagraphStyle("brand", parent=ss["Normal"], fontName="Helvetica-Bold", fontSize=16, leading=19, textColor=ACCENT)
-    sub = ParagraphStyle("sub", parent=ss["Normal"], fontSize=8, leading=10, textColor=MUTED)
-    h2 = ParagraphStyle("h2", parent=ss["Normal"], fontName="Helvetica-Bold", fontSize=9.5, leading=12, textColor=colors.white)
-    body = ParagraphStyle("body", parent=ss["Normal"], fontSize=8.5, leading=11, textColor=INK)
-    small = ParagraphStyle("small", parent=ss["Normal"], fontSize=7, leading=9, textColor=MUTED)
-    cell = ParagraphStyle("cell", parent=ss["Normal"], fontSize=8, leading=10, textColor=INK)
+    F, FS, FB = brand.fonts()
+    brand_style = ParagraphStyle("brand", parent=ss["Normal"], fontName=FB, fontSize=15, leading=18, textColor=ACCENT)
+    sub = ParagraphStyle("sub", parent=ss["Normal"], fontName=F, fontSize=8, leading=10, textColor=MUTED)
+    h2 = ParagraphStyle("h2", parent=ss["Normal"], fontName=FB, fontSize=9.5, leading=12, textColor=colors.white)
+    body = ParagraphStyle("body", parent=ss["Normal"], fontName=F, fontSize=8.5, leading=11, textColor=INK)
+    small = ParagraphStyle("small", parent=ss["Normal"], fontName=F, fontSize=7, leading=9, textColor=MUTED)
+    cell = ParagraphStyle("cell", parent=ss["Normal"], fontName=F, fontSize=8, leading=10, textColor=INK)
     cell_r = ParagraphStyle("cell_r", parent=cell, alignment=2)
-    big = ParagraphStyle("big", parent=ss["Normal"], fontName="Helvetica-Bold", fontSize=20, leading=24, textColor=colors.white, alignment=2)
-    big_lbl = ParagraphStyle("big_lbl", parent=ss["Normal"], fontSize=8, leading=10, textColor=colors.white)
+    big = ParagraphStyle("big", parent=ss["Normal"], fontName=FB, fontSize=20, leading=24, textColor=GOLD, alignment=2)
+    big_lbl = ParagraphStyle("big_lbl", parent=ss["Normal"], fontName=F, fontSize=8, leading=10, textColor=colors.white)
     today = datetime.now()
     valid = today + timedelta(days=int(pricing.get("quotation_validity_days") or 15))
 
     def section(title: str, width: float = 184 * mm) -> Table:
         t = Table([[Paragraph(title, h2)]], colWidths=[width])
-        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), ACCENT), ("LEFTPADDING", (0, 0), (-1, -1), 6), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), ACCENT), ("LINEBEFORE", (0, 0), (0, -1), 3, GOLD), ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
         return t
 
     def kv(rows: list[list], widths: list[float], bold_last: bool = False) -> Table:
-        data = [[Paragraph(str(a), cell), Paragraph(str(b), cell_r)] for a, b in rows]
+        cell_b = ParagraphStyle("cell_b", parent=cell, fontName=FB)
+        cell_rb = ParagraphStyle("cell_rb", parent=cell_r, fontName=FB)
+        data = [[Paragraph(str(a), cell_b if (bold_last and i == len(rows) - 1) else cell), Paragraph(str(b), cell_rb if (bold_last and i == len(rows) - 1) else cell_r)] for i, (a, b) in enumerate(rows)]
         t = Table(data, colWidths=widths)
         st = [("LINEBELOW", (0, 0), (-1, -2), 0.3, LINE), ("TOPPADDING", (0, 0), (-1, -1), 2.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5), ("VALIGN", (0, 0), (-1, -1), "TOP")]
         if bold_last:
-            st += [("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"), ("BACKGROUND", (0, -1), (-1, -1), ACCENT_LIGHT)]
+            st += [("BACKGROUND", (0, -1), (-1, -1), brand.GOLD_BG), ("LINEABOVE", (0, -1), (-1, -1), 0.8, GOLD)]
         t.setStyle(TableStyle(st))
         return t
 
@@ -127,12 +131,13 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     ]
     rt = Table([[Paragraph(a, small), Paragraph(f"<b>{b}</b>", cell_r)] for a, b in right], colWidths=[26 * mm, 32 * mm])
     rt.setStyle(TableStyle([("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
-    left = [Paragraph(company.get("company_name") or "Solar proposal", brand)]
+    left = [Paragraph(company.get("company_name") or "Solar proposal", brand_style)]
     if company.get("company_contact"):
         left.append(Paragraph(company["company_contact"], sub))
-    left.append(Paragraph("SOLAR SYSTEM PROPOSAL", ParagraphStyle("t", parent=sub, fontName="Helvetica-Bold", textColor=INK, fontSize=9, spaceBefore=4)))
-    head = Table([[left, rt]], colWidths=[118 * mm, 64 * mm])
-    head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), 1.2, ACCENT), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
+    left.append(Paragraph("SOLAR SYSTEM PROPOSAL", ParagraphStyle("t", parent=sub, fontName=FB, textColor=GOLD, fontSize=9, spaceBefore=4)))
+    mark = brand.logo(14 * mm)
+    head = Table([[mark or "", left, rt]], colWidths=[18 * mm, 100 * mm, 64 * mm])
+    head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), 1.5, GOLD), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LEFTPADDING", (0, 0), (0, 0), 0)]))
     story.append(head)
     story.append(Spacer(1, 5))
 
@@ -235,8 +240,8 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     stub = Table(stub_rows, colWidths=[104 * mm, 36 * mm, 44 * mm])
     stub.setStyle(TableStyle([
         ("LINEABOVE", (0, 0), (-1, 0), 0.6, MUTED, None, (3, 3)),
-        ("FONTSIZE", (0, 0), (-1, -1), 8), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("TEXTCOLOR", (0, 0), (-1, 0), ACCENT),
-        ("ALIGN", (2, 0), (2, -1), "RIGHT"), ("LINEBELOW", (0, 1), (-1, -2), 0.3, LINE), ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8), ("FONTNAME", (0, 0), (-1, -1), F), ("FONTNAME", (0, 0), (-1, 0), FB), ("TEXTCOLOR", (0, 0), (-1, 0), brand.GOLD_DARK),
+        ("ALIGN", (2, 0), (2, -1), "RIGHT"), ("LINEBELOW", (0, 1), (-1, -2), 0.3, LINE), ("FONTNAME", (0, -1), (-1, -1), FB),
         ("TOPPADDING", (0, 0), (-1, 0), 8), ("BACKGROUND", (0, -1), (-1, -1), ACCENT_LIGHT),
     ]))
     story.append(Paragraph(f"Please keep this stub for your payments. Proposal {proposal_no or '-'} for {doc.customer_name or '-'}.", small))
@@ -247,22 +252,22 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     story.append(section("DETAILS OF CHARGES"))
     rows = [["Item", "Qty", "Unit", "Amount"]]
     styles = [
-        ("FONTSIZE", (0, 0), (-1, -1), 8), ("BACKGROUND", (0, 0), (-1, 0), ACCENT_LIGHT), ("LINEBELOW", (0, 0), (-1, -1), 0.3, LINE),
+        ("FONTSIZE", (0, 0), (-1, -1), 8), ("FONTNAME", (0, 0), (-1, -1), F), ("BACKGROUND", (0, 0), (-1, 0), ACCENT_LIGHT), ("LINEBELOW", (0, 0), (-1, -1), 0.3, LINE),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("ALIGN", (3, 0), (3, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("TOPPADDING", (0, 0), (-1, -1), 2.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
     ]
     for s in cust["sections"]:
         rows.append([s["label"], "", "", ""])
         r = len(rows) - 1
-        styles += [("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"), ("SPAN", (0, r), (2, r)), ("TEXTCOLOR", (0, r), (-1, r), ACCENT)]
+        styles += [("FONTNAME", (0, r), (-1, r), FB), ("SPAN", (0, r), (2, r)), ("TEXTCOLOR", (0, r), (-1, r), brand.GOLD_DARK)]
         for i in s.get("items", []):
             rows.append([Paragraph(i["name"], cell), _qty(i["qty"]), i.get("unit", ""), php(i["amount"])])
         rows.append([f"{s['label']} subtotal", "", "", php(s["amount"])])
         r = len(rows) - 1
-        styles += [("FONTNAME", (3, r), (3, r), "Helvetica-Bold"), ("SPAN", (0, r), (2, r)), ("ALIGN", (0, r), (0, r), "RIGHT")]
+        styles += [("FONTNAME", (3, r), (3, r), FB), ("SPAN", (0, r), (2, r)), ("ALIGN", (0, r), (0, r), "RIGHT")]
     rows.append(["TOTAL CONTRACT PRICE, VAT INCLUSIVE", "", "", php(cust["total"])])
     r = len(rows) - 1
-    styles += [("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"), ("BACKGROUND", (0, r), (-1, r), ACCENT_LIGHT), ("SPAN", (0, r), (2, r))]
+    styles += [("FONTNAME", (0, r), (-1, r), FB), ("BACKGROUND", (0, r), (-1, r), ACCENT_LIGHT), ("SPAN", (0, r), (2, r))]
     dt = Table(rows, colWidths=[116 * mm, 14 * mm, 20 * mm, 34 * mm], repeatRows=1)
     dt.setStyle(TableStyle(styles))
     story.append(dt)
@@ -275,7 +280,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
             when = _d(e["date"]) + (f" to {_d(e['end'])}" if e.get("end") and e["end"] != e["date"] else "")
             srows.append([when, Paragraph(e["label"], cell)])
         st2 = Table(srows, colWidths=[50 * mm, 134 * mm])
-        st2.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 8), ("BACKGROUND", (0, 0), (-1, 0), ACCENT_LIGHT), ("LINEBELOW", (0, 0), (-1, -1), 0.3, LINE), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        st2.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 8), ("FONTNAME", (0, 0), (-1, -1), F), ("BACKGROUND", (0, 0), (-1, 0), ACCENT_LIGHT), ("LINEBELOW", (0, 0), (-1, -1), 0.3, LINE), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
         story.append(st2)
     pdf.build(story)
     return buf.getvalue()

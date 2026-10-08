@@ -76,8 +76,8 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
             <YAxis />
             <Tooltip />
             <Legend />
-            <Bar dataKey="This roof" fill="#2b7a78" />
-            <Bar dataKey="PVGIS reference" fill="#b9c9c9" />
+            <Bar dataKey="This roof" fill="#C9A227" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="PVGIS reference" fill="#2f5fd8" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

@@ -11,6 +11,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from ..schemas import AssessmentDoc
+from . import brand
 
 
 def php(v: float) -> str:
@@ -28,17 +29,21 @@ def build_program_pdf(doc: AssessmentDoc, results: dict, company: dict) -> bytes
     pdf = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
                             title="Program of works", author=company.get("company_name", ""))
     ss = getSampleStyleSheet()
-    h1 = ParagraphStyle("h1", parent=ss["Title"], fontSize=16, spaceAfter=2, alignment=0)
-    h2 = ParagraphStyle("h2", parent=ss["Heading2"], fontSize=11.5, spaceBefore=8, spaceAfter=4)
-    body = ParagraphStyle("body", parent=ss["Normal"], fontSize=9, leading=12)
-    small = ParagraphStyle("small", parent=ss["Normal"], fontSize=7.5, leading=10, textColor=colors.HexColor("#555555"))
-    cell = ParagraphStyle("cell", parent=ss["Normal"], fontSize=7.5, leading=9.5)
+    F, FS, FB = brand.fonts()
+    h1 = ParagraphStyle("h1", parent=ss["Title"], fontName=FB, fontSize=15, leading=18, spaceAfter=2, alignment=0, textColor=brand.BLACK)
+    h2 = ParagraphStyle("h2", parent=ss["Heading2"], fontName=FB, fontSize=11, spaceBefore=8, spaceAfter=4, textColor=brand.BLACK)
+    body = ParagraphStyle("body", parent=ss["Normal"], fontName=F, fontSize=9, leading=12, textColor=brand.GRAY)
+    small = ParagraphStyle("small", parent=ss["Normal"], fontName=F, fontSize=7.5, leading=10, textColor=brand.MUTED)
+    cell = ParagraphStyle("cell", parent=ss["Normal"], fontName=F, fontSize=7.5, leading=9.5, textColor=brand.GRAY)
     grid = TableStyle([
-        ("FONTSIZE", (0, 0), (-1, -1), 8), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef3f3")),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8), ("FONTNAME", (0, 0), (-1, -1), F), ("FONTNAME", (0, 0), (-1, 0), FB), ("BACKGROUND", (0, 0), (-1, 0), brand.OFF_WHITE),
+        ("GRID", (0, 0), (-1, -1), 0.25, brand.LINE), ("VALIGN", (0, 0), (-1, -1), "TOP"),
     ])
 
-    story = [Paragraph(f"Program of works: {doc.customer_name or '-'}", h1)]
+    mark = brand.logo(12 * mm)
+    head = Table([[mark or "", Paragraph(f"Program of works: {doc.customer_name or '-'}", h1)]], colWidths=[16 * mm, 240 * mm])
+    head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), 1.5, brand.GOLD), ("LEFTPADDING", (0, 0), (0, 0), 0)]))
+    story = [head]
     story.append(Paragraph(f"{doc.address} · {pricing['totals']['kwp']:.2f} kWp · contract PHP {php(pricing['totals']['contract_rounded'])} · internal, not for the customer", small))
     story.append(Paragraph("Schedule", h2))
     rows = [["Date", "Until", "Activity", "Customer sees"]]

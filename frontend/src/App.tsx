@@ -41,7 +41,13 @@ export default function App() {
   return (
     <>
       <div className="topbar">
-        <Link to="/">Solar Roof Simulator</Link>
+        <Link to="/" className="brand">
+          <img src="/brand/logo-mark-white.png" alt="" />
+          <span>
+            <span className="name">PL Development</span>
+            <span className="tag">Solar assessment</span>
+          </span>
+        </Link>
         {user && (
           <div className="right">
             <Link to="/materials">Materials</Link>

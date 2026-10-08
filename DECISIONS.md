@@ -323,5 +323,20 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   stub with the milestones; details of charges and the schedule on page
   two. Structure only: the company's own name and colours, no utility
   logo or colours, so it cannot be mistaken for the utility's document.
+
+## Brand
+
+- PL Development brand throughout: primary black #111111, secondary gold
+  #C9A227, off white #F5F5F3, dark gray #2D2D2D, Montserrat. The web app
+  self-hosts Montserrat (bundled at build time, no outside call) and uses
+  the logo mark in the top bar, the login page, the favicon and the
+  home-screen icons; a web manifest lets Android and iOS install it as a
+  full-screen app. The PDFs register the bundled Montserrat TTFs (converted
+  from the same package) with Helvetica as the fallback, carry the logo
+  mark in the header, black section bars with a gold edge, and the gold
+  for the headline numbers. Chart colours: gold for the headline series,
+  blue for a reference or balance, orange for a cost; the trio passes the
+  colour-blind separation checks, and the gold's low contrast on a light
+  surface is relieved by the tables under every chart.
 - Not yet: close-out actuals, project dashboard, the simplified quick
   estimate.

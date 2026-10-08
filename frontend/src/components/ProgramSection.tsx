@@ -11,7 +11,7 @@ const EVENTS: { id: string; label: string }[] = [
   { id: 'commissioning', label: 'commissioning' }, { id: 'cfei', label: 'CFEI' }, { id: 'meter_installed', label: 'meter installed' },
 ]
 // colours validated for colour-blind separation and contrast on the light surface
-const C_IN = '#0b9b8d'
+const C_IN = '#C9A227'
 const C_OUT = '#c84f2b'
 const C_BAL = '#2f5fd8'
 

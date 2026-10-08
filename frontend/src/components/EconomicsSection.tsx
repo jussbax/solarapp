@@ -6,7 +6,7 @@ import NumberInput from './NumberInput'
 const php0 = (v: number | null | undefined) => (v == null ? '-' : `₱${Math.round(v).toLocaleString()}`)
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 // colours validated for colour-blind separation and contrast on the light surface
-const C_SAVE = '#0b9b8d'
+const C_SAVE = '#C9A227'
 const C_COST = '#c84f2b'
 const C_CUM = '#2f5fd8'
 

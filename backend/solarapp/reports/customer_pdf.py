@@ -15,6 +15,7 @@ from reportlab.lib.units import mm  # noqa: E402
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
 
 from ..schemas import AssessmentDoc  # noqa: E402
+from . import brand  # noqa: E402
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
@@ -26,7 +27,7 @@ def compass(azimuth: float) -> str:
 
 def _chart(monthly: list[float]) -> Image:
     fig, ax = plt.subplots(figsize=(6.6, 2.6), dpi=150)
-    ax.bar(MONTHS, monthly, color="#2b7a78")
+    ax.bar(MONTHS, monthly, color=brand.C_GOLD)
     ax.set_ylabel("kWh per month")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -50,16 +51,21 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     pdf = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=16 * mm,
                             title="Solar roof assessment", author=company.get("company_name", ""))
     ss = getSampleStyleSheet()
-    h1 = ParagraphStyle("h1", parent=ss["Title"], fontSize=18, spaceAfter=2)
-    sub = ParagraphStyle("sub", parent=ss["Normal"], textColor=colors.HexColor("#555555"), fontSize=9)
-    h2 = ParagraphStyle("h2", parent=ss["Heading2"], fontSize=12, spaceBefore=8, spaceAfter=4)
-    body = ParagraphStyle("body", parent=ss["Normal"], fontSize=9.5, leading=13)
-    small = ParagraphStyle("small", parent=ss["Normal"], fontSize=8, leading=11, textColor=colors.HexColor("#555555"))
+    F, FS, FB = brand.fonts()
+    h1 = ParagraphStyle("h1", parent=ss["Title"], fontName=FB, fontSize=16, leading=19, spaceAfter=2, alignment=0, textColor=brand.BLACK)
+    sub = ParagraphStyle("sub", parent=ss["Normal"], fontName=F, textColor=brand.MUTED, fontSize=8.5)
+    h2 = ParagraphStyle("h2", parent=ss["Heading2"], fontName=FB, fontSize=11.5, spaceBefore=10, spaceAfter=4, textColor=brand.BLACK)
+    body = ParagraphStyle("body", parent=ss["Normal"], fontName=F, fontSize=9.5, leading=13, textColor=brand.GRAY)
+    small = ParagraphStyle("small", parent=ss["Normal"], fontName=F, fontSize=8, leading=11, textColor=brand.MUTED)
 
     story = []
-    story.append(Paragraph(company.get("company_name") or "Solar roof assessment", h1))
+    left = [Paragraph(company.get("company_name") or "Solar roof assessment", h1)]
     if company.get("company_contact"):
-        story.append(Paragraph(company["company_contact"], sub))
+        left.append(Paragraph(company["company_contact"], sub))
+    mark = brand.logo(14 * mm)
+    head = Table([[mark or "", left]], colWidths=[18 * mm, 156 * mm])
+    head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), 1.5, brand.GOLD), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LEFTPADDING", (0, 0), (0, 0), 0)]))
+    story.append(head)
     story.append(Paragraph("Solar roof assessment", h2))
     when = datetime.now().strftime("%d %b %Y")
     story.append(Paragraph(f"Prepared for <b>{doc.customer_name or '-'}</b> on {when}", body))
@@ -77,10 +83,10 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     ]
     t = Table(kpi, colWidths=[70 * mm, 100 * mm])
     t.setStyle(TableStyle([
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#444444")),
-        ("FONTNAME", (1, 0), (1, -1), "Helvetica-Bold"),
-        ("LINEBELOW", (0, 0), (-1, -2), 0.3, colors.HexColor("#dddddd")),
+        ("FONTSIZE", (0, 0), (-1, -1), 10), ("FONTNAME", (0, 0), (-1, -1), F),
+        ("TEXTCOLOR", (0, 0), (0, -1), brand.MUTED),
+        ("FONTNAME", (1, 0), (1, -1), FB),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.3, brand.LINE),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("TOPPADDING", (0, 0), (-1, -1), 5),
     ]))
     story.append(t)
@@ -91,11 +97,11 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     rows.append(["kWh"] + [f"{v:,.0f}" for v in prod["monthly_kwh"]] + [f"{prod['annual_kwh']:,.0f}"])
     mt = Table(rows, colWidths=[14 * mm] + [11.5 * mm] * 12 + [18 * mm])
     mt.setStyle(TableStyle([
-        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef3f3")),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")),
+        ("FONTSIZE", (0, 0), (-1, -1), 7.5), ("FONTNAME", (0, 0), (-1, -1), F),
+        ("BACKGROUND", (0, 0), (-1, 0), brand.OFF_WHITE),
+        ("GRID", (0, 0), (-1, -1), 0.25, brand.LINE),
         ("ALIGN", (1, 0), (-1, -1), "CENTER"),
-        ("FONTNAME", (-1, 1), (-1, 1), "Helvetica-Bold"),
+        ("FONTNAME", (-1, 1), (-1, 1), FB),
     ]))
     story.append(mt)
 
@@ -106,9 +112,9 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
         face_rows.append([f.name, f"{f.length_m:g} x {f.width_m:g}", f"{f.tilt_deg:g} deg", f"{compass(f.azimuth_deg)} ({f.azimuth_deg:g} deg)", str(cnt)])
     ft = Table(face_rows, colWidths=[50 * mm, 35 * mm, 25 * mm, 40 * mm, 20 * mm])
     ft.setStyle(TableStyle([
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef3f3")),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")),
+        ("FONTSIZE", (0, 0), (-1, -1), 9), ("FONTNAME", (0, 0), (-1, -1), F),
+        ("BACKGROUND", (0, 0), (-1, 0), brand.OFF_WHITE),
+        ("GRID", (0, 0), (-1, -1), 0.25, brand.LINE),
         ("ALIGN", (-1, 1), (-1, -1), "CENTER"),
     ]))
     story.append(ft)

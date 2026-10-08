@@ -63,6 +63,15 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    with the company's own branding, carries the charges, savings, payment
    stub, details and schedule.
 
+## Brand
+
+Colours and font live in `frontend/src/styles.css` (CSS variables at the top)
+and `backend/solarapp/reports/brand.py` (PDF colours, fonts, logo). The logo
+files are in `frontend/public/brand/` and `backend/solarapp/reports/assets/`;
+Montserrat is bundled, so the app makes no font requests to the internet.
+The company name and contact line on the documents come from `.env` or the
+Settings page.
+
 ## Deploy on an Ubuntu server with Docker
 
 ```bash
