@@ -776,3 +776,28 @@ chart, and the engineering build order in the plan.
   inverter one hour each) that do not change the labour price; the
   schedule-overrun warning tells the owner when a priced day is no longer
   enough.
+
+## Design and outputs
+
+- The fourth step is "Design and outputs": an index over seven cards in
+  the order an engineer reads them: roof and production (with the plan
+  drawing per face, the sized panels solid), system design (inverter and
+  its certificate, battery with autonomy and loss-of-load, strings, cable
+  gauges and drops, protection, panels per face), quantities (the BOM
+  with its exports), program of works (the Gantt first), cashflow,
+  savings, and documents (every document with its state and reason in one
+  place, with the card's next step beside it). The action bar keeps the
+  status chip, Save and Calculate.
+- The job stage is a pill in the page head, not an input in the schedule
+  card. A new project is a draft until the first Save; a mis-tap leaves no
+  row behind.
+- Hard warnings (an inverter that is not grid-interactive, an unknown
+  certificate, autonomy not met) are red banners; ordinary warnings stay
+  muted. Labels are attached to their inputs; reasons are visible text,
+  not tooltips.
+- Phone: the stale banner is in the flow (the bar has Calculate), the BOM
+  and the payment editor are cards, month tables turn months into rows.
+- Calculate needs one reading set with three readings: the k factor has
+  no default, by the owner's rule that the roof is measured, not assumed.
+  The proposal is refused on test weather on the server as well, like the
+  roof check and the card.

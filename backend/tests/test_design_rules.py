@@ -300,6 +300,8 @@ def test_results_carry_the_meter_figures_faces_and_the_hourly_year(client):
     assert sum(x["panels"] for x in pr["choices"]["rows"]) == sizing["panels"]
     assert not any(w["code"] in ("inverter_not_grid_interactive", "inverter_certificate_unknown") for w in pr["warnings"])
     # the proposal: the meter figure, the certificate and the one honest battery line
+    from tests.conftest import real_weather
+    real_weather(aid)
     pdf = client.get(f"/api/assessments/{aid}/quotation.pdf")
     assert pdf.status_code == 200
     text_ = _pdf_text(pdf.content)
@@ -329,6 +331,8 @@ def test_off_grid_results_and_proposal_say_how_often_the_battery_runs_out(client
         assert f"about {hy['loss_of_load_hours']} hours without power" in line and any(w["code"] in ("autonomy_not_met", "roof_limited") for w in sizing["warnings"])
     else:
         assert "does not run out" in line
+    from tests.conftest import real_weather
+    real_weather(aid)
     text_ = " ".join(_pdf_text(client.get(f"/api/assessments/{aid}/quotation.pdf").content).split())
     assert "Designed to carry 1 evening without sun." in text_ and "Inverter certificate" not in text_
 

@@ -211,7 +211,10 @@ def test_pricing_flow(client):
     assert abs(sum(s["amount"] for s in pr["customer"]["sections"]) - pr["customer"]["total"]) < 0.01
     assert pr["pin_distance"]["extra_km"] > 0 and pr["job_inputs"]["extra_km"] == pr["pin_distance"]["extra_km"]
     assert pr["job_inputs"]["max_days"] == 3  # app pricing settings apply
-    # quotation PDF
+    # quotation PDF (refused on test weather like every customer document; mark the record's weather as real)
+    assert client.get(f"/api/assessments/{aid}/quotation.pdf").status_code == 409
+    from tests.conftest import real_weather
+    real_weather(aid)
     r = client.get(f"/api/assessments/{aid}/quotation.pdf")
     assert r.status_code == 200 and r.content[:4] == b"%PDF"
     assert b"landed" not in r.content.lower()

@@ -193,6 +193,8 @@ def customer_quotation(
 ) -> Response:
     a = _get(session, assessment_id)
     results = _fresh_results(a)
+    if (results.get("dataset") or {}).get("synthetic"):
+        raise HTTPException(status_code=409, detail="Customer documents are disabled while test weather data is in use.")
     if not (results.get("pricing") or {}).get("available"):
         raise HTTPException(status_code=409, detail="Calculate first. Pricing needs the panel linked to the materials list.")
     company = company_settings(session, settings)

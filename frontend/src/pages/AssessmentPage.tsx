@@ -360,7 +360,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   const hasFace = doc.faces.length > 0 && doc.faces.some((f) => f.length_m > 0 && f.width_m > 0)
   const hasPanel = doc.panels.length > 0
   const hasReadings = doc.reading_sets.length > 0
-  const canCalculate = hasPin && hasFace && hasPanel
+  const canCalculate = hasPin && hasFace && hasPanel && hasReadings  // the model needs one reading set for the k factor
 
   const sizing = results?.sizing
   const pricing = results?.pricing
@@ -435,7 +435,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
               <span className={`check-item ${hasPin ? 'done' : ''}`}>{hasPin ? '✓' : '○'} Map pin</span>
               <span className={`check-item ${hasFace ? 'done' : ''}`}>{hasFace ? '✓' : '○'} A roof face</span>
               <span className={`check-item ${hasPanel ? 'done' : ''}`}>{hasPanel ? '✓' : '○'} A panel</span>
-              <span className={`check-item ${hasReadings ? 'done' : ''}`}>{hasReadings ? '✓' : '○'} Roof readings (optional)</span>
+              <span className={`check-item ${hasReadings ? 'done' : ''}`}>{hasReadings ? '✓' : '○'} Roof readings (one set with three readings)</span>
             </div>
           )}
           <div className="card" id="card-site">
@@ -703,11 +703,11 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
           className="primary"
           onClick={compute}
           disabled={!!busy || !status?.pvgis.available || !canCalculate}
-          title={!status?.pvgis.available ? 'Weather data is not downloaded yet' : !canCalculate ? 'Needs a map pin, a roof face and a panel' : 'Saves, then runs the model'}
+          title={!status?.pvgis.available ? 'Weather data is not downloaded yet' : !canCalculate ? 'Needs a map pin, a roof face, a panel and one reading set' : 'Saves, then runs the model'}
         >
           Calculate
         </button>
-        {!results && !canCalculate && <span className="muted bar-note">Needs a map pin, a roof face and a panel.</span>}
+        {!results && !canCalculate && <span className="muted bar-note">Needs a map pin, a roof face, a panel and one reading set.</span>}
         {status && !status.pvgis.available && <span className="muted bar-note">Weather data is not downloaded yet; see Settings.</span>}
       </div>
     </div>

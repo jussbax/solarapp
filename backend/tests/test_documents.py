@@ -84,12 +84,11 @@ def test_every_document_refuses_stale_results_with_one_message(client):
     answers = {name: client.get(f"/api/assessments/{aid}/{name}") for name in ("report.pdf", "quotation.pdf", "program.pdf", "card.png")}
     assert {r.status_code for r in answers.values()} == {409}
     assert {r.json()["detail"] for r in answers.values()} == {STALE}
-    # calculated again: the priced documents build; the customer documents stay off under test weather data
+    # calculated again: the internal program builds; every customer document stays off under test weather data
     assert client.post(f"/api/assessments/{aid}/compute").status_code == 200
-    assert client.get(f"/api/assessments/{aid}/quotation.pdf").status_code == 200
     assert client.get(f"/api/assessments/{aid}/program.pdf").status_code == 200
-    assert "test weather" in client.get(f"/api/assessments/{aid}/report.pdf").json()["detail"]
-    assert "test weather" in client.get(f"/api/assessments/{aid}/card.png").json()["detail"]
+    for name in ("quotation.pdf", "report.pdf", "card.png"):
+        assert "test weather" in client.get(f"/api/assessments/{aid}/{name}").json()["detail"]
     # a record that was never calculated
     fresh = client.post("/api/assessments", json=LAGUNA_DOC).json()["id"]
     assert client.get(f"/api/assessments/{fresh}/program.pdf").json()["detail"] == "Calculate first."
@@ -206,7 +205,9 @@ def test_proposal_prints_the_bom_battery_plain_item_names_and_the_website_estima
     assert "warranties" in what_you_get(res["sizing"], res["program"], True)[-1]
     assert res["program"]["assumptions"][-2].startswith("Assumed: permit approval") and res["program"]["assumptions"][-1].startswith("Assumed for net metering:")
     assert not any("no data yet" in a for a in res["program"]["assumptions"])
-    # the PDF itself
+    # the PDF itself (customer documents need real weather)
+    from tests.conftest import real_weather
+    real_weather(aid)
     text = _pdf_text(client.get(f"/api/assessments/{aid}/quotation.pdf").content)
     assert text.count("Valid until") == 1
     assert "WHAT YOU GET" in text and "Your website estimate on 28 Sep 2026" in text

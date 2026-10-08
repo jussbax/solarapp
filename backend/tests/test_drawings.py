@@ -152,6 +152,8 @@ def test_plan_and_gantt_flowables_render():
 def test_documents_carry_the_drawings(client):
     out = _computed(client, PILA_DOC)
     aid, res = out["id"], out["results"]
+    from tests.conftest import real_weather
+    real_weather(aid)
     q = client.get(f"/api/assessments/{aid}/quotation.pdf")
     assert q.status_code == 200
     text = _pdf_text(q.content)
