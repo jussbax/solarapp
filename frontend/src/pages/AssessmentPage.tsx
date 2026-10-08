@@ -287,11 +287,17 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
           </a>
         )}
         {results && (
-          <a href={pdfAllowed ? api.cardUrl(aid) : undefined} target="_blank" rel="noreferrer" onClick={(e) => !pdfAllowed && e.preventDefault()}>
-            <button disabled={!pdfAllowed} title={!pdfAllowed ? 'Compute with current inputs on real data first' : 'Phone-sized image to send to the customer'}>
-              Roof check card
-            </button>
-          </a>
+          <button
+            disabled={!pdfAllowed}
+            title={!pdfAllowed ? 'Compute with current inputs on real data first' : 'Phone-sized image to send to the customer'}
+            onClick={() => {
+              const t = window.prompt('Next step shown on the card. A date and time help, e.g. "Energy audit: Saturday 18 Oct, 9 am, about an hour".', 'Next step: your free energy audit')
+              if (t === null) return
+              window.open(`${api.cardUrl(aid)}?next_step=${encodeURIComponent(t.trim())}`, '_blank', 'noopener')
+            }}
+          >
+            Roof check card
+          </button>
         )}
         {results && !pdfAllowed && <span className="muted">Documents need a fresh compute on real data.</span>}
         <button className="danger" onClick={remove} disabled={!!busy} style={{ marginLeft: 'auto' }}>

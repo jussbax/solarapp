@@ -85,8 +85,9 @@ def test_sample_job_reproduces_329300(imported):
         assert sec["items"] and sum(i["amount"] for i in sec["items"]) == pytest.approx(sec["amount"])
     mat = cust["sections"][0]["items"]
     assert [i["key"] for i in mat] == ["Solar Panel", "Inverter", "Battery", "Mounting", "Wires and Terminations", "Protective Devices", "Enclosures and Raceways", "Grounding", "Consumables"]
-    assert mat[0]["qty"] == 8 and mat[0]["name"].startswith("Solar panels: 8 x") and mat[3]["unit"] == "lot"
-    assert sum(1 for i in cust["sections"][1]["items"] if i["name"].startswith("Permits and papers")) == 4
+    assert mat[0]["qty"] == 8 and mat[0]["name"].startswith("Solar panels: 8 ×") and mat[3]["unit"] == "lot"
+    assert {i["key"] for i in cust["sections"][1]["items"]} >= {"seal", "permit", "erc", "meter"}  # the permit lines sit under Installation and permits
+    assert [s["label"] for s in cust["sections"]] == ["Materials", "Installation and permits", "Installation tools", "VAT (12%)"]
     assert [i["key"] for i in cust["sections"][1]["items"]] == ["labor", "mobdemob", "ppe", "seal", "permit", "erc", "meter"]
     assert cust["sections"][2]["items"][0]["qty"] == res["labor"]["days"]
 

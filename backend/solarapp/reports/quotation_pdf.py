@@ -1,8 +1,9 @@
 """Customer proposal laid out like a utility statement: header strip, total box, summary of charges,
-consumption chart, system information, savings, payment stub, details on page two.
+bill chart, system information, savings, reminders, payment schedule; details, your questions,
+and the acceptance block on page two.
 
 Structure only: the company's own name and colours, no utility branding. No internal costs,
-markups, freight or labour detail.
+markups, freight or labour detail. Everything the customer sees is in plain words.
 """
 from __future__ import annotations
 
@@ -17,12 +18,13 @@ from reportlab.lib import colors  # noqa: E402
 from reportlab.lib.pagesizes import A4  # noqa: E402
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # noqa: E402
 from reportlab.lib.units import mm  # noqa: E402
-from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
+from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
 
+from ..profile import warranty_lines  # noqa: E402
 from ..schemas import AssessmentDoc  # noqa: E402
 from . import brand  # noqa: E402
 
-KIND_LABEL = {"off_grid": "Off-grid solar with battery (no grid import)", "net_metering": "Grid-tied solar with net metering", "combination": "Hybrid solar with battery and net metering"}
+KIND_LABEL = {"off_grid": "Off-grid solar with battery (no electric bill)", "net_metering": "Solar with net metering, no battery", "combination": "Hybrid solar with battery and net metering"}
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 ACCENT = brand.BLACK
 ACCENT_LIGHT = brand.OFF_WHITE
@@ -37,8 +39,12 @@ def php(v: float) -> str:
     return f"PHP {v:,.2f}"
 
 
+def php0(v: float) -> str:
+    return f"PHP {v:,.0f}"
+
+
 def _d(s: str | None) -> str:
-    return datetime.fromisoformat(s).strftime("%d %b %Y") if s else ""
+    return datetime.fromisoformat(s).strftime("%-d %b %Y") if s else ""
 
 
 def _qty(q: float) -> str:
@@ -46,42 +52,65 @@ def _qty(q: float) -> str:
     return f"{int(q)}" if q.is_integer() else f"{round(q, 1):g}"
 
 
-def _consumption_chart(eco: dict | None, sizing: dict | None, audit: dict | None) -> Image | None:
-    if eco and eco.get("available"):
-        cons = [m["consumption_kwh"] for m in eco["monthly"]]
-        imp = [m["import_kwh"] for m in eco["monthly"]]
-        label_b = "From the grid with solar"
-    elif sizing:
-        cons = [m["consumption_kwh"] for m in sizing["monthly"]]
-        imp = [m["import_kwh"] for m in sizing["monthly"]]
-        label_b = "From the grid with solar"
-    elif audit:
-        days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-        cons = [d * k for d, k in zip(audit["daily_kwh_by_month"], days)]
-        imp, label_b = None, ""
-    else:
-        return None
+def _handle(url: str) -> str:
+    """m.me/page from a Messenger link, facebook.com/page from a page link; the text as typed otherwise."""
+    u = (url or "").strip()
+    for pre in ("https://", "http://", "www."):
+        if u.lower().startswith(pre):
+            u = u[len(pre):]
+    return u.rstrip("/")
+
+
+def contact_line(company: dict) -> str:
+    parts = [company.get("company_name") or "", company.get("address") or ""]
+    if company.get("phone"):
+        parts.append(company["phone"])
+    if company.get("messenger"):
+        parts.append(_handle(company["messenger"]))
+    if company.get("facebook"):
+        parts.append(_handle(company["facebook"]))
+    if company.get("email"):
+        parts.append(company["email"])
+    return " · ".join(p for p in parts if p)
+
+
+def _bill_chart(eco: dict | None, sizing: dict | None, audit: dict | None) -> tuple[Image | None, str]:
+    """Pesos before and after by month when the savings exist; kWh used otherwise."""
     fig, ax = plt.subplots(figsize=(4.2, 2.2), dpi=160)
     x = range(12)
-    ax.bar(x, cons, color=C_NOW, width=0.72, label="Your consumption now")
-    if imp is not None:
-        ax.bar(x, imp, color=C_SOLAR, width=0.72, label=label_b)
+    title = "YOUR BILL, MONTH BY MONTH"
+    if eco and eco.get("available"):
+        before = [m["bill_before"] for m in eco["monthly"]]
+        after = [m["bill_after"] for m in eco["monthly"]]
+        ax.bar([i - 0.2 for i in x], before, color=C_NOW, width=0.4, label="Without solar")
+        ax.bar([i + 0.2 for i in x], after, color=C_SOLAR, width=0.4, label="With solar")
+        ax.set_ylabel("PHP per month", fontsize=6)
+        ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v / 1000:.0f}k" if v >= 1000 else f"{v:.0f}"))
+    else:
+        title = "YOUR ELECTRICITY USE"
+        if sizing:
+            cons = [m["consumption_kwh"] for m in sizing["monthly"]]
+        elif audit:
+            days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+            cons = [d * k for d, k in zip(audit["daily_kwh_by_month"], days)]
+        else:
+            plt.close(fig)
+            return None, ""
+        ax.bar(x, cons, color=C_NOW, width=0.72, label="kWh used")
+        ax.set_ylabel("kWh per month", fontsize=6)
     ax.set_xticks(list(x))
     ax.set_xticklabels(MONTHS, fontsize=6)
     ax.tick_params(axis="y", labelsize=6)
-    ax.set_ylabel("kWh per month", fontsize=6)
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
     ax.grid(axis="y", alpha=0.3)
     ax.legend(fontsize=6, frameon=False, loc="upper left", bbox_to_anchor=(0, 1.12), ncol=2)
-    for i, v in enumerate(cons):
-        ax.text(i, v, f"{v:,.0f}", ha="center", va="bottom", fontsize=5, color="#555555")
     fig.tight_layout()
     buf = io.BytesIO()
     fig.savefig(buf, format="png")
     plt.close(fig)
     buf.seek(0)
-    return Image(buf, width=84 * mm, height=44 * mm)
+    return Image(buf, width=84 * mm, height=44 * mm), title
 
 
 def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, proposal_no: str = "") -> bytes:
@@ -91,11 +120,24 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     prog = results.get("program") or {}
     cust = pricing["customer"]
     lines = pricing["lines"]
+    _sec = {s["key"]: float(s["amount"]) for s in cust["sections"]}
+    _base = _sec.get("materials", 0) + _sec.get("labor", 0) + _sec.get("equipment", 0)
+    vat_rate = (_sec.get("tax", 0) / _base) if _base > 0 else 0.12
     buf = io.BytesIO()
-    pdf = SimpleDocTemplate(buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
+    footer = contact_line(company)
+    F, FS, FB = brand.fonts()
+
+    def on_page(canvas, d) -> None:
+        canvas.saveState()
+        canvas.setFont(F, 6.5)
+        canvas.setFillColor(MUTED)
+        canvas.drawString(14 * mm, 8 * mm, footer[:150])
+        canvas.drawRightString(A4[0] - 14 * mm, 8 * mm, f"Proposal {proposal_no or '-'} · page {d.page}")
+        canvas.restoreState()
+
+    pdf = SimpleDocTemplate(buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=14 * mm,
                             title="Solar proposal", author=company.get("company_name", ""))
     ss = getSampleStyleSheet()
-    F, FS, FB = brand.fonts()
     brand_style = ParagraphStyle("brand", parent=ss["Normal"], fontName=FB, fontSize=15, leading=18, textColor=ACCENT)
     sub = ParagraphStyle("sub", parent=ss["Normal"], fontName=F, fontSize=8, leading=10, textColor=MUTED)
     h2 = ParagraphStyle("h2", parent=ss["Normal"], fontName=FB, fontSize=9.5, leading=12, textColor=colors.white)
@@ -105,8 +147,10 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     cell_r = ParagraphStyle("cell_r", parent=cell, alignment=2)
     big = ParagraphStyle("big", parent=ss["Normal"], fontName=FB, fontSize=20, leading=24, textColor=GOLD, alignment=2)
     big_lbl = ParagraphStyle("big_lbl", parent=ss["Normal"], fontName=F, fontSize=8, leading=10, textColor=colors.white)
+    q_style = ParagraphStyle("q", parent=body, fontName=FB, spaceBefore=4)
     today = datetime.now()
-    valid = today + timedelta(days=int(pricing.get("quotation_validity_days") or 15))
+    validity = int(pricing.get("quotation_validity_days") or 15)
+    valid = today + timedelta(days=validity)
 
     def section(title: str, width: float = 184 * mm) -> Table:
         t = Table([[Paragraph(title, h2)]], colWidths=[width])
@@ -126,14 +170,13 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
 
     story = []
     # ---- header strip: company left, proposal number, dates right
-    right = [
-        ["Proposal No.", proposal_no or "-"], ["Statement date", today.strftime("%d %b %Y")], ["Valid until", valid.strftime("%d %b %Y")],
-    ]
+    right = [["Proposal No.", proposal_no or "-"], ["Proposal date", today.strftime("%-d %b %Y")], ["Valid until", valid.strftime("%-d %b %Y")]]
     rt = Table([[Paragraph(a, small), Paragraph(f"<b>{b}</b>", cell_r)] for a, b in right], colWidths=[26 * mm, 32 * mm])
     rt.setStyle(TableStyle([("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
     left = [Paragraph(company.get("company_name") or "Solar proposal", brand_style)]
-    if company.get("company_contact"):
-        left.append(Paragraph(company["company_contact"], sub))
+    contact = company.get("company_contact") or contact_line({k: v for k, v in company.items() if k != "company_name"})
+    if contact:
+        left.append(Paragraph(contact, sub))
     left.append(Paragraph("SOLAR SYSTEM PROPOSAL", ParagraphStyle("t", parent=sub, fontName=FB, textColor=GOLD, fontSize=9, spaceBefore=4)))
     mark = brand.logo(14 * mm)
     head = Table([[mark or "", left, rt]], colWidths=[18 * mm, 100 * mm, 64 * mm])
@@ -141,14 +184,20 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     story.append(head)
     story.append(Spacer(1, 5))
 
-    # ---- customer block and total box
+    # ---- customer block and total box, with the solar and battery parts named
+    mat = next((s for s in cust["sections"] if s["key"] == "materials"), {"items": []})
+    battery_item = next((i for i in mat["items"] if i["key"] == "Battery"), None)
+    battery_part = float(battery_item["amount"]) * (1 + vat_rate) if battery_item else 0.0
     cust_block = [
         Paragraph(f"<b>{doc.customer_name or '-'}</b>", ParagraphStyle("cn", parent=body, fontSize=10, leading=13)),
         Paragraph(doc.address or "", body),
-        Paragraph(f"Site {doc.lat:.5f}, {doc.lon:.5f}" if doc.lat is not None and doc.lon is not None else "", small),
+        Paragraph(f"Map pin {doc.lat:.5f}, {doc.lon:.5f}" if doc.lat is not None and doc.lon is not None else "", small),
     ]
-    tot = Table([[Paragraph("TOTAL CONTRACT PRICE, VAT INCLUSIVE", big_lbl)], [Paragraph(php(cust["total"]), big)],
-                 [Paragraph(f"Valid until {valid.strftime('%d %b %Y')}", ParagraphStyle("bl2", parent=big_lbl, alignment=2))]], colWidths=[64 * mm])
+    tot_rows = [[Paragraph("TOTAL CONTRACT PRICE (VAT INCLUDED)", big_lbl)], [Paragraph(php(cust["total"]), big)]]
+    if battery_part > 0:
+        tot_rows.append([Paragraph(f"Solar system {php0(cust['total'] - battery_part)} · battery for brownouts {php0(battery_part)}", ParagraphStyle("bl2", parent=big_lbl, alignment=2))])
+    tot_rows.append([Paragraph(f"Valid until {valid.strftime('%-d %b %Y')}", ParagraphStyle("bl3", parent=big_lbl, alignment=2))])
+    tot = Table(tot_rows, colWidths=[64 * mm])
     tot.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), ACCENT), ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
                              ("TOPPADDING", (0, 0), (0, 0), 6), ("BOTTOMPADDING", (0, -1), (0, -1), 6)]))
     cb = Table([[cust_block, tot]], colWidths=[118 * mm, 64 * mm])
@@ -156,75 +205,79 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     story.append(cb)
     story.append(Spacer(1, 6))
 
-    # ---- two columns: left consumption chart + system information; right summary of charges + savings
+    # ---- two columns: left chart + system information; right summary of charges + savings
     inv = sizing.get("inverter") or {}
     bat = sizing.get("battery") or {}
     panel = pricing.get("panel") or {}
     n_panels = int(next((l["qty"] for l in lines if l.get("category") == "Solar Panel"), 0))
+    wp = panel.get("watt_peak") or next((l.get("rating") for l in lines if l.get("category") == "Solar Panel"), 0) or 0
     sysinfo = [
         ["System type", KIND_LABEL.get(sizing.get("kind", ""), "Solar PV system")],
-        ["Solar panels", f"{n_panels} x {panel.get('name') or (str(panel.get('watt_peak', 0)) + ' W panel')}"],
-        ["System size", f"{pricing['totals']['kwp']:.2f} kWp"],
-        ["Inverter", f"{int(inv.get('units', 1))} x {inv.get('size_kw', 0):g} kW hybrid" if inv else "-"],
+        ["Solar panels", f"{n_panels} × {wp:.0f} W" if wp else f"{n_panels}"],
+        ["System size", f"{pricing['totals']['kwp']:.2f} kWp (the size of the solar array)"],
+        ["Inverter", (f"{int(inv.get('units', 1))} × " if int(inv.get("units", 1) or 1) > 1 else "") + f"{inv.get('size_kw', 0):g} kW hybrid inverter" if inv else "-"],
     ]
     if bat.get("installed_kwh", 0) > 0 and sizing.get("kind") != "net_metering":
-        bl = next((l for l in lines if l.get("category") == "Battery"), None)
-        sysinfo.append(["Battery", f"{_qty(bl['qty'])} x {bl['name']}" if bl else f"{bat['installed_kwh']:.1f} kWh"])
+        sysinfo.append(["Battery", f"{bat['installed_kwh']:.0f} kWh lithium battery (LiFePO4)"])
+    if company.get("brands"):
+        sysinfo.append(["Brands", company["brands"]])
     annual = sizing.get("annual_production_kwh") or (results.get("production") or {}).get("annual_kwh")
     if annual:
-        sysinfo.append(["Estimated production", f"{annual:,.0f} kWh a year"])
+        sysinfo.append(["Solar power made", f"about {annual:,.0f} kWh a year"])
     if sizing.get("coverage_pct") is not None:
-        sysinfo.append(["Of your consumption covered", f"{sizing['coverage_pct']:.0f}%"])
+        sysinfo.append(["Share of your usage covered by solar", f"{sizing['coverage_pct']:.0f}%"])
     left_col = []
-    chart = _consumption_chart(eco if eco.get("available") else None, sizing or None, results.get("audit"))
+    chart, chart_title = _bill_chart(eco if eco.get("available") else None, sizing or None, results.get("audit"))
     if chart is not None:
-        left_col += [section("YOUR ELECTRICITY CONSUMPTION", 90 * mm), Spacer(1, 3), chart, Spacer(1, 4)]
+        left_col += [section(chart_title, 90 * mm), Spacer(1, 3), chart, Spacer(1, 4)]
     left_col += [section("SYSTEM INFORMATION", 90 * mm), kv(sysinfo, [36 * mm, 54 * mm])]
 
     charges = [[s["label"], php(s["amount"])] for s in cust["sections"]] + [["TOTAL CONTRACT PRICE", php(cust["total"])]]
     right_col = [section("SUMMARY OF CHARGES", 90 * mm), kv(charges, [52 * mm, 38 * mm], bold_last=True), Spacer(1, 4)]
     if eco.get("available"):
         a = eco["assumptions"]
-        sav = [["Your electricity bill today, monthly", php(eco["bill_today_monthly"])]]
-        if eco.get("includes_future_loads"):
-            sav.append(["With your planned appliances, no solar", php(eco["bill_before_monthly"])])
+        future = bool(eco.get("includes_future_loads"))
+        sav = [["Your bill today (per month)", php(eco["bill_today_monthly"])]]
+        if future:
+            sav.append(["With the appliances you plan to add, before solar", php(eco["bill_before_monthly"])])
         sav += [
-            ["Estimated bill with solar, monthly", php(eco["bill_after_monthly"])],
-            ["Monthly savings", php(eco["savings_monthly"])],
+            ["Your bill with solar (per month)", php(eco["bill_after_monthly"])],
+            ["Monthly savings" + (" (against the bill with the new appliances)" if future else ""), php(eco["savings_monthly"])],
             ["Savings in the first year", php(eco["year1"]["savings"])],
-            ["Payback", f"{eco['payback_years']:.1f} years" if eco.get("payback_years") is not None else f"beyond {a['analysis_years']} years"],
-            [f"Net savings over {a['analysis_years']} years", php(eco["lifetime_net"])],
+            ["Pays for itself in", f"{eco['payback_years']:.1f} years" if eco.get("payback_years") is not None else f"more than {a['analysis_years']} years"],
+            [f"Saved over {a['analysis_years']} years", php(eco["lifetime_net"])],
         ]
         if eco.get("irr") is not None:
-            sav.append(["Return on the investment", f"{eco['irr'] * 100:.0f}% a year"])
-        sav.append(["Carbon avoided", f"about {eco['co2_t_per_year']:.1f} t CO2 a year"])
+            sav.append(["Yearly return on your money", f"{eco['irr'] * 100:.0f}%"])
+        sav.append(["CO2 avoided", f"about {eco['co2_t_per_year']:.1f} tonnes a year"])
         right_col += [section("YOUR SAVINGS", 90 * mm), kv(sav, [52 * mm, 38 * mm])]
     cols = Table([[left_col, right_col]], colWidths=[92 * mm, 92 * mm])
     cols.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     story.append(cols)
     story.append(Spacer(1, 6))
 
-    # ---- reminders and the payment stub
+    # ---- reminders and the payment schedule
     reminders = [
-        "Prices include delivery to site, installation by our crew, testing and commissioning, and the permits listed.",
-        "Quantities are from the roof assessment and may be adjusted after the final site survey.",
-        f"This proposal is valid for {int(pricing.get('quotation_validity_days') or 15)} days from the statement date.",
+        "The price includes delivery, installation by our crew, testing and switch-on, and the permits listed.",
+        "Quantities are based on our roof assessment and may change after the final check before installation. We will confirm any change with you first.",
+        f"This proposal is good for {validity} days from the proposal date.",
     ]
     if eco.get("available"):
         a = eco["assumptions"]
-        line = (f"Savings are estimates based on {a['tariff_php_per_kwh']:.2f} PHP per kWh ({'your latest bill' if a['tariff_source'].startswith('bill') else 'an assumed rate'}), "
-                f"electricity prices rising {a['tariff_escalation'] * 100:.0f}% a year, panel output declining {a['degradation'] * 100:.1f}% a year")
+        src = "from your latest bill" if str(a.get("tariff_source", "")).startswith("bill") else "our usual rate; your bill may differ"
+        line = (f"Savings are estimates. They assume PHP {a['tariff_php_per_kwh']:.2f} per kWh ({src}) rising {a['tariff_escalation'] * 100:.0f}% a year, "
+                f"panels losing {a['degradation'] * 100:.1f}% of output a year")
         if eco["kind"] != "off_grid":
-            line += f", export credited at {a['export_rate_php_per_kwh']:.2f} PHP per kWh under net metering"
-        line += f", yearly upkeep of PHP {a['om_per_year']:,.0f}"
+            line += f", a net metering credit of PHP {a['export_rate_php_per_kwh']:.2f} per kWh for power sent to the grid"
+        line += f", upkeep of about PHP {a['om_per_year']:,.0f} a year"
         if a["battery_replacement_cost"] > 0:
-            line += f", a battery replacement after {a['battery_life_years']} years"
+            line += f", a new battery after {a['battery_life_years']} years"
         if a["inverter_replacement_cost"] > 0:
-            line += f" and an inverter replacement after {a['inverter_life_years']} years"
-        line += ". Actual savings depend on your consumption and the utility's rates."
+            line += f" and a new inverter after {a['inverter_life_years']} years"
+        line += ". Your real savings depend on how much power you use and on your electric company's rates."
         reminders.append(line)
     if prog.get("available") and prog.get("assumptions"):
-        reminders.append("Permit and utility dates are estimates and depend on the local government and the distribution utility.")
+        reminders.append("Permit and net metering dates are estimates. They depend on the city or municipal office and on your electric company.")
     story.append(section("REMINDERS"))
     for r in reminders:
         story.append(Paragraph(r, small))
@@ -244,10 +297,10 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         ("ALIGN", (2, 0), (2, -1), "RIGHT"), ("LINEBELOW", (0, 1), (-1, -2), 0.3, LINE), ("FONTNAME", (0, -1), (-1, -1), FB),
         ("TOPPADDING", (0, 0), (-1, 0), 8), ("BACKGROUND", (0, -1), (-1, -1), ACCENT_LIGHT),
     ]))
-    story.append(Paragraph(f"Please keep this stub for your payments. Proposal {proposal_no or '-'} for {doc.customer_name or '-'}.", small))
+    story.append(Paragraph(f"Payment schedule for proposal {proposal_no or '-'}, {doc.customer_name or '-'}. Please keep this for your records.", small))
     story.append(stub)
 
-    # ---- page two: details of charges, schedule
+    # ---- page two: details of charges, schedule, your questions, acceptance
     story.append(PageBreak())
     story.append(section("DETAILS OF CHARGES"))
     rows = [["Item", "Qty", "Unit", "Amount"]]
@@ -261,11 +314,15 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         r = len(rows) - 1
         styles += [("FONTNAME", (0, r), (-1, r), FB), ("SPAN", (0, r), (2, r)), ("TEXTCOLOR", (0, r), (-1, r), brand.GOLD_DARK)]
         for i in s.get("items", []):
-            rows.append([Paragraph(i["name"], cell), _qty(i["qty"]), i.get("unit", ""), php(i["amount"])])
+            unit = i.get("unit", "")
+            qty = _qty(i["qty"])
+            if unit == "person-day":
+                qty, unit = f"{qty} person-days" if float(i["qty"]) != 1 else "1 person-day", ""
+            rows.append([Paragraph(i["name"], cell), qty, unit, php(i["amount"])])
         rows.append([f"{s['label']} subtotal", "", "", php(s["amount"])])
         r = len(rows) - 1
         styles += [("FONTNAME", (3, r), (3, r), FB), ("SPAN", (0, r), (2, r)), ("ALIGN", (0, r), (0, r), "RIGHT")]
-    rows.append(["TOTAL CONTRACT PRICE, VAT INCLUSIVE", "", "", php(cust["total"])])
+    rows.append(["TOTAL CONTRACT PRICE (VAT INCLUDED)", "", "", php(cust["total"])])
     r = len(rows) - 1
     styles += [("FONTNAME", (0, r), (-1, r), FB), ("BACKGROUND", (0, r), (-1, r), ACCENT_LIGHT), ("SPAN", (0, r), (2, r))]
     dt = Table(rows, colWidths=[116 * mm, 14 * mm, 20 * mm, 34 * mm], repeatRows=1)
@@ -282,5 +339,56 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         st2 = Table(srows, colWidths=[50 * mm, 134 * mm])
         st2.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 8), ("FONTNAME", (0, 0), (-1, -1), F), ("BACKGROUND", (0, 0), (-1, 0), ACCENT_LIGHT), ("LINEBELOW", (0, 0), (-1, -1), 0.3, LINE), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
         story.append(st2)
-    pdf.build(story)
+        story.append(Spacer(1, 8))
+
+    # ---- your questions: the objections, answered on paper
+    kind = sizing.get("kind", "")
+    bat_kwh = float(bat.get("installed_kwh") or 0)
+    ev = {e["key"]: e for e in prog.get("events", [])} if prog.get("available") else {}
+    days = int((prog.get("install") or {}).get("days") or 1) if prog.get("available") else 1
+    qa: list[tuple[str, str]] = []
+    if kind == "off_grid":
+        qa.append(("What happens in a brownout?", f"Nothing changes: the house runs on the panels and the {bat_kwh:.0f} kWh battery all the time and does not depend on the grid."))
+    elif bat_kwh > 0:
+        qa.append(("What happens in a brownout?", f"The battery takes over the moment the grid drops. A {bat_kwh:.0f} kWh battery carries lights, fans, the refrigerator, TV and wifi through a typical evening; running aircon shortens that. By day the panels keep charging it."))
+    else:
+        qa.append(("What happens in a brownout?", "A system without a battery switches off during a brownout, as the safety rules require, and restarts on its own when the grid returns. A battery can be added later if you want backup."))
+    if kind != "off_grid":
+        gap = ""
+        if ev.get("commissioning") and ev.get("meter_installed"):
+            gap = f" Between switch-on ({_d(ev['commissioning']['date'])}) and the two-way meter ({_d(ev['meter_installed']['date'])}) the system already cuts your daytime bill, but power sent to the grid is not yet credited."
+        qa.append(("Who handles net metering?", "We prepare and file the net metering application, the ERC Certificate of Compliance and the meter request with your electric company; you sign the forms." + gap))
+    qa.append(("What if we move house?", "The system stays with the house and adds to its value. The net metering agreement transfers to the new owner."))
+    qa.append(("Who looks after it?", "Rinse the panels with water two or three times a year, more in the dry season. The inverter shows its output on its screen or app, and we check the system at switch-on and whenever you ask."))
+    qa.append(("What does the installation do to the roof?", f"The rails clamp to the roof framing through the sheet with sealed fasteners. Installation takes {days} {'day' if days == 1 else 'days'} and leaves no open holes."))
+    first = True
+    for q, ans in qa:
+        block = [Paragraph(q, q_style), Paragraph(ans, body)]
+        story.append(KeepTogether(([section("YOUR QUESTIONS"), Spacer(1, 2)] if first else []) + block))
+        first = False
+    wl = warranty_lines(company)
+    if wl:
+        story.append(Paragraph("Warranties", q_style))
+        for w in wl:
+            story.append(Paragraph(w, body))
+    if company.get("pee_name") or company.get("pee_license"):
+        who = company.get("pee_name") or "our Professional Electrical Engineer"
+        lic = f", PRC No. {company['pee_license']}" if company.get("pee_license") else ""
+        story.append(Paragraph(f"Electrical plans are signed and sealed by {who}, Professional Electrical Engineer{lic}.", body))
+    story.append(Spacer(1, 10))
+
+    # ---- acceptance block
+    down = next((p for p in prog["payments"] if p.get("key") == "downpayment"), None) if prog.get("available") else None
+    accept = ["To accept this proposal, sign below and send us a photo on Messenger, or sign on our next visit."]
+    if down:
+        accept.append(f"The downpayment of {php(down['amount'])} is due on signing" + (f", to: {company['payment_details']}." if company.get("payment_details") else "."))
+    sig_style = ParagraphStyle("sig", parent=small, textColor=INK)
+    sig = Table([
+        [Paragraph("Accepted by the customer", sig_style), Paragraph(f"For {company.get('company_name') or 'the company'}", sig_style)],
+        [Spacer(1, 26), Spacer(1, 26)],
+        [Paragraph(f"{doc.customer_name or 'Name'} · signature · date", sig_style), Paragraph(f"{company.get('owner_name') or 'Name'} · signature · date", sig_style)],
+    ], colWidths=[92 * mm, 92 * mm])
+    sig.setStyle(TableStyle([("LINEBELOW", (0, 1), (-1, 1), 0.6, INK), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 10)]))
+    story.append(KeepTogether([section("TO ACCEPT THIS PROPOSAL"), Spacer(1, 3)] + [Paragraph(a, body) for a in accept] + [Spacer(1, 6), sig]))
+    pdf.build(story, onFirstPage=on_page, onLaterPages=on_page)
     return buf.getvalue()

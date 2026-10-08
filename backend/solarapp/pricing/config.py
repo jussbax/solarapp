@@ -254,8 +254,8 @@ class PaymentPlan(BaseModel):
     """Customer payments. Milestone shares plus the instalment share should add up to 1."""
     milestones: list[PaymentMilestone] = Field(default_factory=lambda: [
         PaymentMilestone(key="downpayment", label="Downpayment on signing", share=0.5, event="signing"),
-        PaymentMilestone(key="delivery", label="On delivery of materials to site", share=0.4, event="materials_on_site"),
-        PaymentMilestone(key="completion", label="On commissioning", share=0.1, event="commissioning"),
+        PaymentMilestone(key="delivery", label="On delivery of materials to your house", share=0.4, event="materials_on_site"),
+        PaymentMilestone(key="completion", label="On switch-on and testing", share=0.1, event="commissioning"),
     ])
     installments: int = Field(default=0, ge=0)              # number of equal instalments for the balance
     installment_share: float = Field(default=0, ge=0, le=1)  # share of the contract paid by instalments

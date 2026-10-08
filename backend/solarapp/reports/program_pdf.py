@@ -44,7 +44,7 @@ def build_program_pdf(doc: AssessmentDoc, results: dict, company: dict) -> bytes
     head = Table([[mark or "", Paragraph(f"Program of works: {doc.customer_name or '-'}", h1)]], colWidths=[16 * mm, 240 * mm])
     head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), 1.5, brand.GOLD), ("LEFTPADDING", (0, 0), (0, 0), 0)]))
     story = [head]
-    story.append(Paragraph(f"{doc.address} · {pricing['totals']['kwp']:.2f} kWp · contract PHP {php(pricing['totals']['contract_rounded'])} · internal, not for the customer", small))
+    story.append(Paragraph(f"INTERNAL, NOT FOR THE CUSTOMER · {doc.address} · {pricing['totals']['kwp']:.2f} kWp · contract PHP {php(pricing['totals']['contract_rounded'])}", small))
     story.append(Paragraph("Schedule", h2))
     rows = [["Date", "Until", "Activity", "Customer sees"]]
     for e in prog["events"]:
@@ -61,7 +61,7 @@ def build_program_pdf(doc: AssessmentDoc, results: dict, company: dict) -> bytes
         story.append(Paragraph("Note: " + w["message"], small))
 
     inst = prog["install"]
-    story.append(Paragraph(f"Installation days: {inst['days']} day(s), {inst['crew']['description']}, {inst['crew']['roof_pairs']} roof pair(s) and {inst['crew']['ground_persons']} on the ground", h2))
+    story.append(Paragraph(f"Installation: {inst['days']} {'day' if inst['days'] == 1 else 'days'}, {inst['crew']['description']}; {inst['crew']['roof_pairs']} roof {'pair' if inst['crew']['roof_pairs'] == 1 else 'pairs'}, {inst['crew']['ground_persons']} on the ground", h2))
     fr = inst["frame"]
     story.append(Paragraph(f"Depart base {fr['depart']}, on site {fr['arrive']}, work from {fr['work_start']}, lunch {fr['lunch_start']} to {fr['lunch_end']}, "
                            f"{fr['productive_hours']:g} productive hours a day, back at base about {fr['back_at_base']}. Man-hours: roof {inst['man_hours']['roof']:.1f}, ground {inst['man_hours']['ground']:.1f}, hand-off {inst['man_hours']['handoff']:.1f}.", body))

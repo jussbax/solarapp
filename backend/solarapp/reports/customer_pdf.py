@@ -1,4 +1,4 @@
-"""Customer-facing PDF: only what the customer cares about."""
+"""Your roof check: the customer's PDF after the roof visit. Only what the customer cares about."""
 from __future__ import annotations
 
 import io
@@ -8,7 +8,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-from reportlab.lib import colors  # noqa: E402
 from reportlab.lib.pagesizes import A4  # noqa: E402
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # noqa: E402
 from reportlab.lib.units import mm  # noqa: E402
@@ -16,9 +15,10 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 
 from ..schemas import AssessmentDoc  # noqa: E402
 from . import brand  # noqa: E402
+from .quotation_pdf import contact_line  # noqa: E402
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+COMPASS = ["North", "North-northeast", "Northeast", "East-northeast", "East", "East-southeast", "Southeast", "South-southeast", "South", "South-southwest", "Southwest", "West-southwest", "West", "West-northwest", "Northwest", "North-northwest"]
 
 
 def compass(azimuth: float) -> str:
@@ -46,12 +46,24 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     prod = results["production"]
     panel = next(p["panel"] for p in results["panels"] if p["panel"]["id"] == results["selected_panel_id"])
     selected = next(p for p in results["panels"] if p["panel"]["id"] == results["selected_panel_id"])
+    audit = results.get("audit") or {}
+    bills = (audit.get("audit_vs_bill") or {}).get("bills") or []
+    bill_kwh = float(bills[0]["kwh"]) if bills else None
+    footer = contact_line(company)
+    F, FS, FB = brand.fonts()
+
+    def on_page(canvas, d) -> None:
+        canvas.saveState()
+        canvas.setFont(F, 6.5)
+        canvas.setFillColor(brand.MUTED)
+        canvas.drawString(18 * mm, 9 * mm, footer[:150])
+        canvas.drawRightString(A4[0] - 18 * mm, 9 * mm, f"Roof check · page {d.page}")
+        canvas.restoreState()
 
     buf = io.BytesIO()
     pdf = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=16 * mm,
-                            title="Solar roof assessment", author=company.get("company_name", ""))
+                            title="Your roof check", author=company.get("company_name", ""))
     ss = getSampleStyleSheet()
-    F, FS, FB = brand.fonts()
     h1 = ParagraphStyle("h1", parent=ss["Title"], fontName=FB, fontSize=16, leading=19, spaceAfter=2, alignment=0, textColor=brand.BLACK)
     sub = ParagraphStyle("sub", parent=ss["Normal"], fontName=F, textColor=brand.MUTED, fontSize=8.5)
     h2 = ParagraphStyle("h2", parent=ss["Heading2"], fontName=FB, fontSize=11.5, spaceBefore=10, spaceAfter=4, textColor=brand.BLACK)
@@ -59,39 +71,44 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     small = ParagraphStyle("small", parent=ss["Normal"], fontName=F, fontSize=8, leading=11, textColor=brand.MUTED)
 
     story = []
-    left = [Paragraph(company.get("company_name") or "Solar roof assessment", h1)]
-    if company.get("company_contact"):
-        left.append(Paragraph(company["company_contact"], sub))
+    left = [Paragraph(company.get("company_name") or "Your roof check", h1)]
+    contact = company.get("company_contact") or contact_line({k: v for k, v in company.items() if k != "company_name"})
+    if contact:
+        left.append(Paragraph(contact, sub))
     mark = brand.logo(14 * mm)
     head = Table([[mark or "", left]], colWidths=[18 * mm, 156 * mm])
     head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), 1.5, brand.GOLD), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LEFTPADDING", (0, 0), (0, 0), 0)]))
     story.append(head)
-    story.append(Paragraph("Solar roof assessment", h2))
-    when = datetime.now().strftime("%d %b %Y")
+    story.append(Paragraph("Your roof check", h2))
+    when = datetime.now().strftime("%-d %b %Y")
     story.append(Paragraph(f"Prepared for <b>{doc.customer_name or '-'}</b> on {when}", body))
     if doc.address:
         story.append(Paragraph(doc.address, body))
-    story.append(Paragraph(f"Site coordinates: {doc.lat:.5f}, {doc.lon:.5f}", small))
+    if doc.lat is not None and doc.lon is not None:
+        story.append(Paragraph(f"Map pin: {doc.lat:.5f}, {doc.lon:.5f}", small))
     story.append(Spacer(1, 6))
 
     kpi = [
-        ["Panels", f"{prod['total_panels']} x {panel['watt_peak']:.0f} W"],
-        ["Panel model", panel.get("name") or "-"],
-        ["System size", f"{prod['system_kwp']:.2f} kWp"],
-        ["Estimated production per year", f"{prod['annual_kwh']:,.0f} kWh"],
-        ["Average per month", f"{prod['avg_monthly_kwh']:,.0f} kWh"],
+        ["Panels your roof can hold", f"{prod['total_panels']} × {panel['watt_peak']:.0f} W"],
+        ["Panel", panel.get("name") or "-"],
+        ["System size", f"{prod['system_kwp']:.2f} kWp (the size of the solar array)"],
+        ["Solar power made in a year", f"about {prod['annual_kwh']:,.0f} kWh"],
+        ["In a typical month", f"about {prod['avg_monthly_kwh']:,.0f} kWh"],
     ]
-    t = Table(kpi, colWidths=[70 * mm, 100 * mm])
+    if bill_kwh:
+        ratio = prod["avg_monthly_kwh"] / bill_kwh
+        kpi.append(["Your bill shows", f"{bill_kwh:,.0f} kWh a month" + (f", so the full roof makes around {ratio:.1f} times what you use" if ratio >= 1.05 else f", about {ratio * 100:.0f}% of which the full roof can make")])
+    key_style = ParagraphStyle("key", parent=body, fontSize=10, leading=13, textColor=brand.MUTED)
+    val_style = ParagraphStyle("val", parent=body, fontName=FB, fontSize=10, leading=13, textColor=brand.GRAY)
+    t = Table([[Paragraph(a, key_style), Paragraph(b, val_style)] for a, b in kpi], colWidths=[70 * mm, 100 * mm])
     t.setStyle(TableStyle([
-        ("FONTSIZE", (0, 0), (-1, -1), 10), ("FONTNAME", (0, 0), (-1, -1), F),
-        ("TEXTCOLOR", (0, 0), (0, -1), brand.MUTED),
-        ("FONTNAME", (1, 0), (1, -1), FB),
-        ("LINEBELOW", (0, 0), (-1, -2), 0.3, brand.LINE),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.3, brand.LINE), ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("TOPPADDING", (0, 0), (-1, -1), 5),
     ]))
     story.append(t)
+    story.append(Paragraph("This is what the roof can hold. The system we propose after the energy audit is usually smaller, sized to your bill.", small))
 
-    story.append(Paragraph("Expected monthly production", h2))
+    story.append(Paragraph("What your roof can make each month", h2))
     story.append(_chart(prod["monthly_kwh"]))
     rows = [["Month"] + MONTHS + ["Year"]]
     rows.append(["kWh"] + [f"{v:,.0f}" for v in prod["monthly_kwh"]] + [f"{prod['annual_kwh']:,.0f}"])
@@ -105,12 +122,12 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     ]))
     story.append(mt)
 
-    story.append(Paragraph("Roof", h2))
-    face_rows = [["Roof face", "Size (m)", "Tilt", "Facing", "Panels"]]
+    story.append(Paragraph("Your roof", h2))
+    face_rows = [["Roof face", "Size (m, eave × slope)", "Pitch", "Faces", "Panels"]]
     for f in doc.faces:
         cnt = selected["faces"][f.id]["count"]
-        face_rows.append([f.name, f"{f.length_m:g} x {f.width_m:g}", f"{f.tilt_deg:g} deg", f"{compass(f.azimuth_deg)} ({f.azimuth_deg:g} deg)", str(cnt)])
-    ft = Table(face_rows, colWidths=[50 * mm, 35 * mm, 25 * mm, 40 * mm, 20 * mm])
+        face_rows.append([f.name, f"{f.length_m:g} × {f.width_m:g}", f"{f.tilt_deg:g}°", f"{compass(f.azimuth_deg)} ({f.azimuth_deg:g}°)", str(cnt)])
+    ft = Table(face_rows, colWidths=[50 * mm, 40 * mm, 20 * mm, 40 * mm, 20 * mm])
     ft.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9), ("FONTNAME", (0, 0), (-1, -1), F),
         ("BACKGROUND", (0, 0), (-1, 0), brand.OFF_WHITE),
@@ -121,14 +138,15 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
 
     story.append(Paragraph("About this estimate", h2))
     notes = [
-        "Production is estimated hour by hour over a typical weather year for this location (PVGIS data) and the roof's tilt and facing.",
+        "We estimated production hour by hour for a typical year of weather at your location (PVGIS records), using your roof's pitch and direction.",
+        "We adjusted it with readings taken on your roof: a test panel, a sunlight meter and a power meter.",
+        "These are the panels' output in a typical year. Real weather varies, so some years will be higher and some lower.",
+        "This is a roof check, not a quotation.",
     ]
-    notes.append("The estimate is adjusted with measurements taken on your roof with a calibrated test panel, irradiance meter and MPPT meter.")
-    notes.append("Figures are production at the solar panels for a typical year. Actual weather varies from year to year.")
-    if stale:
-        notes.append("Note: inputs were edited after this calculation.")
     for n in notes:
         story.append(Paragraph(n, small))
 
-    pdf.build(story)
+    story.append(Paragraph("Next step: your free energy audit", h2))
+    story.append(Paragraph("We'll go through your bill and the appliances you use, then size the system and send you a proposal with the price, the savings and the schedule. Please have your latest bill ready.", body))
+    pdf.build(story, onFirstPage=on_page, onLaterPages=on_page)
     return buf.getvalue()

@@ -478,3 +478,31 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   default so the server keeps making no outside calls unless asked.
 - The website's analytics get a browser event and a dataLayer push on
   estimate shown and lead submitted; the page itself loads no tracker.
+
+## Customer documents: trust and wording
+
+- The proposal now carries what the marketing and copy audits found missing:
+  a contact footer on every page (company, address, phone, Messenger,
+  Facebook, email from the profile), the solar and battery parts of the
+  price named under the total, brands from the profile, the bill month by
+  month in pesos before and after solar instead of a kWh chart, savings
+  rows in the customer's words (bill today, bill with solar, pays for
+  itself in, saved over 25 years, yearly return on your money), a "Your
+  questions" block that answers brownouts, net metering handling and the
+  gap before the two-way meter, moving house, upkeep and what the
+  installation does to the roof, the warranties and the PEE's name and
+  licence, and an acceptance block with where to pay and two signature
+  lines. Section and line names follow the copy audit's glossary
+  (Installation and permits, Installation tools, VAT; cables and
+  connectors, breakers and surge protection; the permit lines spelled
+  out), and so do the schedule milestones and the default payment labels.
+- The roof check PDF is titled as such, says plainly that it shows what the
+  roof can hold and that the proposed system is usually smaller, carries
+  the next step and the same contact footer, and no longer prints an
+  internal "inputs were edited" note.
+- The card is "Your Roof Check", states the roof's output as a multiple of
+  the bill rather than a percentage above 100, takes the next step text
+  (with a date) from a prompt when the card is opened, and ends with the
+  contact line and a QR code to the estimate page tagged utm_source=card,
+  so a forwarded card becomes a measured lead. The QR needs
+  SOLARAPP_PUBLIC_URL; without it the card prints the contact line only.

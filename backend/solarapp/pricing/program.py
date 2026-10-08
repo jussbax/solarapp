@@ -323,25 +323,25 @@ def build_program(doc: AssessmentDoc, results: dict, cfg: PricingConfig, today: 
     }
     events = [
         {"key": "signing", "label": "Contract signing and downpayment", "date": _iso(signing), "end": None, "kind": "milestone"},
-        {"key": "permit_prep", "label": "Plans, PEE sign and seal", "date": _iso(signing), "end": _iso(permit_prep_end), "kind": "task"},
-        {"key": "permit_application", "label": "LGU electrical permit application", "date": _iso(permit_prep_end), "end": _iso(permit_approved), "kind": "task"},
+        {"key": "permit_prep", "label": "Electrical plans, signed and sealed by the PEE", "date": _iso(signing), "end": _iso(permit_prep_end), "kind": "task"},
+        {"key": "permit_application", "label": "Electrical permit application (city or municipal office)", "date": _iso(permit_prep_end), "end": _iso(permit_approved), "kind": "task"},
         {"key": "permit_approved", "label": "Electrical permit approved", "date": _iso(permit_approved), "end": None, "kind": "milestone"},
     ]
     if net_metering:
         events += [
-            {"key": "netmeter_application", "label": "Net metering application with the distribution utility", "date": _iso(nm_application), "end": _iso(nm_agreement), "kind": "task"},
+            {"key": "netmeter_application", "label": "Net metering application with your electric company", "date": _iso(nm_application), "end": _iso(nm_agreement), "kind": "task"},
             {"key": "netmeter_agreement", "label": "Net metering agreement signed", "date": _iso(nm_agreement), "end": None, "kind": "milestone"},
         ]
     events += [
         {"key": "sourcing", "label": "Pickup run: " + ", ".join(pricing["freight"]["stops_on_run"]), "date": _iso(sourcing), "end": None, "kind": "task"},
-        {"key": "materials_on_site", "label": "Materials delivered to site", "date": _iso(install_start), "end": None, "kind": "milestone"},
+        {"key": "materials_on_site", "label": "Materials delivered to your house", "date": _iso(install_start), "end": None, "kind": "milestone"},
         {"key": "installation", "label": f"Installation ({n_days} {'day' if n_days == 1 else 'days'}, crew of {install_plan['crew']['persons']})", "date": _iso(install_start), "end": _iso(install_end), "kind": "task"},
-        {"key": "commissioning", "label": "Energized, tested and commissioned", "date": _iso(commissioning), "end": None, "kind": "milestone"},
-        {"key": "cfei", "label": "Certificate of final electrical inspection", "date": _iso(cfei), "end": None, "kind": "milestone"},
+        {"key": "commissioning", "label": "System switched on and tested", "date": _iso(commissioning), "end": None, "kind": "milestone"},
+        {"key": "cfei", "label": "Final electrical inspection certificate", "date": _iso(cfei), "end": None, "kind": "milestone"},
     ]
     if net_metering:
         events += [
-            {"key": "meter_installed", "label": "DU inspection and bi-directional meter installed", "date": _iso(meter), "end": None, "kind": "milestone"},
+            {"key": "meter_installed", "label": "Electric company inspection; net metering meter installed", "date": _iso(meter), "end": None, "kind": "milestone"},
         ]
     for e in events:
         e["customer"] = e["key"] in CUSTOMER_EVENTS
