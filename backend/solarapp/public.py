@@ -29,7 +29,7 @@ FORWARDED_HEADERS = ("content-type", "x-visitor", "x-source", "user-agent", "acc
 MAX_BODY = 16_384
 ESTIMATES_IN_FLIGHT = 4      # sizings the private app may run at once for the public
 STATUS_CACHE_S = 60.0
-UNAVAILABLE = "The estimate isn't available right now. Please try again later or message us on Facebook."
+UNAVAILABLE = "The estimate isn't available right now. Please try again later."
 # A tight content security policy: the website and the widget are same-origin, the widget injects one style tag.
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
        "connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'")
