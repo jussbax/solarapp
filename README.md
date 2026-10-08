@@ -124,20 +124,29 @@ from anywhere, expose it with a Cloudflare Tunnel:
 # quick tunnel for testing
 cloudflared tunnel --url http://localhost:8000
 
-# named tunnel (recommended): create once, then in the tunnel's ingress
-# point your hostname at http://localhost:8000
-cloudflared tunnel login
-cloudflared tunnel create solarapp
+# named tunnel (recommended): a fixed address such as solar.yourdomain.com on a
+# domain whose DNS is on Cloudflare. Run once on the server:
+cloudflared tunnel login                      # prints a link: open it on any browser, pick the domain
+cloudflared tunnel create solarapp            # prints the tunnel id and writes ~/.cloudflared/<id>.json
 cloudflared tunnel route dns solarapp solar.yourdomain.com
-# ~/.cloudflared/config.yml:
-#   tunnel: <tunnel id>
-#   credentials-file: /home/<user>/.cloudflared/<tunnel id>.json
-#   ingress:
-#     - hostname: solar.yourdomain.com
-#       service: http://localhost:8000
-#     - service: http_status:404
+sudo mkdir -p /etc/cloudflared
+sudo cp ~/.cloudflared/<id>.json /etc/cloudflared/
+sudo tee /etc/cloudflared/config.yml > /dev/null <<EOF2
+tunnel: <id>
+credentials-file: /etc/cloudflared/<id>.json
+protocol: http2
+ingress:
+  - hostname: solar.yourdomain.com
+    service: http://localhost:8000
+  - service: http_status:404
+EOF2
 sudo cloudflared service install
+sudo systemctl status cloudflared --no-pager
 ```
+
+`protocol: http2` matters on networks that block UDP port 7844 (the
+quick-tunnel pre-checks say "QUIC connection failed"). The service starts on
+boot; `sudo journalctl -u cloudflared -f` shows its log.
 
 Consider putting Cloudflare Access in front of the hostname as a second
 login layer; the app itself has one password-protected user.
