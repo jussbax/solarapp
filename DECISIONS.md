@@ -626,3 +626,31 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   non-resident keys work too; challenges are single use and expire in
   five minutes; failures share the login throttle. The password and code
   stay as the fallback, so a lost key never locks the owner out.
+
+## Security, round two
+
+- The session cookie's generation is an HMAC of the password and a server
+  nonce under the secret key, so a stolen cookie no longer carries a
+  crackable fingerprint of the password. The nonce lives in
+  `data/session.key`; "Sign out everywhere" rotates it and ends every
+  session at once (logout stays per device).
+- Managing security keys is a step-up action: the password (and a fresh
+  code) must be entered again. A stolen cookie alone cannot add a key or
+  remove the owner's, which would otherwise have outlived a password
+  change. Wrong answers count toward the login throttle.
+- The two-factor file is written atomically and read under the lock; a
+  backup code is consumed exactly once even under concurrent logins, and
+  a file that exists but cannot be read means "on, nobody passes on the
+  password alone", never "off".
+- Anonymous passkey challenges have their own per-address limit, and a
+  flood evicts the oldest challenge rather than everyone's.
+- The private app refuses request bodies over 1 MB (11 MB for the
+  workbook import) and writes without a length. The estimate page on the
+  back-office host carries a content security policy that lets only the
+  company website frame it. The public process believes the tunnel's
+  visitor address only from a private peer, as the private app already
+  did.
+- Accepted as is: `/api/auth/me` tells an anonymous caller whether a
+  code or a key is in use (an attacker with the password learns it on the
+  first attempt anyway, and the login page needs it); styles may be
+  inline (scripts may not); the app runs as one worker by design.

@@ -272,7 +272,7 @@ Run it under systemd or `nohup` to keep it alive.
 
 ```bash
 cd backend && . .venv/bin/activate && pip install -r requirements-dev.txt
-python -m pytest                                          # 64 tests, no network
+python -m pytest                                          # 96 tests, no network
 python -m solarapp.pricing ../path/to/PLD_Materials_DB.xlsx   # import a materials workbook (the Materials page does this too)
 python -m solarapp.data_download --out ../data --synthetic --bbox 14.25 14.75 120.75 121.25
 SOLARAPP_DATA_DIR=../data uvicorn solarapp.main:app --reload --port 8000

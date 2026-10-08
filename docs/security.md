@@ -44,7 +44,21 @@ registered on, so a look-alike site gets nothing.
 
 Wrong or unknown keys count toward the same login throttle, and every
 sign-in names its method (`method=password` or `method=passkey`) in the
-audit log.
+audit log. Adding or removing a key asks for the password (and a fresh
+code) again, so a stolen session cookie alone cannot plant a key or
+remove yours; a wrong answer counts as a failed login.
+
+## If a phone or laptop is lost
+
+1. Open Settings › Sign-in security on another device and press "Sign out
+   everywhere". Every session ends at once, including the one on the lost
+   device; sign in again afterwards.
+2. Check the list of security keys and remove any you do not recognise.
+   Signing out does not remove keys, and neither does a password change.
+3. Change the password in `.env` and restart if the lost device could have
+   had it saved.
+4. Read the audit log: an unexpected `passkey added` line is a takeover
+   signal.
 
 ## Cloudflare (both hostnames)
 
@@ -125,10 +139,25 @@ dataset is re-downloadable and need not be backed up. Never copy the live
 - Two-factor authentication on the mailbox that receives lead notices and
   on the Messenger account that sends the documents.
 
+## One worker, tunnel only
+
+Run one app worker, as the shipped command does. Do not add `--workers N`
+to uvicorn: the login throttle, the authenticator replay guard and the
+passkey challenge store live in the process, and several processes would
+not share them.
+
+The origin must be reachable only through the two Cloudflare tunnels. Never
+publish ports on the server or expose its address: the estimate's per-visitor
+rate limit and the audit log trust the visitor address the tunnel sends, and
+a directly reachable origin would let anyone forge it. The Cloudflare rate
+limit on `/api/quick/` is the real outer limiter.
+
 ## What to read in the logs
 
 `docker compose logs --since 24h solarapp | grep solarapp.audit` shows
 logins (ok, failed, throttled), leads created, settings changes, imports
 and deletions, each with the client address. A rejected authenticator
-code is logged as `login code rejected`. If you also use Cloudflare
+code is logged as `login code rejected`; `step-up failed` is a wrong
+password given when adding or removing a key; `sign-out everywhere` is
+the owner ending every session. If you also use Cloudflare
 Access, it keeps the outer login trail.

@@ -314,7 +314,13 @@ class LoginIn(BaseModel):
     code: str = Field(default="", max_length=16)   # authenticator code or backup code, when two-factor login is on
 
 
-class PasskeyRegisterIn(BaseModel):
+class StepUpIn(BaseModel):
+    """Managing keys and signing out everywhere ask for the password (and the code) again, so a stolen cookie alone cannot do it."""
+    password: str = Field(max_length=200)
+    code: str = Field(default="", max_length=16)
+
+
+class PasskeyRegisterIn(StepUpIn):
     challenge_id: str = Field(max_length=64)
     name: str = Field(default="", max_length=60)
     credential: dict[str, Any]   # the browser's PublicKeyCredential as JSON

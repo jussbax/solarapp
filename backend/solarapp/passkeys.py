@@ -61,8 +61,8 @@ def _remember(challenge: bytes, kind: str) -> str:
     with _lock:
         for k in [k for k, (_, _, exp) in _challenges.items() if exp < now]:
             del _challenges[k]
-        if len(_challenges) >= MAX_CHALLENGES:
-            _challenges.clear()
+        while len(_challenges) >= MAX_CHALLENGES:  # a flood evicts the oldest, not everyone
+            del _challenges[next(iter(_challenges))]
         _challenges[cid] = (challenge, kind, now + CHALLENGE_TTL_S)
     return cid
 

@@ -11,6 +11,7 @@ attacker has a static website and two rate-limited endpoints, nothing else.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import time
 from pathlib import Path
 from typing import Optional
@@ -32,6 +33,18 @@ UNAVAILABLE = "The estimate isn't available right now. Please try again later or
 # A tight content security policy: the website and the widget are same-origin, the widget injects one style tag.
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
        "connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'")
+
+
+# The tunnel container reaches us over the Docker network: these are the only peers whose visitor header counts.
+_TRUSTED_PEERS = [ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "fc00::/7", "::1/128")]
+
+
+def _trusted_peer(host: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(ip in n for n in _TRUSTED_PEERS)
 
 
 def create_public_app(settings: Optional[Settings] = None, transport: Optional[httpx.AsyncBaseTransport] = None) -> FastAPI:
@@ -81,8 +94,10 @@ def create_public_app(settings: Optional[Settings] = None, transport: Optional[h
         if name == "status" and request.method == "GET" and status_cache["until"] > now:
             return Response(status_cache["body"], media_type=str(status_cache["type"]))
         headers = {k: v for k, v in request.headers.items() if k.lower() in FORWARDED_HEADERS}
-        # the real visitor address, as seen by the tunnel in front of us, for the private app's rate limiter
-        client_ip = request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "")
+        # the real visitor address for the private app's rate limiter: the tunnel's header only when the
+        # peer is the tunnel (a private or loopback address), never a header a stranger sends to an exposed origin
+        peer = request.client.host if request.client else ""
+        client_ip = (request.headers.get("cf-connecting-ip") if _trusted_peer(peer) else "") or peer
         if client_ip:
             headers["x-forwarded-for"] = client_ip[:64]
         headers["x-internal-token"] = settings.internal_token

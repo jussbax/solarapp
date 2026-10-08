@@ -26,6 +26,11 @@ DEFAULT_PASSWORD = "change-me"
 OFFICE_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org; "
               "font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
 EMBEDDABLE = ("/estimate", "/widget/", "/assets/", "/brand/")
+# The estimate page on the back-office host may be framed by the company website only.
+EMBED_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
+             "connect-src 'self'; frame-ancestors 'self'{origins}; base-uri 'self'; form-action 'self'; object-src 'none'")
+MAX_BODY = 1024 * 1024            # an assessment document is tens of kilobytes; nothing on the private API needs more
+MAX_UPLOAD_BODY = 11 * 1024 * 1024  # the materials workbook import (10 MB cap inside, plus the form overhead)
 
 
 def prepare_secrets(settings: Settings) -> Settings:
@@ -67,13 +72,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     office_hosts = set(settings.office_hosts)
     PUBLIC_PATHS = ("/api/quick/", "/assets/", "/widget/", "/brand/", "/favicon", "/apple-touch-icon", "/api/health")
 
+    embed_csp = EMBED_CSP.format(origins="".join(" " + o for o in settings.origins))
+
+    @app.middleware("http")
+    async def body_cap(request: Request, call_next):
+        """No request body beyond what the back office needs; a write without a length is refused."""
+        if request.method in ("POST", "PUT", "PATCH"):
+            length = request.headers.get("content-length", "")
+            cap = MAX_UPLOAD_BODY if request.url.path == "/api/pricing/import" else MAX_BODY
+            if not length.isdigit():
+                return JSONResponse({"detail": "Length required"}, status_code=411)
+            if int(length) > cap:
+                return JSONResponse({"detail": "Request too large."}, status_code=413)
+        return await call_next(request)
+
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         path = request.url.path
-        if not path.startswith(EMBEDDABLE):
+        if path.startswith(EMBEDDABLE):
+            response.headers.setdefault("Content-Security-Policy", embed_csp)
+        else:
             response.headers.setdefault("X-Frame-Options", "DENY")
             response.headers.setdefault("Content-Security-Policy", OFFICE_CSP)
         if path.startswith("/api/") and not path.startswith("/api/quick/") and path != "/api/health":

@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import sys
 import threading
@@ -38,21 +39,31 @@ def _hash(code: str) -> str:
     return hashlib.sha256(code.replace("-", "").replace(" ", "").lower().encode()).hexdigest()
 
 
+def _write(p: Path, data: dict) -> None:
+    """Atomic: readers see the old file or the new one, never a half-written one."""
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.chmod(0o600)
+    os.replace(tmp, p)
+
+
 def load(settings: Settings) -> Optional[dict]:
-    """The stored second factor, or one built from SOLARAPP_TOTP_SECRET, or None when off."""
+    """The stored second factor, or one built from SOLARAPP_TOTP_SECRET, or None when off.
+    A file that exists but cannot be read counts as ON with no usable codes (fail closed)."""
     p = _path(settings)
     if p.is_file():
         try:
-            return json.loads(p.read_text())
+            data = json.loads(p.read_text())
         except (OSError, ValueError):
-            return None
+            return {"secret": "", "backup": []}
+        return data if isinstance(data, dict) else {"secret": "", "backup": []}
     if settings.totp_secret:
         return {"secret": settings.totp_secret.strip(), "backup": []}
     return None
 
 
 def enabled(settings: Settings) -> bool:
-    return load(settings) is not None
+    return _path(settings).is_file() or bool(settings.totp_secret)
 
 
 def setup(settings: Settings, account: str = "") -> tuple[str, list[str], str]:
@@ -62,8 +73,8 @@ def setup(settings: Settings, account: str = "") -> tuple[str, list[str], str]:
     data = {"secret": secret, "backup": [_hash(c) for c in codes], "created_at": time.strftime("%Y-%m-%d")}
     p = _path(settings)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data))
-    p.chmod(0o600)
+    with _lock:
+        _write(p, data)
     uri = pyotp.TOTP(secret).provisioning_uri(name=account or settings.app_username, issuer_name=settings.company_name or "Solar back office")
     return secret, codes, uri
 
@@ -78,14 +89,16 @@ def disable(settings: Settings) -> bool:
 
 def verify(settings: Settings, code: str) -> bool:
     """True for a fresh authenticator code or an unused backup code. A backup code is consumed."""
-    data = load(settings)
-    if data is None:
+    if not enabled(settings):
         return True  # second factor not set up: the password alone decides
     code = (code or "").strip()
     if not code:
         return False
-    totp = pyotp.TOTP(data["secret"])
     with _lock:
+        data = load(settings)  # read under the lock: check, consume and write back are one step
+        if not data or not data.get("secret"):
+            return False  # configured but unreadable: nobody gets in on the password alone
+        totp = pyotp.TOTP(data["secret"])
         if code.isdigit() and len(code) == 6:
             now = time.time()
             for drift in (0, -1, 1):  # a phone clock up to 30 s off
@@ -103,7 +116,7 @@ def verify(settings: Settings, code: str) -> bool:
                 del hashes[i]
                 p = _path(settings)
                 if p.is_file():
-                    p.write_text(json.dumps({**data, "backup": hashes}))
+                    _write(p, {**data, "backup": hashes})
                 return True
     return False
 

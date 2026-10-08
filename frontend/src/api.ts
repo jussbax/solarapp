@@ -52,6 +52,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
+export type StepUp = { password: string; code: string }
 export type Passkey = { id: number; name: string; transports: string[]; backed_up: boolean; created_at: string | null; last_used_at: string | null }
 
 export const api = {
@@ -62,11 +63,14 @@ export const api = {
   passkeyLoginOptions: () => request<{ challenge_id: string; options: Record<string, unknown> }>('/api/auth/passkey/options', { method: 'POST' }),
   passkeyLogin: (challenge_id: string, credential: Record<string, unknown>) =>
     request<{ username: string }>('/api/auth/passkey/login', { method: 'POST', body: JSON.stringify({ challenge_id, credential }) }),
+  signOutEverywhere: () => request<{ ok: boolean }>('/api/auth/signout-everywhere', { method: 'POST' }),
   passkeys: () => request<Passkey[]>('/api/auth/passkeys'),
-  passkeyRegisterOptions: () => request<{ challenge_id: string; options: Record<string, unknown> }>('/api/auth/passkeys/options', { method: 'POST' }),
-  passkeyRegister: (challenge_id: string, name: string, credential: Record<string, unknown>) =>
-    request<Passkey>('/api/auth/passkeys', { method: 'POST', body: JSON.stringify({ challenge_id, name, credential }) }),
-  passkeyDelete: (id: number) => request<void>(`/api/auth/passkeys/${id}`, { method: 'DELETE' }),
+  // managing keys asks for the password (and the code) again, so a stolen cookie alone cannot add or remove one
+  passkeyRegisterOptions: (confirm: StepUp) =>
+    request<{ challenge_id: string; options: Record<string, unknown> }>('/api/auth/passkeys/options', { method: 'POST', body: JSON.stringify(confirm) }),
+  passkeyRegister: (confirm: StepUp, challenge_id: string, name: string, credential: Record<string, unknown>) =>
+    request<Passkey>('/api/auth/passkeys', { method: 'POST', body: JSON.stringify({ ...confirm, challenge_id, name, credential }) }),
+  passkeyDelete: (id: number, confirm: StepUp) => request<void>(`/api/auth/passkeys/${id}/remove`, { method: 'POST', body: JSON.stringify(confirm) }),
   dataStatus: () => request<DataStatus>('/api/data/status'),
   settings: () => request<AppSettings>('/api/settings'),
   saveSettings: (body: Partial<AppSettings>) => request<AppSettings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),

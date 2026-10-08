@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import secrets
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, Response
@@ -16,9 +17,39 @@ def _serializer(settings: Settings) -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(settings.secret_key, salt="session")
 
 
+NONCE_FILE = "session.key"
+
+
+def _nonce(settings: Settings, rotate: bool = False) -> str:
+    """A random value on the data volume; new on first use or when every session must end."""
+    path = settings.data_dir / NONCE_FILE
+    if not rotate and path.is_file():
+        try:
+            value = path.read_text().strip()
+            if value:
+                return value
+        except OSError:
+            pass
+    value = secrets.token_hex(16)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(value)
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    return value
+
+
 def _generation(settings: Settings) -> str:
-    """Changes with the password, so a password change logs every device out."""
-    return hashlib.sha256(settings.app_password.encode()).hexdigest()[:12]
+    """Changes with the password or when sessions are revoked. Keyed with the secret, so a cookie
+    holder cannot test password guesses against it offline."""
+    material = settings.app_password.encode() + b"|" + _nonce(settings).encode()
+    return hmac.new(settings.secret_key.encode(), material, hashlib.sha256).hexdigest()[:16]
+
+
+def sign_out_everywhere(settings: Settings) -> None:
+    """Every signed-in device, this one included, is signed out: the next request needs a fresh login."""
+    _nonce(settings, rotate=True)
 
 
 def verify_credentials(settings: Settings, username: str, password: str) -> bool:

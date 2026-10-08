@@ -8,8 +8,12 @@ export default function SignInSecurity() {
   const [keys, setKeys] = useState<Passkey[] | null>(null)
   const [twoFactor, setTwoFactor] = useState<boolean | null>(null)
   const [name, setName] = useState('')
+  const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const confirm = { password, code }
+  const confirmed = password.length > 0 && (!twoFactor || code.length > 0)
 
   const load = () => {
     api.passkeys().then(setKeys).catch(() => setKeys([]))
@@ -21,10 +25,11 @@ export default function SignInSecurity() {
     setBusy(true)
     setMsg(null)
     try {
-      const { challenge_id, options } = await api.passkeyRegisterOptions()
+      const { challenge_id, options } = await api.passkeyRegisterOptions(confirm)
       const credential = await createPasskey(options)
-      const key = await api.passkeyRegister(challenge_id, name || 'Security key', credential)
+      const key = await api.passkeyRegister(confirm, challenge_id, name || 'Security key', credential)
       setName('')
+      setCode('')
       setMsg(`"${key.name}" added. It can sign you in from now on.`)
       load()
     } catch (err) {
@@ -35,11 +40,26 @@ export default function SignInSecurity() {
   }
 
   const remove = async (k: Passkey) => {
+    if (!confirmed) {
+      setMsg('Enter your password' + (twoFactor ? ' and a fresh code' : '') + ' below first, then press Remove.')
+      return
+    }
     if (!window.confirm(`Remove "${k.name}"? It will no longer sign you in.`)) return
     try {
-      await api.passkeyDelete(k.id)
+      await api.passkeyDelete(k.id, confirm)
+      setCode('')
       setMsg(`"${k.name}" removed.`)
       load()
+    } catch (err) {
+      setMsg((err as Error).message)
+    }
+  }
+
+  const signOutEverywhere = async () => {
+    if (!window.confirm('Sign out every phone and laptop, including this one? You sign in again afterwards.')) return
+    try {
+      await api.signOutEverywhere()
+      window.location.assign('/login')
     } catch (err) {
       setMsg((err as Error).message)
     }
@@ -103,17 +123,42 @@ export default function SignInSecurity() {
       ) : insecure ? (
         <div className="muted">Passkeys need https and a real hostname. Open the back office by its name to add one.</div>
       ) : (
-        <div className="row" style={{ marginTop: 8 }}>
-          <div className="field">
-            <label>Name for the new key</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. YubiKey on the keyring, or My phone" maxLength={60} />
+        <>
+          <h3>Confirm it's you</h3>
+          <div className="muted" style={{ marginBottom: 6 }}>
+            Adding or removing a key asks for your password{twoFactor ? ' and a fresh code' : ''} again, so a stolen session cannot do it.
           </div>
-          <button className="primary narrow" type="button" disabled={busy} onClick={add} data-testid="add-passkey">
-            Add a security key
-          </button>
-        </div>
+          <div className="row">
+            <div className="field">
+              <label>Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+            </div>
+            {twoFactor && (
+              <div className="field">
+                <label>Authenticator code</label>
+                <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits" />
+              </div>
+            )}
+          </div>
+          <div className="row" style={{ marginTop: 8 }}>
+            <div className="field">
+              <label>Name for the new key</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. YubiKey on the keyring, or My phone" maxLength={60} />
+            </div>
+            <button className="primary narrow" type="button" disabled={busy || !confirmed} onClick={add} data-testid="add-passkey">
+              Add a security key
+            </button>
+          </div>
+        </>
       )}
       {msg && <div className="banner info" style={{ marginTop: 10 }}>{msg}</div>}
+      <h3>Lost a phone or laptop?</h3>
+      <div className="muted" style={{ marginBottom: 8 }}>
+        Signing out everywhere ends every session at once. Then check the key list above and remove any key you do not recognise.
+      </div>
+      <button className="danger" type="button" onClick={signOutEverywhere} data-testid="signout-everywhere">
+        Sign out everywhere
+      </button>
     </div>
   )
 }

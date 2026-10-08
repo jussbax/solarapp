@@ -441,6 +441,19 @@ def test_session_cookie_flags_and_password_change_logs_out(client):
     other = Settings(data_dir="/tmp/x", app_username="u", app_password="old", secret_key="s" * 32, cookie_secure=False)
     stale = _serializer(other).dumps({"u": "u", "g": "000000000000"})
     assert not client.get("/api/auth/me", cookies={COOKIE: stale}).json()["signed_in"]
+    # the cookie carries no fingerprint of the password that could be cracked offline
+    import base64
+    import hashlib
+    import json
+    payload = client.cookies[COOKIE].split(".")[0]
+    data = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    assert data["g"] != hashlib.sha256(b"p").hexdigest()[:12] and len(data["g"]) == 16
+    # sign out everywhere: the old cookie is dead on every device, this one included
+    live = client.cookies[COOKIE]
+    assert client.post("/api/auth/signout-everywhere").status_code == 200
+    assert not client.get("/api/auth/me", cookies={COOKIE: live}).json()["signed_in"]
+    assert client.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 200
+    assert client.get("/api/auth/me").json()["signed_in"]
 
 
 def test_writes_must_come_from_the_back_office_itself(client):
@@ -602,21 +615,24 @@ def test_passkey_register_and_sign_in(client):
     assert client.get("/api/auth/me").json()["passkeys"] is False
     # managing keys needs a session; signing in with one is open but says so when none exists
     assert client.get("/api/auth/passkeys").status_code == 401
-    assert client.post("/api/auth/passkeys/options").status_code == 401
+    assert client.post("/api/auth/passkeys/options", json={"password": "p"}).status_code == 401
     assert client.post("/api/auth/passkey/options").status_code == 404
     assert client.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 200
 
     key = SoftKey("testserver", "http://testserver")
-    r = client.post("/api/auth/passkeys/options")
+    # a stolen cookie alone cannot add a key: the password is asked again, and a wrong one counts as a failed login
+    assert client.post("/api/auth/passkeys/options", json={"password": "wrong"}).status_code == 403
+    assert len(auth_routes._fails["testclient"]) == 1
+    r = client.post("/api/auth/passkeys/options", json={"password": "p"})
     assert r.status_code == 200
     opts = r.json()
     assert opts["options"]["rp"]["id"] == "testserver" and opts["options"]["authenticatorSelection"]["userVerification"] == "required"
-    r = client.post("/api/auth/passkeys", json={"challenge_id": opts["challenge_id"], "name": "Keyring YubiKey", "credential": key.register(opts["options"])})
+    r = client.post("/api/auth/passkeys", json={"password": "p", "challenge_id": opts["challenge_id"], "name": "Keyring YubiKey", "credential": key.register(opts["options"])})
     assert r.status_code == 201, r.text
     key_id = r.json()["id"]
     assert r.json()["name"] == "Keyring YubiKey" and r.json()["transports"] == ["usb"]
     # a challenge is single use
-    assert client.post("/api/auth/passkeys", json={"challenge_id": opts["challenge_id"], "name": "again", "credential": key.register(opts["options"])}).status_code == 400
+    assert client.post("/api/auth/passkeys", json={"password": "p", "challenge_id": opts["challenge_id"], "name": "again", "credential": key.register(opts["options"])}).status_code == 400
     assert [k["name"] for k in client.get("/api/auth/passkeys").json()] == ["Keyring YubiKey"]
 
     client.post("/api/auth/logout")
@@ -646,6 +662,89 @@ def test_passkey_register_and_sign_in(client):
     auth_routes._fails.clear()
     # remove the key while signed in; the password still works
     assert client.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 200
-    assert client.delete(f"/api/auth/passkeys/{key_id}").status_code == 204
+    assert client.post(f"/api/auth/passkeys/{key_id}/remove", json={"password": "nope"}).status_code == 403
+    assert client.post(f"/api/auth/passkeys/{key_id}/remove", json={"password": "p"}).status_code == 204
     assert client.get("/api/auth/passkeys").json() == []
     assert client.get("/api/auth/me").json()["passkeys"] is False
+
+
+def test_backup_code_is_consumed_exactly_once_under_concurrency(client):
+    import threading
+    from solarapp import twofactor
+    from solarapp.config import get_settings
+    settings = client.app.dependency_overrides[get_settings]()
+    _, codes, _ = twofactor.setup(settings)
+    try:
+        results = []
+        start = threading.Barrier(12)
+
+        def attempt():
+            start.wait()
+            results.append(twofactor.verify(settings, codes[0]))
+
+        threads = [threading.Thread(target=attempt) for _ in range(12)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert results.count(True) == 1
+        assert twofactor.remaining_backup_codes(settings) == 7
+    finally:
+        twofactor.disable(settings)
+
+
+def test_private_app_caps_request_bodies_and_frames_the_estimate_only_for_the_website(client):
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    big = {"customer_name": "x" * (1024 * 1024 + 10)}
+    assert client.post("/api/assessments", json=big).status_code == 413
+    assert client.post("/api/assessments", content=iter([b"{}"]), headers={"content-type": "application/json"}).status_code == 411  # chunked, no length
+    csp = client.get("/estimate").headers.get("content-security-policy", "")
+    assert "frame-ancestors 'self'" in csp and "x-frame-options" not in {k.lower() for k in client.get("/estimate").headers}
+    assert client.get("/login").headers["x-frame-options"] == "DENY"
+
+
+def test_anonymous_passkey_options_are_rate_limited(client):
+    from solarapp import passkeys
+    from solarapp.api import auth_routes, quick_routes
+    from solarapp.config import get_settings
+    from solarapp.db import get_session
+    client.post("/api/auth/logout")
+    # a key must exist for the options to be served at all
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    key = SoftKey("testserver", "http://testserver")
+    opts = client.post("/api/auth/passkeys/options", json={"password": "p"}).json()
+    created = client.post("/api/auth/passkeys", json={"password": "p", "challenge_id": opts["challenge_id"], "name": "k", "credential": key.register(opts["options"])})
+    assert created.status_code == 201
+    client.post("/api/auth/logout")
+    quick_routes._hits.pop("pk:testclient", None)
+    codes = [client.post("/api/auth/passkey/options").status_code for _ in range(auth_routes.OPTIONS_PER_HOUR + 1)]
+    assert codes[:-1] == [200] * auth_routes.OPTIONS_PER_HOUR and codes[-1] == 429
+    quick_routes._hits.pop("pk:testclient", None)
+    # a flood of challenges evicts the oldest ones, never everyone's
+    with passkeys._lock:
+        passkeys._challenges.clear()
+    for _ in range(passkeys.MAX_CHALLENGES + 5):
+        passkeys._remember(b"x", "login")
+    assert len(passkeys._challenges) == passkeys.MAX_CHALLENGES
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    assert client.post(f"/api/auth/passkeys/{created.json()['id']}/remove", json={"password": "p"}).status_code == 204
+
+
+def test_public_process_believes_the_tunnel_header_only_from_a_private_peer(tmp_path):
+    import httpx
+    from fastapi.testclient import TestClient
+    from solarapp.config import Settings
+    from solarapp.public import _trusted_peer, create_public_app
+    assert _trusted_peer("172.18.0.5") and _trusted_peer("127.0.0.1") and not _trusted_peer("203.0.113.9") and not _trusted_peer("testclient")
+    seen = {}
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        seen["xff"] = request.headers.get("x-forwarded-for")
+        return httpx.Response(200, json={"ok": True})
+
+    public = create_public_app(Settings(data_dir=tmp_path, site_dir=tmp_path, static_dir=tmp_path, upstream="http://private", internal_token="t" * 32),
+                               transport=httpx.MockTransport(upstream))
+    with TestClient(public) as pub:
+        # the test client is not an address at all, so a stranger's header is dropped and the peer itself is forwarded
+        assert pub.get("/api/quick/status", headers={"cf-connecting-ip": "1.2.3.4"}).status_code == 200
+        assert seen["xff"] == "testclient"
