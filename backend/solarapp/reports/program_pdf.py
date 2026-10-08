@@ -10,6 +10,8 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from xml.sax.saxutils import escape
+
 from ..schemas import AssessmentDoc
 from . import brand
 
@@ -41,10 +43,10 @@ def build_program_pdf(doc: AssessmentDoc, results: dict, company: dict) -> bytes
     ])
 
     mark = brand.logo(12 * mm)
-    head = Table([[mark or "", Paragraph(f"Program of works: {doc.customer_name or '-'}", h1)]], colWidths=[16 * mm, 240 * mm])
+    head = Table([[mark or "", Paragraph(f"Program of works: {escape(doc.customer_name or '-')}", h1)]], colWidths=[16 * mm, 240 * mm])
     head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), 1.5, brand.GOLD), ("LEFTPADDING", (0, 0), (0, 0), 0)]))
     story = [head]
-    story.append(Paragraph(f"INTERNAL, NOT FOR THE CUSTOMER · {doc.address} · {pricing['totals']['kwp']:.2f} kWp · contract PHP {php(pricing['totals']['contract_rounded'])}", small))
+    story.append(Paragraph(f"INTERNAL, NOT FOR THE CUSTOMER · {escape(doc.address)} · {pricing['totals']['kwp']:.2f} kWp · contract PHP {php(pricing['totals']['contract_rounded'])}", small))
     story.append(Paragraph("Schedule", h2))
     rows = [["Date", "Until", "Activity", "Customer sees"]]
     for e in prog["events"]:

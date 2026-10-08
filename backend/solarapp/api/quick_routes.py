@@ -1,13 +1,18 @@
 """Public estimate: four questions, no login. Rate limited per browser and per address.
 
-These routes are the only ones a website on another origin calls (see
-Settings.public_origins); everything else stays behind the login and, in
+These routes are the only ones the public website process calls (with the
+internal token) or, from another origin, a website listed in
+Settings.public_origins. Everything else stays behind the login and, in
 production, behind Cloudflare Access.
 """
 from __future__ import annotations
 
+import hmac
+import ipaddress
+import logging
+import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -19,7 +24,7 @@ from ..config import Settings, get_settings
 from ..core.dataset import PvgisDataset
 from ..core.quick import GOAL_LABEL, PATTERN_LABEL, quick_estimate
 from ..core.towns import towns_payload
-from ..db import get_session
+from ..db import get_engine, get_session
 from ..models import Assessment, QuickEstimateLog
 from ..notify import send_lead_notice, smtp_configured
 from ..pricing.job import PricingContext
@@ -28,45 +33,89 @@ from ..profile import public_profile, warranty_lines
 from ..schemas import AssessmentDoc, BillEntry, EnergyAudit, LeadInfo, ProgramJob, QuickLead, QuickRequest
 from .deps import get_pvgis
 
+log = logging.getLogger("solarapp.audit")
+UNAVAILABLE = "The estimate isn't available right now. Please try again later or message us on Facebook."
+TOO_MANY = "You've run a lot of estimates in a short time. Please try again in an hour."
+
+# ---- client address: proxy headers are honoured only from our own proxies (loopback, Docker and office networks)
+_TRUSTED = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")]
+
+
+def client_ip(request: Request) -> str:
+    peer = request.client.host if request.client else ""
+    try:
+        trusted = any(ipaddress.ip_address(peer) in n for n in _TRUSTED)
+    except ValueError:
+        trusted = False
+    if trusted:
+        forwarded = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if forwarded:
+            return forwarded[:64]
+    return peer or "?"
+
+
+# ---- rate limiter: bounded memory whatever a visitor sends
+ADDRESS_MULTIPLIER = 10       # one shared mobile address may hold many phones
+MAX_KEYS = 20_000             # beyond this a token flood is under way; drop the per-token buckets
+SWEEP_EVERY_S = 300.0
+_hits: dict[str, deque] = {}
+_lock = threading.Lock()
+_last_sweep = 0.0
+
+
+def _bucket_ok(key: str, limit: int, now: float) -> bool:
+    """True when the key may take another hit. Never allocates for a key it has not seen."""
+    q = _hits.get(key)
+    if q is None:
+        return limit > 0
+    while q and now - q[0] > 3600:
+        q.popleft()
+    if not q:
+        del _hits[key]
+        return limit > 0
+    return len(q) < limit
+
+
+def _sweep(now: float) -> None:
+    global _last_sweep
+    if now - _last_sweep < SWEEP_EVERY_S and len(_hits) < MAX_KEYS:
+        return
+    _last_sweep = now
+    for k in [k for k, q in _hits.items() if not q or now - q[-1] > 3600]:
+        del _hits[k]
+    if len(_hits) >= MAX_KEYS:
+        for k in [k for k in _hits if k.startswith("v:")]:
+            del _hits[k]
+
+
+def _throttle(request: Request, limit: int) -> None:
+    """Limit per browser (X-Visitor token) and, more loosely, per address. A rejected request allocates nothing."""
+    ip = client_ip(request)
+    token = (request.headers.get("x-visitor") or "").strip()[:64]
+    now = time.time()
+    with _lock:
+        _sweep(now)
+        ip_key = f"ip:{ip}"
+        if not _bucket_ok(ip_key, limit * ADDRESS_MULTIPLIER, now):
+            raise HTTPException(status_code=429, detail=TOO_MANY, headers={"Retry-After": "3600"})
+        per_key = f"v:{ip}:{token}" if token else f"ip-only:{ip}"
+        if not _bucket_ok(per_key, limit, now):
+            raise HTTPException(status_code=429, detail=TOO_MANY, headers={"Retry-After": "3600"})
+        for k in (ip_key, per_key):
+            _hits.setdefault(k, deque()).append(now)
 
 
 def internal_or_user(request: Request, settings: Settings = Depends(get_settings), user: str | None = Depends(current_user)) -> None:
-    """With an internal token configured, only the public website process (token) or a signed-in user may call these."""
-    if not settings.internal_token or user:
+    """With an internal token configured, only the public website process (token) or a signed-in user may call these.
+    Without one (single-process setups, development) the routes are public by design."""
+    if user or not settings.internal_token:
         return
-    if request.headers.get("x-internal-token", "") != settings.internal_token:
+    given = request.headers.get("x-internal-token", "")
+    if not hmac.compare_digest(given.encode(), settings.internal_token.encode()):
         raise HTTPException(status_code=404, detail="Not found")
 
 
 router = APIRouter(prefix="/api/quick", tags=["quick"], dependencies=[Depends(internal_or_user)])
-_hits: dict[str, deque] = defaultdict(deque)
-ADDRESS_MULTIPLIER = 20  # mobile networks put thousands of phones behind one address
-UNAVAILABLE = "The estimate isn't available right now. Please try again later or message us on Facebook."
-
-
-def _bucket_ok(key: str, limit: int, now: float) -> bool:
-    q = _hits[key]
-    while q and now - q[0] > 3600:
-        q.popleft()
-    return len(q) < limit
-
-
-def _client_ip(request: Request) -> str:
-    return request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "?")
-
-
-def _throttle(request: Request, limit: int) -> None:
-    """Limit per browser (X-Visitor token) and, more loosely, per address, so one shared
-    mobile address does not lock out a whole town while a script cannot run unlimited either."""
-    ip = _client_ip(request)
-    token = (request.headers.get("x-visitor") or "").strip()[:64]
-    now = time.time()
-    keys = [(f"ip:{ip}", limit * ADDRESS_MULTIPLIER)]
-    keys.append((f"v:{ip}:{token}", limit) if token else (f"ip-only:{ip}", limit))
-    if not all(_bucket_ok(k, lim, now) for k, lim in keys):
-        raise HTTPException(status_code=429, detail="You've run a lot of estimates in a short time. Please try again in an hour.")
-    for k, _ in keys:
-        _hits[k].append(now)
 
 
 def _ctx(session: Session) -> PricingContext:
@@ -80,6 +129,16 @@ def _source_label(src) -> str:
         host = urlparse(src.referrer).netloc
         return host or "referral"
     return "direct"
+
+
+def _log_estimate(row: QuickEstimateLog) -> None:
+    """Written after the response is sent, so the visitor never waits on the database."""
+    try:
+        with Session(get_engine()) as s:
+            s.add(row)
+            s.commit()
+    except Exception as e:  # noqa: BLE001 - a lost count must not matter
+        logging.getLogger(__name__).warning("estimate not logged: %s", e)
 
 
 @router.get("/status")
@@ -99,7 +158,7 @@ def quick_status(session: Session = Depends(get_session), settings: Settings = D
 
 
 @router.post("/estimate")
-def estimate(body: QuickRequest, request: Request, session: Session = Depends(get_session), pvgis: PvgisDataset = Depends(get_pvgis)) -> dict:
+def estimate(body: QuickRequest, request: Request, tasks: BackgroundTasks, session: Session = Depends(get_session), pvgis: PvgisDataset = Depends(get_pvgis)) -> dict:
     ctx = _ctx(session)
     if not ctx.config.quick.enabled:
         raise HTTPException(status_code=404, detail=UNAVAILABLE)
@@ -113,13 +172,13 @@ def estimate(body: QuickRequest, request: Request, session: Session = Depends(ge
     except LookupError:
         raise HTTPException(status_code=503, detail=UNAVAILABLE)
     src = request.headers.get("x-source", "")[:100]
-    session.add(QuickEstimateLog(
+    tasks.add_task(_log_estimate, QuickEstimateLog(
         goal=body.goal, pattern=body.pattern, monthly_kwh=float(out["inputs"]["monthly_kwh"]), town=out["inputs"]["town"],
-        lat=float(out["inputs"]["lat"]), lon=float(out["inputs"]["lon"]), panels=int(out["system"]["panels"]), kwp=float(out["system"]["kwp"]),
+        lat=round(float(out["inputs"]["lat"]), 2), lon=round(float(out["inputs"]["lon"]), 2),  # a town, not a house
+        panels=int(out["system"]["panels"]), kwp=float(out["system"]["kwp"]),
         battery_kwh=float(out["system"]["battery_kwh"]), price=float(out["price"]["total"]), source=src.split("/")[0], campaign=src.split("/", 1)[1] if "/" in src else "",
         visitor=(request.headers.get("x-visitor") or "")[:64],
     ))
-    session.commit()
     return out
 
 
@@ -152,13 +211,14 @@ def lead(body: QuickLead, request: Request, tasks: BackgroundTasks, session: Ses
         customer_name=body.name.strip(), address=address, notes=notes, lat=where["lat"], lon=where["lon"],
         audit=EnergyAudit(bills=[BillEntry(id="lead", billing_month=now.strftime("%Y-%m"), kwh=float(kwh) if kwh else 0.0, amount_php=body.monthly_php)], system={"kind": body.goal}),
         program=ProgramJob(stage="lead"),
-        lead=LeadInfo(contact=body.contact.strip(), town=where["label"], preferred_time=body.preferred_time, consent=body.consent,
+        lead=LeadInfo(contact=body.contact.strip(), town=where["label"], preferred_time=body.preferred_time, consent=body.consent, notice_version=body.notice_version,
                       created_at=now.isoformat(), source=body.source, estimate=est),
     )
     a = Assessment(customer_name=doc.customer_name, address=doc.address, doc=doc.model_dump(mode="json"))
     session.add(a)
     session.commit()
     session.refresh(a)
+    log.info("lead created id=%s ip=%s source=%s", a.id, client_ip(request), _source_label(body.source))
     if smtp_configured(settings):
         link = f"{settings.public_url.rstrip('/')}/assessments/{a.id}" if settings.public_url else f"assessment #{a.id}"
         tasks.add_task(send_lead_notice, settings, f"New solar lead: {doc.customer_name} ({where['label']})", f"{notes}\n\nSource: {_source_label(body.source)}\nOpen: {link}\n")

@@ -32,7 +32,7 @@ PROFILE_FIELDS: list[tuple[str, str, str]] = [
     ("warranty_battery_years", "Battery warranty (years)", ""),
     ("payment_details", "Where to pay (bank or GCash details for the proposal)", ""),
     ("callback_promise", "After a booking, you will reach out", "within one working day"),
-    ("privacy_note", "Privacy line under the booking form", "We use your name and number only to arrange your visit and send your estimate. We never pass them on."),
+    ("privacy_note", "Privacy line under the booking form", "We use your name and number only to arrange your visit and send your estimate. We keep them for up to 12 months unless you become a customer, and we never sell them or share them beyond the services that process them for us. Message us to see or delete your details."),
 ]
 PROFILE_KEYS = [k for k, _, _ in PROFILE_FIELDS]
 # fields the public estimate page may show; the rest stay internal

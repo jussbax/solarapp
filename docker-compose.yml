@@ -1,17 +1,37 @@
+# Two processes from one image behind two Cloudflare tunnels. The host publishes no ports.
+#   docker compose --profile tunnels up -d --build
+# For a host-level cloudflared or LAN testing add the override: -f docker-compose.yml -f docker-compose.lan.yml
+
+x-hardened: &hardened
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 256
+  mem_limit: 1g
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
 services:
-  # The private app: back office, engine, database, documents. Never published to the internet directly.
+  # The private app: back office, engine, database, documents. Reachable only through the office tunnel (behind
+  # Cloudflare Access) and from the public process over the internal network.
   solarapp:
+    <<: *hardened
     build: .
     image: solarapp:latest
-    restart: unless-stopped
     env_file: .env
-    ports:
-      # Local only by default, for a host-level cloudflared or LAN testing. Set SOLARAPP_BIND=0.0.0.0 in .env
-      # to open it to the office network. With the tunnel containers below you can delete this block entirely.
-      - "${SOLARAPP_BIND:-127.0.0.1}:8000:8000"
+    environment:
+      SOLARAPP_INTERNAL_TOKEN: ${SOLARAPP_INTERNAL_TOKEN:?set SOLARAPP_INTERNAL_TOKEN in .env (openssl rand -hex 24)}
+    user: "10001:10001"
+    networks: [internal, office-edge]
     volumes:
-      # Weather dataset and the SQLite database live here, outside the image.
+      # Weather dataset, the SQLite database and the generated secret key live here, outside the image.
       - ./data:/app/data
+      # The supplier workbook is mounted into the private process only; it is not baked into the image.
+      - ./backend/data_seed:/app/backend/data_seed:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
       interval: 30s
@@ -21,40 +41,55 @@ services:
   # The public website and estimate: same image, a different process, no database, no documents, no secrets
   # beyond the internal token. It forwards only the three estimate calls to the private app.
   solarapp-public:
+    <<: *hardened
     image: solarapp:latest
-    restart: unless-stopped
     depends_on:
       - solarapp
     environment:
       SOLARAPP_UPSTREAM: http://solarapp:8000
-      SOLARAPP_INTERNAL_TOKEN: ${SOLARAPP_INTERNAL_TOKEN:-}
+      SOLARAPP_INTERNAL_TOKEN: ${SOLARAPP_INTERNAL_TOKEN:?set SOLARAPP_INTERNAL_TOKEN in .env (openssl rand -hex 24)}
       SOLARAPP_SITE_DIR: /app/site/dist
       SOLARAPP_STATIC_DIR: /app/frontend/dist
+    user: "10001:10001"
+    networks: [internal, public-edge]
     command: ["uvicorn", "solarapp.public:app", "--host", "0.0.0.0", "--port", "8000"]
-    read_only: true
-    tmpfs:
-      - /tmp
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
       interval: 30s
       timeout: 5s
       retries: 3
 
-  # Two Cloudflare tunnels as containers (docker compose --profile tunnels up -d): one for the back office
-  # hostname, one for the website. The host then publishes no ports at all. Tokens come from the Zero Trust
-  # dashboard (Networks > Tunnels > Create a tunnel > Docker).
+  # Two Cloudflare tunnels as containers: one for the back office hostname, one for the website. Tokens come from
+  # the Zero Trust dashboard (Networks > Tunnels > Create a tunnel > Docker). Pinned tag; bump it monthly.
   tunnel-office:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
+    <<: *hardened
+    image: cloudflare/cloudflared:2026.10.0
     profiles: ["tunnels"]
     depends_on:
       - solarapp
-    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CF_TUNNEL_TOKEN_OFFICE:-}"]
+    environment:
+      TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN_OFFICE:-}
+    user: "65532:65532"
+    networks: [office-edge]
+    command: ["tunnel", "--no-autoupdate", "run"]
 
   tunnel-public:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
+    <<: *hardened
+    image: cloudflare/cloudflared:2026.10.0
     profiles: ["tunnels"]
     depends_on:
       - solarapp-public
-    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CF_TUNNEL_TOKEN_PUBLIC:-}"]
+    environment:
+      TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN_PUBLIC:-}
+    user: "65532:65532"
+    networks: [public-edge]
+    command: ["tunnel", "--no-autoupdate", "run"]
+
+networks:
+  # public <-> private only; no internet
+  internal:
+    internal: true
+  # egress for the office tunnel and the lead e-mails
+  office-edge: {}
+  # egress for the website tunnel
+  public-edge: {}

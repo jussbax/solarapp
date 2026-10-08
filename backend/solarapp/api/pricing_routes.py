@@ -1,9 +1,13 @@
 """Materials database, pricing settings and workbook import."""
 from __future__ import annotations
 
+import logging
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Optional
+
+from starlette.concurrency import run_in_threadpool
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlmodel import Session, func, select
@@ -15,6 +19,9 @@ from ..pricing.config import PricingConfig
 from ..pricing.importer import read_workbook
 from ..pricing.store import SEED_PATH, catalog_status, load_config, persist_import, save_config
 from ..schemas import MaterialItemIn, MaterialItemPatch
+
+MAX_UPLOAD, MAX_UNZIPPED = 10 * 1024 * 1024, 200 * 1024 * 1024
+log = logging.getLogger("solarapp.audit")
 
 router = APIRouter(prefix="/api/pricing", tags=["pricing"], dependencies=[Depends(require_user)])
 
@@ -53,15 +60,28 @@ async def import_upload(
 ) -> dict:
     if not (file.filename or "").lower().endswith(".xlsx"):
         raise HTTPException(status_code=422, detail="Upload the materials workbook as .xlsx")
-    data = await file.read()
+    if file.size is not None and file.size > MAX_UPLOAD:
+        raise HTTPException(status_code=413, detail="The workbook is larger than 10 MB.")
+    data = await file.read(MAX_UPLOAD + 1)
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(status_code=413, detail="The workbook is larger than 10 MB.")
     with tempfile.TemporaryDirectory() as td:
-        path = Path(td) / (Path(file.filename or "materials.xlsx").name)
+        path = Path(td) / "materials.xlsx"
         path.write_bytes(data)
         try:
-            result = read_workbook(path)
+            with zipfile.ZipFile(path) as z:
+                infos = z.infolist()
+                if len(infos) > 2000 or sum(i.file_size for i in infos) > MAX_UNZIPPED:
+                    raise HTTPException(status_code=422, detail="The workbook is unreasonably large inside.")
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=422, detail="That is not an .xlsx workbook.")
+        try:
+            result = await run_in_threadpool(read_workbook, path)  # parsing is slow; keep the server answering meanwhile
         except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=422, detail=f"Could not read the workbook: {e}")
-    return persist_import(session, result, replace_config=not keep_config)
+            raise HTTPException(status_code=422, detail=f"Could not read the workbook. It needs the same sheets as PLD_Materials_DB. ({e})")
+    report = persist_import(session, result, replace_config=not keep_config)
+    log.info("materials imported file=%r added=%s updated=%s", (file.filename or "")[:80], report.get("added"), report.get("updated"))
+    return report
 
 
 @router.post("/import-seed")

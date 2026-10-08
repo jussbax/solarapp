@@ -10,7 +10,7 @@ from solarapp.main import create_app
 def client(tmp_path_factory):
     root = tmp_path_factory.mktemp("data")
     write_synthetic(root, (14.5, 14.75, 120.75, 121.0), 0.25)
-    settings = Settings(data_dir=root, app_username="u", app_password="p", secret_key="s" * 32, static_dir=root / "nostatic")
+    settings = Settings(data_dir=root, app_username="u", app_password="p", secret_key="s" * 32, cookie_secure=False, static_dir=root / "nostatic")
     app = create_app(settings)
     with TestClient(app) as c:
         yield c
@@ -316,7 +316,7 @@ def test_estimate_only_host_refuses_the_back_office(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
     from solarapp.config import Settings
     from solarapp.main import create_app
-    settings = Settings(data_dir=tmp_path, app_username="u", app_password="p", secret_key="s" * 32, public_host="https://www.pldevinc.com/", public_url="https://solar.pldevinc.com")
+    settings = Settings(data_dir=tmp_path, app_username="u", app_password="p", secret_key="s" * 32, cookie_secure=False, public_host="https://www.pldevinc.com/", public_url="https://solar.pldevinc.com")
     assert settings.public_hosts == ["pldevinc.com", "www.pldevinc.com"] and settings.estimate_url == "https://pldevinc.com"
     with TestClient(create_app(settings)) as c:
         # on the public hostname only the estimate's routes answer
@@ -340,7 +340,7 @@ def test_static_route_never_leaves_the_build_folder(tmp_path):
     (dist / "estimate.html").write_text("<html>estimate</html>")
     (dist / "ok.txt").write_text("served")
     (tmp_path / "secret.txt").write_text("private")
-    settings = Settings(data_dir=tmp_path / "data", app_username="u", app_password="p", secret_key="s" * 32, static_dir=dist)
+    settings = Settings(data_dir=tmp_path / "data", app_username="u", app_password="p", secret_key="s" * 32, cookie_secure=False, static_dir=dist)
     with TestClient(create_app(settings)) as c:
         assert c.get("/ok.txt").text == "served"
         for probe in ("/..%2fsecret.txt", "/%2e%2e/secret.txt", "/assets/..%2f..%2fsecret.txt", "/a/..%2f..%2fsecret.txt"):
@@ -363,7 +363,7 @@ def test_public_process_serves_the_site_and_forwards_only_the_estimate(tmp_path)
     (site / "static" / "site.css").write_text("body{}")
     (tmp_path / "secret.txt").write_text("private")
     token = "t" * 32
-    private = create_app(Settings(data_dir=tmp_path / "data", app_username="u", app_password="p", secret_key="s" * 32, internal_token=token))
+    private = create_app(Settings(data_dir=tmp_path / "data", app_username="u", app_password="p", secret_key="s" * 32, cookie_secure=False, internal_token=token))
     public = create_public_app(Settings(data_dir=tmp_path / "data2", site_dir=site, static_dir=tmp_path / "nodist", upstream="http://private", internal_token=token),
                                transport=httpx.ASGITransport(app=private))
     with TestClient(private) as priv, TestClient(public) as pub:
@@ -388,3 +388,121 @@ def test_public_process_serves_the_site_and_forwards_only_the_estimate(tmp_path)
         priv.post("/api/auth/login", json={"username": "u", "password": "p"})
         assert priv.get("/api/quick/status").status_code == 200  # a signed-in owner may still open the estimate page
         assert priv.get("/").headers.get("x-frame-options") == "DENY"
+
+
+def test_rate_limiter_memory_is_bounded_and_login_is_throttled(client):
+    from starlette.requests import Request
+    from fastapi import HTTPException
+    from solarapp.api import quick_routes
+
+    quick_routes._hits.clear()
+
+    def req(visitor):
+        return Request({"type": "http", "headers": [(b"x-visitor", visitor.encode())], "client": ("203.0.113.9", 1), "method": "POST", "path": "/api/quick/estimate"})
+
+    limit = 3
+    allowed = 0
+    for i in range(limit * quick_routes.ADDRESS_MULTIPLIER * 3):  # rotating tokens, far past the address cap
+        try:
+            quick_routes._throttle(req(f"bot-{i}"), limit)
+            allowed += 1
+        except HTTPException as e:
+            assert e.status_code == 429
+    assert allowed == limit * quick_routes.ADDRESS_MULTIPLIER
+    assert len(quick_routes._hits) <= allowed + 1  # one bucket per allowed request plus the address bucket; rejected requests allocate nothing
+    quick_routes._hits.clear()
+
+    # proxy headers are honoured only from our own networks
+    trusted = Request({"type": "http", "headers": [(b"cf-connecting-ip", b"198.51.100.7")], "client": ("172.18.0.5", 1), "method": "GET", "path": "/"})
+    spoof = Request({"type": "http", "headers": [(b"cf-connecting-ip", b"198.51.100.7")], "client": ("203.0.113.9", 1), "method": "GET", "path": "/"})
+    assert quick_routes.client_ip(trusted) == "198.51.100.7" and quick_routes.client_ip(spoof) == "203.0.113.9"
+
+    # ten wrong passwords, then a quarter hour off
+    from solarapp.api import auth_routes
+    auth_routes._fails.clear()
+    client.post("/api/auth/logout")
+    for _ in range(auth_routes.MAX_FAILS):
+        assert client.post("/api/auth/login", json={"username": "u", "password": "wrong"}).status_code == 401
+    r = client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    assert r.status_code == 429 and "Retry-After" in r.headers
+    auth_routes._fails.clear()
+    assert client.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 200
+
+
+def test_session_cookie_flags_and_password_change_logs_out(client):
+    client.post("/api/auth/logout")
+    r = client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    cookie = r.headers["set-cookie"].lower()
+    assert "httponly" in cookie and "samesite=strict" in cookie
+    assert client.get("/api/auth/me").json()["signed_in"]
+    # a token minted under another password is worthless
+    from solarapp.auth import COOKIE, _serializer
+    from solarapp.config import Settings
+    other = Settings(data_dir="/tmp/x", app_username="u", app_password="old", secret_key="s" * 32, cookie_secure=False)
+    stale = _serializer(other).dumps({"u": "u", "g": "000000000000"})
+    assert not client.get("/api/auth/me", cookies={COOKIE: stale}).json()["signed_in"]
+
+
+def test_writes_must_come_from_the_back_office_itself(client):
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    assert client.put("/api/settings", json={"phone": "1"}, headers={"origin": "https://evil.example"}).status_code == 403
+    assert client.put("/api/settings", json={"phone": "1"}, headers={"sec-fetch-site": "same-site"}).status_code == 403
+    assert client.put("/api/settings", json={"phone": "1"}, headers={"sec-fetch-site": "same-origin", "origin": "http://testserver"}).status_code == 200
+    assert client.post("/api/pricing/import?keep_config=true", files={"file": ("x.xlsx", b"PK\x03\x04junk", "application/octet-stream")}, headers={"origin": "https://evil.example"}).status_code == 403
+    # the public estimate is exempt by design (the website is another origin)
+    assert client.get("/api/quick/status", headers={"sec-fetch-site": "cross-site"}).status_code == 200
+    h = client.get("/api/settings").headers
+    assert h.get("cache-control") == "no-store" and "frame-ancestors 'none'" in h.get("content-security-policy", "")
+
+
+def test_workbook_upload_is_capped_and_checked(client):
+    from solarapp.api.pricing_routes import MAX_UPLOAD
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    big = b"0" * (MAX_UPLOAD + 1)
+    assert client.post("/api/pricing/import", files={"file": ("big.xlsx", big, "application/octet-stream")}).status_code == 413
+    assert client.post("/api/pricing/import", files={"file": ("bad.xlsx", b"not a zip at all", "application/octet-stream")}).status_code == 422
+
+
+def test_customer_text_cannot_style_the_documents_or_break_downloads(client):
+    from solarapp.api.assessments import _download_name
+    from solarapp.models import Assessment
+    from solarapp.reports.customer_pdf import build_customer_pdf
+    from solarapp.schemas import AssessmentDoc
+    nasty = 'Juan "<font size=\'40\' color=\'red\'>Dela Cruz</font><br/>'
+    a = Assessment(id=7, customer_name=nasty + " Ñandú")
+    disp = _download_name("proposal", a, "pdf")["Content-Disposition"]
+    assert disp.startswith('attachment; filename="proposal-Juan_') and "\n" not in disp and disp.isascii() and "filename*=UTF-8''" in disp
+    # a markup-shaped name is rendered as text (escaped), not as reportlab markup
+    import json
+    r = client.get("/api/assessments").json()
+    computed = next((x for x in r if x["has_results"]), None)
+    if computed:
+        full = client.get(f"/api/assessments/{computed['id']}").json()
+        doc = AssessmentDoc.model_validate({**full["doc"], "customer_name": nasty, "address": "<b>Blk</b> 1"})
+        pdf = build_customer_pdf(doc, full["results"], {"company_name": "Co <i>x</i>", "company_contact": "<u>c</u>"})
+        assert pdf.startswith(b"%PDF")
+
+
+def test_retention_anonymises_old_leads_and_trims_the_estimate_log(client):
+    from datetime import datetime, timedelta, timezone
+    from sqlmodel import Session
+    from solarapp.db import get_engine
+    from solarapp.models import Assessment, QuickEstimateLog
+    from solarapp.retention import run
+    from solarapp.schemas import AssessmentDoc, LeadInfo, ProgramJob
+    old = datetime.now(timezone.utc) - timedelta(days=400)
+    with Session(get_engine()) as s:
+        doc = AssessmentDoc(customer_name="Old Lead", address="Somewhere 12", lat=14.12345, lon=121.12345, program=ProgramJob(stage="lead"), lead=LeadInfo(contact="0917 1 2 3"))
+        a = Assessment(customer_name="Old Lead", address="Somewhere 12", doc=doc.model_dump(mode="json"), created_at=old, updated_at=old)
+        fresh = Assessment(customer_name="Fresh Lead", doc=AssessmentDoc(customer_name="Fresh Lead", program=ProgramJob(stage="lead")).model_dump(mode="json"))
+        s.add(a); s.add(fresh); s.add(QuickEstimateLog(goal="net_metering", created_at=old)); s.add(QuickEstimateLog(goal="net_metering"))
+        s.commit()
+        aid = a.id
+        preview = run(s, dry_run=True)
+        assert preview["anonymised_leads"] == 1 and preview["deleted_estimates"] == 1
+        result = run(s)
+        assert result["anonymised_leads"] == 1 and result["deleted_estimates"] == 1
+        s.expire_all()
+        gone = s.get(Assessment, aid)
+        assert gone.customer_name == "" and gone.doc["lead"]["contact"] == "" and gone.doc["lat"] == 14.12 and gone.doc["anonymised"]
+        assert s.get(Assessment, fresh.id).customer_name == "Fresh Lead"

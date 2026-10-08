@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
@@ -9,6 +11,8 @@ from ..db import get_session
 from ..models import AppSetting
 from ..profile import PROFILE_KEYS, company_profile
 from ..schemas import SettingsIn, SettingsOut
+
+log = logging.getLogger("solarapp.audit")
 
 router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(require_user)])
 
@@ -32,4 +36,5 @@ def write_settings(body: SettingsIn, session: Session = Depends(get_session), se
         row.value = value.strip()
         session.add(row)
     session.commit()
+    log.info("settings changed keys=%s", sorted(k for k in body.model_dump(exclude_none=True) if k in PROFILE_KEYS))
     return read_settings(session, settings)

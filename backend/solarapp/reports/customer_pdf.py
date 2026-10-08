@@ -13,6 +13,8 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # noqa: E4
 from reportlab.lib.units import mm  # noqa: E402
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
 
+from xml.sax.saxutils import escape  # noqa: E402
+
 from ..schemas import AssessmentDoc  # noqa: E402
 from . import brand  # noqa: E402
 from .quotation_pdf import contact_line  # noqa: E402
@@ -71,19 +73,19 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     small = ParagraphStyle("small", parent=ss["Normal"], fontName=F, fontSize=8, leading=11, textColor=brand.MUTED)
 
     story = []
-    left = [Paragraph(company.get("company_name") or "Your roof check", h1)]
+    left = [Paragraph(escape(company.get("company_name") or "Your roof check"), h1)]
     contact = company.get("company_contact") or contact_line({k: v for k, v in company.items() if k != "company_name"})
     if contact:
-        left.append(Paragraph(contact, sub))
+        left.append(Paragraph(escape(contact), sub))
     mark = brand.logo(14 * mm)
     head = Table([[mark or "", left]], colWidths=[18 * mm, 156 * mm])
     head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), 1.5, brand.GOLD), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LEFTPADDING", (0, 0), (0, 0), 0)]))
     story.append(head)
     story.append(Paragraph("Your roof check", h2))
     when = datetime.now().strftime("%-d %b %Y")
-    story.append(Paragraph(f"Prepared for <b>{doc.customer_name or '-'}</b> on {when}", body))
+    story.append(Paragraph(f"Prepared for <b>{escape(doc.customer_name or '-')}</b> on {when}", body))
     if doc.address:
-        story.append(Paragraph(doc.address, body))
+        story.append(Paragraph(escape(doc.address), body))
     if doc.lat is not None and doc.lon is not None:
         story.append(Paragraph(f"Map pin: {doc.lat:.5f}, {doc.lon:.5f}", small))
     story.append(Spacer(1, 6))
@@ -126,7 +128,7 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     face_rows = [["Roof face", "Size (m, eave × slope)", "Pitch", "Faces", "Panels"]]
     for f in doc.faces:
         cnt = selected["faces"][f.id]["count"]
-        face_rows.append([f.name, f"{f.length_m:g} × {f.width_m:g}", f"{f.tilt_deg:g}°", f"{compass(f.azimuth_deg)} ({f.azimuth_deg:g}°)", str(cnt)])
+        face_rows.append([escape(f.name), f"{f.length_m:g} × {f.width_m:g}", f"{f.tilt_deg:g}°", f"{compass(f.azimuth_deg)} ({f.azimuth_deg:g}°)", str(cnt)])
     ft = Table(face_rows, colWidths=[50 * mm, 40 * mm, 20 * mm, 40 * mm, 20 * mm])
     ft.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9), ("FONTNAME", (0, 0), (-1, -1), F),

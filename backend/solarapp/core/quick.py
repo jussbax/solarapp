@@ -48,6 +48,8 @@ def per_kwp_profile(pvgis: PvgisDataset, lat: float, lon: float, tilt: float, az
         raise ValueError("We don't have sun records for that spot. Check that the pin is on your house in the Philippines.")
     key = (cell.id, round(tilt, 1), round(azimuth, 1), round(k_site, 3))
     if key not in _per_kwp_cache:
+        if len(_per_kwp_cache) >= 256:
+            _per_kwp_cache.pop(next(iter(_per_kwp_cache)))
         tmy = pvgis.load_tmy(cell)
         sky = prepare_sky(tmy, cell.lat, cell.lon, cell.elevation_m, cell.time_offset_h)
         face = FaceSpec("quick", "Roof", tilt, azimuth, 1)

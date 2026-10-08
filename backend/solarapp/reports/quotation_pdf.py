@@ -20,6 +20,8 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # noqa: E4
 from reportlab.lib.units import mm  # noqa: E402
 from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
 
+from xml.sax.saxutils import escape  # noqa: E402
+
 from ..profile import warranty_lines  # noqa: E402
 from ..schemas import AssessmentDoc  # noqa: E402
 from . import brand  # noqa: E402
@@ -173,10 +175,10 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     right = [["Proposal No.", proposal_no or "-"], ["Proposal date", today.strftime("%-d %b %Y")], ["Valid until", valid.strftime("%-d %b %Y")]]
     rt = Table([[Paragraph(a, small), Paragraph(f"<b>{b}</b>", cell_r)] for a, b in right], colWidths=[26 * mm, 32 * mm])
     rt.setStyle(TableStyle([("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
-    left = [Paragraph(company.get("company_name") or "Solar proposal", brand_style)]
+    left = [Paragraph(escape(company.get("company_name") or "Solar proposal"), brand_style)]
     contact = company.get("company_contact") or contact_line({k: v for k, v in company.items() if k != "company_name"})
     if contact:
-        left.append(Paragraph(contact, sub))
+        left.append(Paragraph(escape(contact), sub))
     left.append(Paragraph("SOLAR SYSTEM PROPOSAL", ParagraphStyle("t", parent=sub, fontName=FB, textColor=GOLD, fontSize=9, spaceBefore=4)))
     mark = brand.logo(14 * mm)
     head = Table([[mark or "", left, rt]], colWidths=[18 * mm, 100 * mm, 64 * mm])
@@ -189,8 +191,8 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     battery_item = next((i for i in mat["items"] if i["key"] == "Battery"), None)
     battery_part = float(battery_item["amount"]) * (1 + vat_rate) if battery_item else 0.0
     cust_block = [
-        Paragraph(f"<b>{doc.customer_name or '-'}</b>", ParagraphStyle("cn", parent=body, fontSize=10, leading=13)),
-        Paragraph(doc.address or "", body),
+        Paragraph(f"<b>{escape(doc.customer_name or '-')}</b>", ParagraphStyle("cn", parent=body, fontSize=10, leading=13)),
+        Paragraph(escape(doc.address or ""), body),
         Paragraph(f"Map pin {doc.lat:.5f}, {doc.lon:.5f}" if doc.lat is not None and doc.lon is not None else "", small),
     ]
     tot_rows = [[Paragraph("TOTAL CONTRACT PRICE (VAT INCLUDED)", big_lbl)], [Paragraph(php(cust["total"]), big)]]
@@ -220,7 +222,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     if bat.get("installed_kwh", 0) > 0 and sizing.get("kind") != "net_metering":
         sysinfo.append(["Battery", f"{bat['installed_kwh']:.0f} kWh lithium battery (LiFePO4)"])
     if company.get("brands"):
-        sysinfo.append(["Brands", company["brands"]])
+        sysinfo.append(["Brands", escape(company["brands"])])
     annual = sizing.get("annual_production_kwh") or (results.get("production") or {}).get("annual_kwh")
     if annual:
         sysinfo.append(["Solar power made", f"about {annual:,.0f} kWh a year"])
@@ -297,7 +299,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         ("ALIGN", (2, 0), (2, -1), "RIGHT"), ("LINEBELOW", (0, 1), (-1, -2), 0.3, LINE), ("FONTNAME", (0, -1), (-1, -1), FB),
         ("TOPPADDING", (0, 0), (-1, 0), 8), ("BACKGROUND", (0, -1), (-1, -1), ACCENT_LIGHT),
     ]))
-    story.append(Paragraph(f"Payment schedule for proposal {proposal_no or '-'}, {doc.customer_name or '-'}. Please keep this for your records.", small))
+    story.append(Paragraph(f"Payment schedule for proposal {escape(proposal_no or '-')}, {escape(doc.customer_name or '-')}. Please keep this for your records.", small))
     story.append(stub)
 
     # ---- page two: details of charges, schedule, your questions, acceptance
@@ -318,7 +320,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
             qty = _qty(i["qty"])
             if unit == "person-day":
                 qty, unit = f"{qty} person-days" if float(i["qty"]) != 1 else "1 person-day", ""
-            rows.append([Paragraph(i["name"], cell), qty, unit, php(i["amount"])])
+            rows.append([Paragraph(escape(i["name"]), cell), qty, unit, php(i["amount"])])
         rows.append([f"{s['label']} subtotal", "", "", php(s["amount"])])
         r = len(rows) - 1
         styles += [("FONTNAME", (3, r), (3, r), FB), ("SPAN", (0, r), (2, r)), ("ALIGN", (0, r), (0, r), "RIGHT")]
@@ -335,7 +337,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         srows = [["Date", "Milestone"]]
         for e in prog["customer_schedule"]:
             when = _d(e["date"]) + (f" to {_d(e['end'])}" if e.get("end") and e["end"] != e["date"] else "")
-            srows.append([when, Paragraph(e["label"], cell)])
+            srows.append([when, Paragraph(escape(e["label"]), cell)])
         st2 = Table(srows, colWidths=[50 * mm, 134 * mm])
         st2.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 8), ("FONTNAME", (0, 0), (-1, -1), F), ("BACKGROUND", (0, 0), (-1, 0), ACCENT_LIGHT), ("LINEBELOW", (0, 0), (-1, -1), 0.3, LINE), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
         story.append(st2)
@@ -381,12 +383,12 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     down = next((p for p in prog["payments"] if p.get("key") == "downpayment"), None) if prog.get("available") else None
     accept = ["To accept this proposal, sign below and send us a photo on Messenger, or sign on our next visit."]
     if down:
-        accept.append(f"The downpayment of {php(down['amount'])} is due on signing" + (f", to: {company['payment_details']}." if company.get("payment_details") else "."))
+        accept.append(f"The downpayment of {php(down['amount'])} is due on signing" + (f", to: {escape(company['payment_details'])}." if company.get("payment_details") else "."))
     sig_style = ParagraphStyle("sig", parent=small, textColor=INK)
     sig = Table([
         [Paragraph("Accepted by the customer", sig_style), Paragraph(f"For {company.get('company_name') or 'the company'}", sig_style)],
         [Spacer(1, 26), Spacer(1, 26)],
-        [Paragraph(f"{doc.customer_name or 'Name'} · signature · date", sig_style), Paragraph(f"{company.get('owner_name') or 'Name'} · signature · date", sig_style)],
+        [Paragraph(f"{escape(doc.customer_name or 'Name')} · signature · date", sig_style), Paragraph(f"{escape(company.get('owner_name') or 'Name')} · signature · date", sig_style)],
     ], colWidths=[92 * mm, 92 * mm])
     sig.setStyle(TableStyle([("LINEBELOW", (0, 1), (-1, 1), 0.6, INK), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 10)]))
     story.append(KeepTogether([section("TO ACCEPT THIS PROPOSAL"), Spacer(1, 3)] + [Paragraph(a, body) for a in accept] + [Spacer(1, 6), sig]))

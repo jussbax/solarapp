@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from typing import Optional
 
+import logging
+import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session, select
@@ -23,6 +27,17 @@ from ..schemas import AssessmentDoc, AssessmentOut, AssessmentSummary, LeadEstim
 from .appliances import remember_appliances
 from .deps import get_nasa, get_pvgis
 from .settings_routes import company_settings
+
+log = logging.getLogger("solarapp.audit")
+
+
+def _download_name(prefix: str, a: Assessment, ext: str, inline: bool = False) -> dict:
+    """A Content-Disposition that survives quotes and non-Latin names (customer names come from the public form)."""
+    raw = (a.customer_name or f"assessment-{a.id}").strip()
+    ascii_name = re.sub(r"[^A-Za-z0-9_-]+", "_", unicodedata.normalize("NFKD", raw).encode("ascii", "ignore").decode()).strip("_")[:60] or f"assessment-{a.id}"
+    kind = "inline" if inline else "attachment"
+    return {"Content-Disposition": f"{kind}; filename=\"{prefix}-{ascii_name}.{ext}\"; filename*=UTF-8''{quote(f'{prefix}-{raw}.{ext}')}"}
+
 
 router = APIRouter(prefix="/api/assessments", tags=["assessments"], dependencies=[Depends(require_user)])
 
@@ -132,6 +147,7 @@ def delete_assessment(assessment_id: int, session: Session = Depends(get_session
     a = _get(session, assessment_id)
     session.delete(a)
     session.commit()
+    log.info("assessment deleted id=%s", assessment_id)
     return Response(status_code=204)
 
 
@@ -176,8 +192,7 @@ def customer_report(
         raise HTTPException(status_code=409, detail="Customer documents are disabled while test weather data is in use.")
     company = company_settings(session, settings)
     pdf = build_customer_pdf(AssessmentDoc.model_validate(a.doc), a.results, company, stale=a.results_stale)
-    name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
-    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="solar-assessment-{name}.pdf"'})
+    return Response(pdf, media_type="application/pdf", headers=_download_name("roof-check", a, "pdf"))
 
 
 @router.get("/{assessment_id}/quotation.pdf")
@@ -194,8 +209,7 @@ def customer_quotation(
         raise HTTPException(status_code=409, detail="Inputs changed since the last calculation. Calculate again first.")
     company = company_settings(session, settings)
     pdf = build_quotation_pdf(AssessmentDoc.model_validate(a.doc), a.results, company, proposal_no=f"P-{a.created_at.year}-{a.id:04d}")
-    name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
-    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="solar-quotation-{name}.pdf"'})
+    return Response(pdf, media_type="application/pdf", headers=_download_name("proposal", a, "pdf"))
 
 
 @router.get("/{assessment_id}/program.pdf")
@@ -210,8 +224,7 @@ def program_of_works(
         raise HTTPException(status_code=409, detail="Calculate first. Pricing needs the panel linked to the materials list.")
     company = company_settings(session, settings)
     pdf = build_program_pdf(AssessmentDoc.model_validate(a.doc), a.results, company)
-    name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
-    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="program-of-works-{name}.pdf"'})
+    return Response(pdf, media_type="application/pdf", headers=_download_name("program-of-works", a, "pdf"))
 
 
 @router.get("/{assessment_id}/card.png")
@@ -229,5 +242,4 @@ def client_card(
         raise HTTPException(status_code=409, detail="The card is disabled while test weather data is in use.")
     company = company_settings(session, settings)
     png = build_client_card(AssessmentDoc.model_validate(a.doc), a.results, company, next_step=next_step[:120], public_url=settings.estimate_url)
-    name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
-    return Response(png, media_type="image/png", headers={"Content-Disposition": f'inline; filename="roof-check-{name}.png"'})
+    return Response(png, media_type="image/png", headers=_download_name("roof-check", a, "png", inline=True))

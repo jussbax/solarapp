@@ -218,14 +218,14 @@ class LeadSource(BaseModel):
 class LeadEstimate(BaseModel):
     """What the prospect saw when they booked."""
     model_config = ConfigDict(extra="ignore")
-    goal: str = ""
-    panels: int = 0
-    kwp: float = 0.0
-    battery_kwh: float = 0.0
-    price: float = 0.0
-    bill_before_monthly: Optional[float] = None
-    bill_after_monthly: Optional[float] = None
-    payback_years: Optional[float] = None
+    goal: str = Field(default="", max_length=20)
+    panels: int = Field(default=0, ge=0, le=500)
+    kwp: float = Field(default=0.0, ge=0, le=500)
+    battery_kwh: float = Field(default=0.0, ge=0, le=1000)
+    price: float = Field(default=0.0, ge=0, le=100_000_000)
+    bill_before_monthly: Optional[float] = Field(default=None, ge=0, le=10_000_000)
+    bill_after_monthly: Optional[float] = Field(default=None, ge=0, le=10_000_000)
+    payback_years: Optional[float] = Field(default=None, ge=0, le=1000)
 
 
 class LeadInfo(BaseModel):
@@ -234,6 +234,7 @@ class LeadInfo(BaseModel):
     town: str = ""
     preferred_time: str = ""
     consent: bool = False
+    notice_version: str = ""      # the privacy line the visitor was shown
     created_at: str = ""
     source: LeadSource = Field(default_factory=LeadSource)
     estimate: LeadEstimate = Field(default_factory=LeadEstimate)
@@ -308,8 +309,8 @@ class AssessmentOut(BaseModel):
 
 
 class LoginIn(BaseModel):
-    username: str
-    password: str
+    username: str = Field(max_length=120)
+    password: str = Field(max_length=200)
 
 
 class SettingsOut(BaseModel):
@@ -386,6 +387,7 @@ class QuickLead(QuickRequest):
     address: str = Field(default="", max_length=200)
     preferred_time: str = Field(default="", max_length=40)
     consent: bool = True
+    notice_version: str = Field(default="", max_length=40)
     website: str = Field(default="", max_length=200)   # honeypot: a real person leaves it empty
     source: LeadSource = Field(default_factory=LeadSource)
     estimate: LeadEstimate = Field(default_factory=LeadEstimate)

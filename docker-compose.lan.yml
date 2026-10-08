@@ -1,0 +1,8 @@
+# Override for a host-level cloudflared or LAN testing: publishes the private app on the host.
+#   docker compose -f docker-compose.yml -f docker-compose.lan.yml up -d
+# 127.0.0.1 keeps it to this machine; SOLARAPP_BIND=0.0.0.0 in .env opens it to the office network (then set
+# SOLARAPP_COOKIE_SECURE=false, because the login cookie is marked Secure and plain http will not carry it).
+services:
+  solarapp:
+    ports:
+      - "${SOLARAPP_BIND:-127.0.0.1}:8000:8000"

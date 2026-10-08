@@ -125,6 +125,14 @@ the token or to a signed-in user.
    the estimate page (`solar.pldevinc.com/estimate`) keeps working behind
    Access.
 
+Then follow `docs/security.md` for the Cloudflare rules (rate limits, WAF,
+Access, the www redirect), the server checklist, backups and the monthly
+retention run. Note that the compose file now requires
+`SOLARAPP_INTERNAL_TOKEN` in `.env`, refuses the example password, runs
+both processes as an unprivileged user (`sudo chown -R 10001:10001 data`
+once) and publishes no host ports; use `docker-compose.lan.yml` for a
+host-level cloudflared or LAN testing.
+
 Single-container fallback: without the public process, set
 `SOLARAPP_PUBLIC_HOST=pldevinc.com` and route that hostname to the private
 app; it then serves the estimate page alone at the root of that hostname

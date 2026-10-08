@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     company_name: str = "PL Development Inc."
     company_contact: str = "Pila, Laguna"
     static_dir: Optional[Path] = None  # built frontend (dist); served at /
-    session_hours: int = 24 * 14
+    session_hours: int = 24 * 7
+    cookie_secure: bool = True         # SOLARAPP_COOKIE_SECURE=false only for plain-http testing on the office network
+    # The back office's own hostname; with public_host set, any other hostname is treated as public (fail closed)
+    office_host: str = ""
     # Website origins allowed to call the public estimate API (comma separated), e.g. https://pldevinc.com,https://www.pldevinc.com
     public_origins: str = ""
     # Public address of the back office, used in links sent to the owner (e.g. https://solar.pldevinc.com)
@@ -55,6 +58,11 @@ class Settings(BaseSettings):
             return []
         bare = h.removeprefix("www.")
         return [bare, "www." + bare]
+
+    @property
+    def office_hosts(self) -> list[str]:
+        h = self.office_host.strip().lower().removeprefix("https://").removeprefix("http://").rstrip("/").rstrip(".")
+        return [h] if h else []
 
     @property
     def estimate_url(self) -> str:

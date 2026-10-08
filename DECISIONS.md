@@ -576,3 +576,39 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
 - A path-traversal hole in the static file route (any readable file,
   without a login) was found during the security review and closed: the
   served path must resolve inside the build folder.
+
+## Security (from the security audit)
+
+- Threat model and findings live in the session's audit report; the fixes
+  are in the code. The public estimate's rate limiter is bounded: a
+  rejected request allocates nothing, buckets expire, and a token flood
+  drops to per-address buckets only; proxy headers for the client address
+  are honoured only from our own networks. Login is throttled per address
+  (ten failures, then fifteen minutes) and every login, lead, settings
+  change, import and deletion is written to the `solarapp.audit` log.
+- Secrets fail closed: the example password refuses to start the app; a
+  missing or example secret key is replaced by one generated once into
+  `data/secret.key`. The session cookie is Secure, HttpOnly, SameSite
+  Strict, lasts seven days and carries a password generation, so changing
+  the password logs every device out. Writes to the back office must come
+  from the back office itself (Sec-Fetch-Site and Origin are checked), so
+  neither a cross-site nor a same-site page can post with the cookie; the
+  public estimate routes are exempt by design.
+- The public process reads at most 16 KB of a request, lets four sizings
+  run at once, caches the status call for a minute, and refuses to start
+  without the internal token; the private app compares the token in
+  constant time. The workbook import is capped at 10 MB, pre-checked for
+  zip bombs, parsed in a thread and with defusedxml; customer-supplied
+  text is escaped before it reaches reportlab markup; download names are
+  ASCII-safe with a UTF-8 alternative.
+- SQLite runs in WAL mode with a 30 s busy timeout; backups use the
+  `.backup` API, never a file copy. Containers run as an unprivileged user
+  on a read-only filesystem with all capabilities dropped, memory and pid
+  limits, rotated logs, pinned base images, and the supplier workbook
+  mounted into the private process only; the three Docker networks keep
+  the website tunnel away from the private app.
+- Data Privacy Act: a retention command anonymises leads that never became
+  a visit after twelve months and trims the estimate log after ninety
+  days; the estimate log keeps a town-level location only; the privacy
+  notice and the privacy line say exactly what the system does, including
+  the e-mail service and the encrypted backup.
