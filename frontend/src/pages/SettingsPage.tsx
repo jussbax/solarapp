@@ -1,42 +1,81 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api'
 import PricingSettings from '../components/PricingSettings'
-import type { AppSettings, DataStatus } from '../types'
+import { PROFILE_FIELDS, type AppSettings, type DataStatus } from '../types'
+import { fmtDateTime } from '../fmt'
+
+const PUBLIC_KEYS = new Set(['company_name', 'address', 'phone', 'messenger', 'facebook', 'email', 'owner_name', 'pee_name', 'pee_license', 'service_area', 'brands', 'callback_promise', 'privacy_note'])
+const WARRANTY_KEYS = new Set(['warranty_workmanship_years', 'warranty_panels_product_years', 'warranty_panels_performance_years', 'warranty_inverter_years', 'warranty_battery_years'])
 
 export default function SettingsPage({ status, onRefresh }: { status: DataStatus | null; onRefresh: () => void }) {
   const [s, setS] = useState<AppSettings | null>(null)
+  const [saved, setSaved] = useState<AppSettings | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    api.settings().then(setS)
+    api.settings().then((r) => {
+      setS(r)
+      setSaved(r)
+    })
   }, [])
+
+  const dirty = s && saved && JSON.stringify(s) !== JSON.stringify(saved)
 
   const save = async (e: FormEvent) => {
     e.preventDefault()
     if (!s) return
-    const r = await api.saveSettings({ company_name: s.company_name, company_contact: s.company_contact })
-    setS(r)
-    setMsg('Saved.')
+    setBusy(true)
+    try {
+      const r = await api.saveSettings(s)
+      setS(r)
+      setSaved(r)
+      setMsg('Saved. The estimate page and the documents use these right away.')
+    } catch (err) {
+      setMsg((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
   }
+
+  const field = (key: string, label: string, hint?: string, long = false) =>
+    s && (
+      <div className="field" key={key}>
+        <label>{label}</label>
+        {long ? (
+          <textarea rows={2} value={s[key] ?? ''} onChange={(e) => setS({ ...s, [key]: e.target.value })} />
+        ) : (
+          <input value={s[key] ?? ''} onChange={(e) => setS({ ...s, [key]: e.target.value })} placeholder={hint} />
+        )}
+        {hint && !long && <div className="hint">{hint}</div>}
+      </div>
+    )
 
   return (
     <>
       <form className="card" onSubmit={save}>
-        <h2>Company (shown on customer documents)</h2>
+        <h2>Company profile</h2>
+        <div className="muted" style={{ marginBottom: 10 }}>
+          Shown on the public estimate page, the proposal, the roof check and the card. Blank fields are left off.
+        </div>
         {s && (
           <>
-            <div className="field">
-              <label>Company name</label>
-              <input value={s.company_name} onChange={(e) => setS({ ...s, company_name: e.target.value })} />
+            <h3>Who you are and how to reach you</h3>
+            <div className="grid">{PROFILE_FIELDS.filter((f) => PUBLIC_KEYS.has(f.key) && f.key !== 'privacy_note' && f.key !== 'callback_promise').map((f) => field(f.key, f.label, f.hint))}</div>
+            {field('company_contact', 'Contact line on documents', 'Address, phone, email, as one line under the company name.')}
+            <h3>Warranties printed on the proposal</h3>
+            <div className="grid">{PROFILE_FIELDS.filter((f) => WARRANTY_KEYS.has(f.key)).map((f) => field(f.key, f.label))}</div>
+            <h3>Proposal and booking</h3>
+            {field('payment_details', 'Where to pay', 'Bank or GCash details printed in the proposal acceptance block.', true)}
+            <div className="grid">{field('callback_promise', 'After a booking, you reach out', 'e.g. within one working day')}</div>
+            {field('privacy_note', 'Privacy line under the booking form', undefined, true)}
+            <div className="actions" style={{ position: 'static', border: 0, padding: '6px 0 0' }}>
+              <button className="primary" type="submit" disabled={busy || !dirty}>
+                Save profile
+              </button>
+              {msg && <span className="muted">{msg}</span>}
+              {dirty && !msg && <span className="chip unsaved">Unsaved changes</span>}
             </div>
-            <div className="field">
-              <label>Contact line (address, phone, email)</label>
-              <input value={s.company_contact} onChange={(e) => setS({ ...s, company_contact: e.target.value })} />
-            </div>
-            <button className="primary" type="submit">
-              Save
-            </button>{' '}
-            {msg && <span className="muted">{msg}</span>}
           </>
         )}
       </form>
@@ -58,7 +97,7 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
               </tr>
               <tr>
                 <th>Downloaded</th>
-                <td>{status.pvgis.downloaded_at ? new Date(status.pvgis.downloaded_at).toLocaleString() : '-'}</td>
+                <td>{status.pvgis.downloaded_at ? fmtDateTime(status.pvgis.downloaded_at) : '-'}</td>
               </tr>
               <tr>
                 <th>NASA POWER reference</th>

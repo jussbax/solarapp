@@ -273,3 +273,40 @@ def test_quick_throttle_tells_browsers_apart_behind_one_address():
     with pytest.raises(HTTPException):
         quick_routes._throttle(req("10.0.0.1", "bot-last"), 3)
     quick_routes._hits.clear()
+
+
+def test_website_lead_carries_source_and_snapshot_and_feeds_the_funnel(client):
+    client.post("/api/auth/logout")
+    st = client.get("/api/quick/status").json()
+    assert st["towns"] and any(t["name"] == "Pila" for t in st["towns"]) and "company_name" in st["profile"] and isinstance(st["warranty"], list)
+    body = {
+        "goal": "net_metering", "town": "Tanauan", "province": "Batangas", "monthly_php": 4000, "pattern": "evening",
+        "name": "Web Visitor", "contact": "0917 555 1234", "address": "", "preferred_time": "Evening",
+        "source": {"utm_source": "fb", "utm_campaign": "brownout1", "referrer": "https://facebook.com/", "page": "https://pldevinc.com/estimate?utm_source=fb"},
+        "estimate": {"goal": "net_metering", "panels": 6, "kwp": 3.51, "battery_kwh": 0, "price": 172000, "bill_before_monthly": 4000, "bill_after_monthly": 900, "payback_years": 4.2},
+    }
+    r = client.post("/api/quick/lead", json=body)
+    assert r.status_code == 200 and r.json()["ok"]
+    # a bot filling the hidden field gets a polite yes and nothing is stored
+    assert client.post("/api/quick/lead", json={**body, "name": "Bot", "website": "http://spam"}).json()["ok"]
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    rows = client.get("/api/assessments").json()
+    lead = next(a for a in rows if a["customer_name"] == "Web Visitor")
+    assert not any(a["customer_name"] == "Bot" for a in rows)
+    assert lead["stage"] == "lead" and lead["lead_contact"] == "0917 555 1234" and lead["lead_source"] == "fb" and lead["lead_estimate"]["price"] == 172000
+    assert lead["address"] == "Tanauan, Batangas" and lead["lead_town"] == "Tanauan, Batangas"
+    doc = client.get(f"/api/assessments/{lead['id']}").json()["doc"]
+    assert doc["lead"]["source"]["utm_campaign"] == "brownout1" and doc["lead"]["consent"] is True
+    assert "From the website estimate" in doc["notes"] and "best time: Evening" in doc["notes"] and "a lower bill, no battery" in doc["notes"]
+    f = client.get("/api/assessments/funnel?days=7").json()
+    assert f["leads"] >= 1 and f["days"] == 7 and "estimates" in f and "signed" in f
+
+
+def test_profile_settings_round_trip(client):
+    r = client.put("/api/settings", json={"phone": "0917 000 1111", "owner_name": "Justin", "warranty_inverter_years": "5", "not_a_field": "x"})
+    assert r.status_code == 200
+    got = client.get("/api/settings").json()
+    assert got["phone"] == "0917 000 1111" and got["owner_name"] == "Justin" and "not_a_field" not in got
+    client.post("/api/auth/logout")
+    pub = client.get("/api/quick/status").json()["profile"]
+    assert pub["phone"] == "0917 000 1111" and "payment_details" not in pub

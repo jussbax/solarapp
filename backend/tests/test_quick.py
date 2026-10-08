@@ -48,9 +48,24 @@ def test_quick_estimate_end_to_end(ctx, pvgis):
     # pesos instead of kWh
     q2 = quick_estimate(QuickRequest(goal="net_metering", lat=14.09, lon=121.15, monthly_php=4056, pattern="balanced"), pvgis, ctx)
     assert q2["inputs"]["monthly_kwh"] == pytest.approx(338) and q2["system"]["battery_kwh"] == 0
-    assert any("taken as" in a for a in q2["assumptions"])
+    assert any("We read your" in a for a in q2["assumptions"])
     # the evening pattern needs more battery than the morning pattern on the same consumption
     qm = quick_estimate(QuickRequest(goal="combination", lat=14.09, lon=121.15, monthly_kwh=338, pattern="morning"), pvgis, ctx)
     assert qm["system"]["battery_kwh"] <= q["system"]["battery_kwh"]
     with pytest.raises(ValueError):
         quick_estimate(QuickRequest(goal="off_grid", lat=14.09, lon=121.15, pattern="balanced"), pvgis, ctx)
+
+
+def test_quick_estimate_by_town_with_battery_alternative(ctx, pvgis):
+    from solarapp.core.quick import quick_estimate
+    from solarapp.schemas import QuickRequest
+    q = quick_estimate(QuickRequest(goal="combination", town="Tanauan", province="Batangas", monthly_kwh=338, pattern="evening"), pvgis, ctx)
+    assert q["inputs"]["town"] == "Tanauan" and q["inputs"]["in_area"] and q["inputs"]["lat"] == pytest.approx(14.086, abs=0.01)
+    alt = q["alternative"]
+    assert alt and alt["goal"] == "net_metering" and alt["system"]["battery_kwh"] == 0 and alt["price"]["total"] < q["price"]["total"]
+    assert q["price"]["battery_part"] > 0 and q["production"]["production_vs_use_pct"] > 0
+    # a pin far from any listed town is flagged, not refused
+    far = quick_estimate(QuickRequest(goal="net_metering", lat=14.65, lon=121.03, monthly_kwh=338, pattern="balanced"), pvgis, ctx)
+    assert not far["inputs"]["in_area"] and any("outside Laguna and Batangas" in w for w in far["warnings"])
+    with pytest.raises(ValueError):
+        quick_estimate(QuickRequest(goal="net_metering", town="Atlantis", monthly_kwh=338), pvgis, ctx)

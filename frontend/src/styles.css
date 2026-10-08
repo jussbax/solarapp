@@ -148,3 +148,4 @@ td.code { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .actions .chip { flex: 1 1 100%; }
   .map { height: 260px; }
 }
+.badge.gold { background: var(--gold-bg); color: var(--gold-dark); }

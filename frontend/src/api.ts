@@ -1,6 +1,6 @@
 import type {
-  ApplianceCategory, AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, CatalogItem, DataStatus, ImportReport, MaterialItem, MaterialSupplier,
-  PricingConfig, PricingStatus, QuickRequest, QuickResult,
+  ApplianceCategory, AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, CatalogItem, DataStatus, Funnel, ImportReport, MaterialItem, MaterialSupplier,
+  PricingConfig, PricingStatus,
 } from './types'
 
 export class ApiError extends Error {
@@ -12,20 +12,6 @@ export class ApiError extends Error {
 }
 
 let onUnauthorized: (() => void) | null = null
-
-/** A random id per browser so the public estimate's rate limit tells visitors apart behind one shared address. */
-export function visitorId(): string {
-  try {
-    let v = localStorage.getItem('solarapp:visitor')
-    if (!v) {
-      v = Math.random().toString(36).slice(2) + Date.now().toString(36)
-      localStorage.setItem('solarapp:visitor', v)
-    }
-    return v
-  } catch {
-    return 'anon'
-  }
-}
 
 /** Pydantic returns a list of {loc, msg}; show them as "field: message". */
 export function describeDetail(detail: unknown, status: number): string {
@@ -47,7 +33,7 @@ export function setUnauthorizedHandler(fn: () => void) {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(path.startsWith('/api/quick/') ? { 'X-Visitor': visitorId() } : {}), ...(init?.headers || {}) },
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init,
   })
   if (res.status === 401 && !path.endsWith('/auth/login') && !path.endsWith('/auth/me')) {
@@ -88,9 +74,7 @@ export const api = {
   quotationUrl: (id: number) => `/api/assessments/${id}/quotation.pdf`,
   programUrl: (id: number) => `/api/assessments/${id}/program.pdf`,
   cardUrl: (id: number) => `/api/assessments/${id}/card.png`,
-  quickStatus: () => request<{ enabled: boolean; data: boolean }>('/api/quick/status'),
-  quickEstimate: (body: QuickRequest) => request<QuickResult>('/api/quick/estimate', { method: 'POST', body: JSON.stringify(body) }),
-  quickLead: (body: QuickRequest & { name: string; contact: string; address: string }) => request<{ ok: boolean }>('/api/quick/lead', { method: 'POST', body: JSON.stringify(body) }),
+  funnel: (days = 30) => request<Funnel>(`/api/assessments/funnel?days=${days}`),
   pricingStatus: () => request<PricingStatus>('/api/pricing/status'),
   pricingConfig: () => request<PricingConfig>('/api/pricing/config'),
   savePricingConfig: (cfg: PricingConfig) => request<PricingConfig>('/api/pricing/config', { method: 'PUT', body: JSON.stringify(cfg) }),

@@ -66,10 +66,71 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    and carbon avoided. The proposal PDF, laid out like a utility statement
    with the company's own branding, carries the charges, savings, payment
    stub, details and schedule.
-10. Free quick estimate at `/quick`, no login: goal, location, monthly use,
-    usage pattern. Returns the system, price, savings and payback from the
-    same engines with typical-roof assumptions, and books the free roof
-    visit as a lead on the job list.
+10. Free estimate for the company website at `/estimate`, no login: goal,
+    town (Laguna and Batangas) or the phone's location, monthly use, usage
+    pattern. Returns the bill before and after, payback, price and the
+    system from the same engines with typical-roof assumptions, shows the
+    battery as a priced add-on, and books the free roof visit as a lead on
+    the job list with its source (UTM tags, referrer) and what the visitor
+    saw. The same page ships as an embeddable widget for the website (see
+    below). The job list shows the funnel for the last 30 days: estimates
+    run, leads, visits, proposals, signed.
+
+## The estimate on your website
+
+The estimate is meant to live on the company website; the back office stays
+private. Two ways to put it there:
+
+**Script widget (preferred, works on WordPress, Webflow, Framer and any
+builder that allows custom HTML):** put this where the estimate should
+appear, on a page such as `pldevinc.com/estimate`:
+
+```html
+<div id="pld-solar-estimate"></div>
+<script src="https://solar.pldevinc.com/widget/quick.js" defer></script>
+```
+
+The script calls the server it was loaded from. Add
+`data-api="https://solar.pldevinc.com"` on the script tag if the script is
+copied elsewhere. The widget inherits the page's font unless Montserrat is
+loaded on the site.
+
+**Iframe or link (Wix, Squarespace, or when custom scripts are not
+allowed):** embed or link `https://solar.pldevinc.com/estimate`. The page
+is standalone (no login shell) and fits a phone.
+
+Either way, set in `.env`:
+
+```
+SOLARAPP_PUBLIC_ORIGINS=https://pldevinc.com,https://www.pldevinc.com
+SOLARAPP_PUBLIC_URL=https://solar.pldevinc.com
+```
+
+The first allows the website's origin to call `/api/quick/*` (nothing else
+is reachable cross-origin, and the login cookie never travels with those
+calls). Fill in the company profile under Settings (phone, Messenger link,
+Facebook page, owner, PEE, warranties, brands, where you install): the
+page prints what is filled in and leaves the rest off.
+
+Links to the page can carry UTM tags
+(`?utm_source=fb&utm_medium=ad&utm_campaign=brownout1`); they are stored
+with the lead and counted on the job list. The widget raises a
+`pld-estimate` browser event (`estimate_shown`, `lead_submitted`) and pushes
+`pld_estimate_shown` / `pld_lead_submitted` to `window.dataLayer` when one
+exists, so a Meta Pixel or Google Tag on the website can fire Lead events.
+
+**Lead notices:** set `SOLARAPP_SMTP_*` and `SOLARAPP_NOTIFY_EMAIL` in `.env`
+to get an email for each booking (Gmail works with an app password). Without
+it, leads simply appear at the top of the job list with their contact and
+what they saw.
+
+**Keep the back office private (Cloudflare Access):** on the tunnel's
+hostname (`solar.pldevinc.com`) add an Access application that requires a
+login for everything, then a bypass policy for these paths only:
+`/estimate`, `/api/quick/*`, `/widget/*`, `/assets/*`, `/brand/*`,
+`/favicon.png`. The estimate and the widget stay public; the login page,
+the API and the documents need the Cloudflare login before the app's own
+login.
 
 ## Brand
 

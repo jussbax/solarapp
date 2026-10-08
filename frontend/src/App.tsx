@@ -7,7 +7,6 @@ import AssessmentListPage from './pages/AssessmentListPage'
 import AssessmentPage from './pages/AssessmentPage'
 import SettingsPage from './pages/SettingsPage'
 import MaterialsPage from './pages/MaterialsPage'
-import QuickPage from './pages/QuickPage'
 import DataBanner from './components/DataBanner'
 
 export default function App() {
@@ -51,7 +50,7 @@ export default function App() {
         </Link>
         {user && (
           <div className="right">
-            <Link to="/quick">Quick estimate</Link>
+            <a href="/estimate" target="_blank" rel="noreferrer">Estimate page</a>
             <Link to="/materials">Materials</Link>
             <Link to="/settings">Settings</Link>
             <span>{user}</span>
@@ -62,7 +61,6 @@ export default function App() {
       <div className="page">
         {user && <DataBanner status={status} />}
         <Routes>
-          <Route path="/quick" element={<QuickPage />} />
           <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage onLogin={(u) => setUser(u)} />} />
           <Route path="/" element={user ? <AssessmentListPage /> : <Navigate to="/login" />} />
           <Route path="/assessments/:id" element={user ? <AssessmentPage status={status} /> : <Navigate to="/login" />} />

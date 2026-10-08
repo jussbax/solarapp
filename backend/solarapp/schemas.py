@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import ConfigDict, BaseModel, Field, field_validator
 
 
 class WallObstacle(BaseModel):
@@ -173,7 +173,7 @@ class PaymentPlanIn(BaseModel):
     installment_first_offset_days: int = Field(default=30, ge=0)
 
 
-JobStage = Literal["lead", "assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
+JobStage = Literal["lead", "contacted", "assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
 
 
 class ProgramJob(BaseModel):
@@ -203,6 +203,42 @@ class EconomicsJob(BaseModel):
     om_per_year: Optional[float] = Field(default=None, ge=0)
 
 
+class LeadSource(BaseModel):
+    """Where a website lead came from; whatever the page could read."""
+    model_config = ConfigDict(extra="ignore")
+    utm_source: str = Field(default="", max_length=100)
+    utm_medium: str = Field(default="", max_length=100)
+    utm_campaign: str = Field(default="", max_length=100)
+    utm_content: str = Field(default="", max_length=100)
+    fbclid: str = Field(default="", max_length=200)
+    referrer: str = Field(default="", max_length=300)
+    page: str = Field(default="", max_length=300)
+
+
+class LeadEstimate(BaseModel):
+    """What the prospect saw when they booked."""
+    model_config = ConfigDict(extra="ignore")
+    goal: str = ""
+    panels: int = 0
+    kwp: float = 0.0
+    battery_kwh: float = 0.0
+    price: float = 0.0
+    bill_before_monthly: Optional[float] = None
+    bill_after_monthly: Optional[float] = None
+    payback_years: Optional[float] = None
+
+
+class LeadInfo(BaseModel):
+    """Kept on the assessment when it started as a website lead."""
+    contact: str = ""
+    town: str = ""
+    preferred_time: str = ""
+    consent: bool = False
+    created_at: str = ""
+    source: LeadSource = Field(default_factory=LeadSource)
+    estimate: LeadEstimate = Field(default_factory=LeadEstimate)
+
+
 class AssessmentDoc(BaseModel):
     customer_name: str = ""
     address: str = ""
@@ -221,6 +257,7 @@ class AssessmentDoc(BaseModel):
     pricing: PricingJob = Field(default_factory=PricingJob)
     program: ProgramJob = Field(default_factory=ProgramJob)
     economics: EconomicsJob = Field(default_factory=EconomicsJob)
+    lead: Optional[LeadInfo] = None
 
 
 class ApplianceCatalogOut(BaseModel):
@@ -254,6 +291,11 @@ class AssessmentSummary(BaseModel):
     system_kwp: Optional[float] = None
     annual_kwh: Optional[float] = None
     panel_count: Optional[int] = None
+    kind: Optional[str] = None
+    lead_contact: Optional[str] = None
+    lead_town: Optional[str] = None
+    lead_source: Optional[str] = None
+    lead_estimate: Optional[LeadEstimate] = None
 
 
 class AssessmentOut(BaseModel):
@@ -271,11 +313,14 @@ class LoginIn(BaseModel):
 
 
 class SettingsOut(BaseModel):
+    """Company profile; every key in profile.PROFILE_FIELDS."""
+    model_config = ConfigDict(extra="allow")
     company_name: str
     company_contact: str
 
 
 class SettingsIn(BaseModel):
+    model_config = ConfigDict(extra="allow")
     company_name: Optional[str] = None
     company_contact: Optional[str] = None
 
@@ -324,10 +369,12 @@ class MaterialItemPatch(BaseModel):
 
 
 class QuickRequest(BaseModel):
-    """The four questions of the free quick estimate."""
+    """The four questions of the free estimate. Location is a listed town or a pin."""
     goal: Literal["net_metering", "combination", "off_grid"] = "combination"
-    lat: float = Field(ge=-90, le=90)
-    lon: float = Field(ge=-180, le=180)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lon: Optional[float] = Field(default=None, ge=-180, le=180)
+    town: str = Field(default="", max_length=60)
+    province: str = Field(default="", max_length=40)
     monthly_kwh: Optional[float] = Field(default=None, gt=0, le=20000)
     monthly_php: Optional[float] = Field(default=None, gt=0, le=1000000)
     pattern: Literal["morning", "balanced", "evening"] = "balanced"
@@ -337,3 +384,8 @@ class QuickLead(QuickRequest):
     name: str = Field(min_length=1, max_length=120)
     contact: str = Field(min_length=3, max_length=120)
     address: str = Field(default="", max_length=200)
+    preferred_time: str = Field(default="", max_length=40)
+    consent: bool = True
+    website: str = Field(default="", max_length=200)   # honeypot: a real person leaves it empty
+    source: LeadSource = Field(default_factory=LeadSource)
+    estimate: LeadEstimate = Field(default_factory=LeadEstimate)

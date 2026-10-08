@@ -433,3 +433,48 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   "needs recalculating" for stale, "Roof check" for the customer PDF and
   card, "Proposal" for the quotation, "Tools" and "VAT" for the sections,
   degree signs instead of "deg", US spelling, no "(s)" plurals.
+
+## The estimate on the website
+
+- The free estimate is a marketing object and lives on the company website;
+  the assessment, pricing and program pages are the company's working
+  notes and stay behind the login. One engine serves both: the website
+  figure and the later proposal come from the same sizing, bill of
+  materials, pricing and savings code, so they never disagree.
+- The public page is its own small bundle (`/estimate`, built from
+  `frontend/estimate.html`) with no login shell and no map library, plus
+  an embeddable script (`/widget/quick.js`, built with
+  `vite.widget.config.ts`, styles inlined) that mounts the same component
+  inside any page on the website and calls the server it came from. The
+  old in-app `/quick` route is gone; the back office links to `/estimate`.
+- Cross-origin access is limited to the origins in
+  `SOLARAPP_PUBLIC_ORIGINS`, without credentials, so the login cookie never
+  travels with the website's calls; only `/api/quick/*` is useful to it.
+- Location is a town picker (Laguna and Batangas municipalities with
+  approximate town-centre coordinates) or the phone's location, not a map
+  pin: the PVGIS cell is about 27 km across and only the trip distance
+  uses the point, and a careless tap on a national-zoom map was the
+  biggest effort wall on a phone. A pin more than 25 km from any listed
+  town is flagged as outside the usual area, not refused.
+- The result leads with the bill before and after, the payback and the
+  price; the system is one line. For the two net-metering goals the other
+  one is computed too and shown as "without the battery" or "add a battery
+  for brownouts", with the honest line that the battery adds little to the
+  savings. The price breakdown and the assumptions sit under "How we worked
+  this out".
+- A lead carries its source (UTM tags, fbclid, referrer, page), the
+  estimate the visitor saw, a preferred time, and a consent flag; a hidden
+  honeypot field drops bots. The assessment's notes are written in plain
+  words, the list row shows the contact (tap to call) and what they saw,
+  and a "Contacted" stage sits between Lead and Assessed. Every estimate is
+  logged (goal, kWh, town, price, source) and the job list shows the funnel
+  for the last 30 days: estimates, leads, visits, proposals, signed.
+- The company profile (phone, Messenger, Facebook, owner, PEE and licence,
+  where you install, brands, warranties, where to pay, callback promise,
+  privacy line) is app settings edited on the Settings page; the public
+  page prints what is filled in and leaves the rest off, and the documents
+  (next batch) read the same profile.
+- Lead notices by email are optional (SMTP settings in `.env`); off by
+  default so the server keeps making no outside calls unless asked.
+- The website's analytics get a browser event and a dataLayer push on
+  estimate shown and lead submitted; the page itself loads no tracker.

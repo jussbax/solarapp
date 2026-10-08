@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session, select
 
@@ -10,14 +12,14 @@ from ..compute import ComputeError, compute_results
 from ..config import Settings, get_settings
 from ..core.dataset import NasaReference, PvgisDataset
 from ..db import get_session
-from ..models import Assessment, utcnow
+from ..models import Assessment, QuickEstimateLog, utcnow
 from ..pricing.job import PricingContext
 from ..pricing.store import load_catalog, load_config
 from ..reports.card import build_client_card
 from ..reports.customer_pdf import build_customer_pdf
 from ..reports.program_pdf import build_program_pdf
 from ..reports.quotation_pdf import build_quotation_pdf
-from ..schemas import AssessmentDoc, AssessmentOut, AssessmentSummary
+from ..schemas import AssessmentDoc, AssessmentOut, AssessmentSummary, LeadEstimate
 from .appliances import remember_appliances
 from .deps import get_nasa, get_pvgis
 from .settings_routes import company_settings
@@ -49,14 +51,50 @@ def list_assessments(session: Session = Depends(get_session)) -> list[Assessment
         if sizing:  # the sized system rather than the roof maximum
             prod = {"system_kwp": sizing.get("kwp"), "annual_kwh": sizing.get("annual_production_kwh"), "total_panels": sizing.get("panels")}
         pricing = (a.results or {}).get("pricing") or {}
+        doc = a.doc or {}
+        lead = doc.get("lead") or {}
+        src = lead.get("source") or {}
+        est = lead.get("estimate") or {}
         out.append(AssessmentSummary(
             id=a.id, created_at=a.created_at, updated_at=a.updated_at, customer_name=a.customer_name,
             address=a.address, has_results=a.results is not None, results_stale=a.results_stale,
-            stage=((a.doc or {}).get("program") or {}).get("stage", "assessed"),
+            stage=(doc.get("program") or {}).get("stage", "assessed"),
             contract_php=(pricing.get("totals") or {}).get("contract_rounded") if pricing.get("available") else None,
             system_kwp=prod.get("system_kwp"), annual_kwh=prod.get("annual_kwh"), panel_count=prod.get("total_panels"),
+            kind=((doc.get("audit") or {}).get("system") or {}).get("kind"),
+            lead_contact=lead.get("contact") or None, lead_town=lead.get("town") or None,
+            lead_source=(src.get("utm_source") or ("referral" if src.get("referrer") else None)) if lead else None,
+            lead_estimate=LeadEstimate.model_validate(est) if est.get("panels") else None,
         ))
     return out
+
+
+STAGE_ORDER = ["lead", "contacted", "assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
+
+
+@router.get("/funnel")
+def funnel(days: int = 30, session: Session = Depends(get_session)) -> dict:
+    """The five numbers of the funnel for the last N days: estimates, leads, visits (assessed or later), proposals, signed."""
+    days = max(1, min(int(days), 3650))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    estimates = session.exec(select(QuickEstimateLog).where(QuickEstimateLog.created_at >= since)).all()
+    rows = session.exec(select(Assessment).where(Assessment.created_at >= since)).all()
+    def rank(a: Assessment) -> int:
+        st = ((a.doc or {}).get("program") or {}).get("stage", "assessed")
+        return STAGE_ORDER.index(st) if st in STAGE_ORDER else 2
+    leads = [a for a in rows if (a.doc or {}).get("lead")]
+    by_source: dict[str, int] = {}
+    for e in estimates:
+        by_source[e.source or "direct"] = by_source.get(e.source or "direct", 0) + 1
+    return {
+        "days": days,
+        "estimates": len(estimates),
+        "leads": len(leads),
+        "visits": sum(1 for a in rows if rank(a) >= STAGE_ORDER.index("assessed")),
+        "proposals": sum(1 for a in rows if rank(a) >= STAGE_ORDER.index("quoted")),
+        "signed": sum(1 for a in rows if rank(a) >= STAGE_ORDER.index("signed")),
+        "estimates_by_source": by_source,
+    }
 
 
 @router.post("", response_model=AssessmentOut, status_code=201)

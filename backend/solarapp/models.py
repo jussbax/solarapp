@@ -40,6 +40,27 @@ class ApplianceCatalog(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
 
 
+class QuickEstimateLog(SQLModel, table=True):
+    """One row per public estimate shown, so the owner can count estimates against leads."""
+    __tablename__ = "quick_estimates"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=utcnow)
+    goal: str = ""
+    pattern: str = ""
+    monthly_kwh: float = 0.0
+    town: str = ""
+    lat: float = 0.0
+    lon: float = 0.0
+    panels: int = 0
+    kwp: float = 0.0
+    battery_kwh: float = 0.0
+    price: float = 0.0
+    source: str = ""      # utm_source or referrer host
+    campaign: str = ""
+    visitor: str = ""
+
+
 class AppSetting(SQLModel, table=True):
     __tablename__ = "app_settings"
 

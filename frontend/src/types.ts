@@ -201,9 +201,9 @@ export interface EconomicsBlock {
   co2_t_per_year?: number
 }
 
-export type JobStage = 'lead' | 'assessed' | 'quoted' | 'signed' | 'sourcing' | 'installing' | 'commissioned' | 'net_metering' | 'closed'
+export type JobStage = 'lead' | 'contacted' | 'assessed' | 'quoted' | 'signed' | 'sourcing' | 'installing' | 'commissioned' | 'net_metering' | 'closed'
 export const JOB_STAGES: { id: JobStage; label: string }[] = [
-  { id: 'lead', label: 'Lead' }, { id: 'assessed', label: 'Assessed' }, { id: 'quoted', label: 'Quoted' }, { id: 'signed', label: 'Signed' }, { id: 'sourcing', label: 'Sourcing' },
+  { id: 'lead', label: 'Lead' }, { id: 'contacted', label: 'Contacted' }, { id: 'assessed', label: 'Assessed' }, { id: 'quoted', label: 'Quoted' }, { id: 'signed', label: 'Signed' }, { id: 'sourcing', label: 'Sourcing' },
   { id: 'installing', label: 'Installing' }, { id: 'commissioned', label: 'Commissioned' }, { id: 'net_metering', label: 'Net metering' }, { id: 'closed', label: 'Closed' },
 ]
 
@@ -471,6 +471,21 @@ export interface AssessmentSummary {
   system_kwp: number | null
   annual_kwh: number | null
   panel_count: number | null
+  kind: string | null
+  lead_contact: string | null
+  lead_town: string | null
+  lead_source: string | null
+  lead_estimate: { goal: string; panels: number; kwp: number; battery_kwh: number; price: number; bill_before_monthly: number | null; bill_after_monthly: number | null; payback_years: number | null } | null
+}
+
+export interface Funnel {
+  days: number
+  estimates: number
+  leads: number
+  visits: number
+  proposals: number
+  signed: number
+  estimates_by_source: Record<string, number>
 }
 
 export interface Warning {
@@ -705,7 +720,32 @@ export interface DataStatus {
 export interface AppSettings {
   company_name: string
   company_contact: string
+  [key: string]: string
 }
+
+/** Company profile fields, in Settings order. Mirrors backend profile.PROFILE_FIELDS. */
+export const PROFILE_FIELDS: { key: string; label: string; hint?: string }[] = [
+  { key: 'company_name', label: 'Company name' },
+  { key: 'company_contact', label: 'Contact line on documents', hint: 'Address, phone, email, as one line under the company name.' },
+  { key: 'address', label: 'Office address' },
+  { key: 'phone', label: 'Phone or mobile' },
+  { key: 'messenger', label: 'Messenger link', hint: 'https://m.me/yourpage' },
+  { key: 'facebook', label: 'Facebook page link' },
+  { key: 'email', label: 'Email' },
+  { key: 'owner_name', label: "Owner's name", hint: 'Signs the proposal; named in the booking thank-you.' },
+  { key: 'pee_name', label: 'Professional Electrical Engineer' },
+  { key: 'pee_license', label: 'PEE licence number (PRC)' },
+  { key: 'service_area', label: 'Where you install', hint: 'e.g. Laguna and Batangas' },
+  { key: 'brands', label: 'Brands you install', hint: 'One line, e.g. Blue Carbon TOPCon panels, Felicity hybrid inverters, LiFePO4 batteries' },
+  { key: 'warranty_workmanship_years', label: 'Workmanship warranty (years)' },
+  { key: 'warranty_panels_product_years', label: 'Panel product warranty (years)' },
+  { key: 'warranty_panels_performance_years', label: 'Panel performance warranty (years)' },
+  { key: 'warranty_inverter_years', label: 'Inverter warranty (years)' },
+  { key: 'warranty_battery_years', label: 'Battery warranty (years)' },
+  { key: 'payment_details', label: 'Where to pay', hint: 'Bank or GCash details printed in the proposal acceptance block.' },
+  { key: 'callback_promise', label: 'After a booking, you reach out', hint: 'e.g. within one working day' },
+  { key: 'privacy_note', label: 'Privacy line under the booking form' },
+]
 
 export const SKY_CONDITIONS = ['clear', 'partly cloudy', 'hazy', 'cloudy', 'overcast']
 
@@ -797,25 +837,3 @@ export function newReadingSet(faceId: string | null): ReadingSet {
   }
 }
 
-export type QuickGoal = 'net_metering' | 'combination' | 'off_grid'
-export type QuickPattern = 'morning' | 'balanced' | 'evening'
-
-export interface QuickRequest {
-  goal: QuickGoal
-  lat: number
-  lon: number
-  monthly_kwh: number | null
-  monthly_php: number | null
-  pattern: QuickPattern
-}
-
-export interface QuickResult {
-  inputs: { goal: QuickGoal; goal_label: string; pattern: QuickPattern; pattern_label: string; monthly_kwh: number; tariff_php_per_kwh: number; lat: number; lon: number }
-  location: { distance_km: number; sun_kwh_per_kwp_year: number }
-  system: { panels: number; panel_wp: number; panel_name: string; kwp: number; inverter_kw: number; inverter_units: number; battery_kwh: number; roof_area_m2: number; roof_limited: boolean }
-  production: { annual_kwh: number; monthly_kwh: number[]; coverage_pct: number; self_consumption_pct: number; annual_export_kwh: number; annual_import_kwh: number; annual_unserved_kwh: number; annual_consumption_kwh: number }
-  price: { total: number; materials: number; labor: number; equipment: number; tax: number; price_per_wp: number }
-  economics: { bill_before_monthly: number; bill_after_monthly: number; savings_monthly: number; savings_year1: number; payback_years: number | null; lifetime_net: number; analysis_years: number; irr: number | null; co2_t_per_year: number } | null
-  assumptions: string[]
-  warnings: string[]
-}

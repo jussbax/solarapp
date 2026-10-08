@@ -1,23 +1,21 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from ..auth import require_user
 from ..config import Settings, get_settings
 from ..db import get_session
 from ..models import AppSetting
+from ..profile import PROFILE_KEYS, company_profile
 from ..schemas import SettingsIn, SettingsOut
 
 router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(require_user)])
 
 
 def company_settings(session: Session, settings: Settings) -> dict:
-    stored = {s.key: s.value for s in session.exec(select(AppSetting)).all()}
-    return {
-        "company_name": stored.get("company_name") or settings.company_name,
-        "company_contact": stored.get("company_contact") if "company_contact" in stored else settings.company_contact,
-    }
+    """Company profile for documents: name, contact line and the public-profile fields."""
+    return company_profile(session, settings)
 
 
 @router.get("", response_model=SettingsOut)
@@ -28,8 +26,10 @@ def read_settings(session: Session = Depends(get_session), settings: Settings = 
 @router.put("", response_model=SettingsOut)
 def write_settings(body: SettingsIn, session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> SettingsOut:
     for key, value in body.model_dump(exclude_none=True).items():
+        if key not in PROFILE_KEYS or not isinstance(value, str):
+            continue
         row = session.get(AppSetting, key) or AppSetting(key=key)
-        row.value = value
+        row.value = value.strip()
         session.add(row)
     session.commit()
     return read_settings(session, settings)
