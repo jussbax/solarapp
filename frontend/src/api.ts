@@ -1,6 +1,6 @@
 import type {
   ApplianceCategory, AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, CatalogItem, DataStatus, ImportReport, MaterialItem, MaterialSupplier,
-  PricingConfig, PricingStatus,
+  PricingConfig, PricingStatus, QuickRequest, QuickResult,
 } from './types'
 
 export class ApiError extends Error {
@@ -61,6 +61,9 @@ export const api = {
   quotationUrl: (id: number) => `/api/assessments/${id}/quotation.pdf`,
   programUrl: (id: number) => `/api/assessments/${id}/program.pdf`,
   cardUrl: (id: number) => `/api/assessments/${id}/card.png`,
+  quickStatus: () => request<{ enabled: boolean; data: boolean }>('/api/quick/status'),
+  quickEstimate: (body: QuickRequest) => request<QuickResult>('/api/quick/estimate', { method: 'POST', body: JSON.stringify(body) }),
+  quickLead: (body: QuickRequest & { name: string; contact: string; address: string }) => request<{ ok: boolean }>('/api/quick/lead', { method: 'POST', body: JSON.stringify(body) }),
   pricingStatus: () => request<PricingStatus>('/api/pricing/status'),
   pricingConfig: () => request<PricingConfig>('/api/pricing/config'),
   savePricingConfig: (cfg: PricingConfig) => request<PricingConfig>('/api/pricing/config', { method: 'PUT', body: JSON.stringify(cfg) }),

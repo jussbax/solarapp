@@ -109,3 +109,15 @@ button.small { padding: 3px 8px; font-size: 13px; }
 .suggest-item:hover { background: var(--gold-bg); }
 .month-picker { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0; }
 tr.peak-row td { background: #fff6e0; font-weight: 600; }
+
+/* quick estimate */
+.choices { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.choice { border: 2px solid var(--line); border-radius: 10px; padding: 12px; cursor: pointer; background: #fff; text-align: left; font-weight: 500; }
+.choice b { display: block; font-weight: 700; margin-bottom: 4px; }
+.choice small { color: var(--muted); font-weight: 400; }
+.choice.on { border-color: var(--gold); background: var(--gold-bg); }
+.hero { background: var(--ink); color: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; border-left: 6px solid var(--gold); }
+.hero .big { font-size: 34px; font-weight: 700; color: var(--gold); line-height: 1.1; }
+.hero .label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #b8b8b2; }
+.hero-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.step { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-dark); font-weight: 700; margin-bottom: 4px; }

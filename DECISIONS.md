@@ -363,6 +363,31 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   orientation table and the artifact-runtime log; PVGIS and the server
   database replace them.
 
+## Quick estimate (public, four questions)
+
+- A free, login-free page at /quick asks the goal (net metering, net
+  metering with a battery, off-grid), the house location on the map, the
+  monthly use in kWh or the bill in pesos, and when electricity is used
+  most (morning, spread, evening). Nothing else: no roof, no readings.
+- Location gives the PVGIS cell; a typical roof (10 degrees facing south)
+  and a typical measured site factor (0.95) give the production per kWp,
+  cached per cell. The pattern picks one of three 24-hour load shapes
+  scaled to the monthly kWh, the same every month. Peak load for the
+  inverter is the busiest hour times 2. Sizing, bill of materials, pricing
+  and economics are the same engines as the full assessment, with the
+  default panel laid in rows of eight and no roof limit below 40 panels,
+  and the trip distance from the pin.
+- Shown to the visitor: panels, kWp and roof area, inverter, battery, the
+  installed price rounded up to the thousand with the four customer
+  sections, production and coverage, bill before and after, payback, net
+  over the period, CO2, and the assumptions in plain words. Nothing
+  internal.
+- A name and contact book the free roof visit: saved as an assessment at
+  stage "lead" with the four answers in the notes and the bill on file, so
+  the full assessment starts from it. Public endpoints are rate limited
+  per visitor address (30 an hour) and switched off while synthetic
+  weather data is loaded; the quick settings sit in the pricing settings.
+
 ## Brand
 
 - PL Development brand throughout: primary black #111111, secondary gold

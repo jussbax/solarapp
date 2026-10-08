@@ -201,9 +201,9 @@ export interface EconomicsBlock {
   co2_t_per_year?: number
 }
 
-export type JobStage = 'assessed' | 'quoted' | 'signed' | 'sourcing' | 'installing' | 'commissioned' | 'net_metering' | 'closed'
+export type JobStage = 'lead' | 'assessed' | 'quoted' | 'signed' | 'sourcing' | 'installing' | 'commissioned' | 'net_metering' | 'closed'
 export const JOB_STAGES: { id: JobStage; label: string }[] = [
-  { id: 'assessed', label: 'Assessed' }, { id: 'quoted', label: 'Quoted' }, { id: 'signed', label: 'Signed' }, { id: 'sourcing', label: 'Sourcing' },
+  { id: 'lead', label: 'Lead' }, { id: 'assessed', label: 'Assessed' }, { id: 'quoted', label: 'Quoted' }, { id: 'signed', label: 'Signed' }, { id: 'sourcing', label: 'Sourcing' },
   { id: 'installing', label: 'Installing' }, { id: 'commissioned', label: 'Commissioned' }, { id: 'net_metering', label: 'Net metering' }, { id: 'closed', label: 'Closed' },
 ]
 
@@ -795,4 +795,27 @@ export function newReadingSet(faceId: string | null): ReadingSet {
       { irradiance_wm2: 0, power_w: 0, module_temp_c: null },
     ],
   }
+}
+
+export type QuickGoal = 'net_metering' | 'combination' | 'off_grid'
+export type QuickPattern = 'morning' | 'balanced' | 'evening'
+
+export interface QuickRequest {
+  goal: QuickGoal
+  lat: number
+  lon: number
+  monthly_kwh: number | null
+  monthly_php: number | null
+  pattern: QuickPattern
+}
+
+export interface QuickResult {
+  inputs: { goal: QuickGoal; goal_label: string; pattern: QuickPattern; pattern_label: string; monthly_kwh: number; tariff_php_per_kwh: number; lat: number; lon: number }
+  location: { distance_km: number; sun_kwh_per_kwp_year: number }
+  system: { panels: number; panel_wp: number; panel_name: string; kwp: number; inverter_kw: number; inverter_units: number; battery_kwh: number; roof_area_m2: number; roof_limited: boolean }
+  production: { annual_kwh: number; monthly_kwh: number[]; coverage_pct: number; self_consumption_pct: number; annual_export_kwh: number; annual_import_kwh: number; annual_unserved_kwh: number; annual_consumption_kwh: number }
+  price: { total: number; materials: number; labor: number; equipment: number; tax: number; price_per_wp: number }
+  economics: { bill_before_monthly: number; bill_after_monthly: number; savings_monthly: number; savings_year1: number; payback_years: number | null; lifetime_net: number; analysis_years: number; irr: number | null; co2_t_per_year: number } | null
+  assumptions: string[]
+  warnings: string[]
 }

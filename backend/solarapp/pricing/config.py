@@ -298,6 +298,20 @@ class EconomicsConfig(BaseModel):
     co2_kg_per_kwh: float = 0.71              # Philippine grid emission factor
 
 
+class QuickConfig(BaseModel):
+    """Quick estimate (public, four questions): typical roof and panel, no site measurements."""
+    enabled: bool = True
+    panel_code: str = "BC-PNL-001"
+    k_site: float = 0.95                 # typical site factor seen on measured roofs
+    tilt_deg: float = 10
+    azimuth_deg: float = 180
+    max_panels: int = 40                 # no roof given, so a generous cap
+    panels_per_row: int = 8
+    peak_factor: float = 2.0             # instantaneous peak over the busiest hour's average
+    price_round_to: float = 1000
+    max_requests_per_hour: int = 30      # per visitor address
+
+
 class PricingConfig(BaseModel):
     company_base: str = "PL Development Inc., Pila, Laguna"
     truck: TruckConfig = Field(default_factory=TruckConfig)
@@ -314,6 +328,7 @@ class PricingConfig(BaseModel):
     job_defaults: JobDefaults = Field(default_factory=JobDefaults)
     program: ProgramConfig = Field(default_factory=ProgramConfig)
     economics: EconomicsConfig = Field(default_factory=EconomicsConfig)
+    quick: QuickConfig = Field(default_factory=QuickConfig)
     wiring: WiringRules = Field(default_factory=WiringRules)
     roles: BoqRoles = Field(default_factory=BoqRoles)
     imported_from: Optional[str] = None

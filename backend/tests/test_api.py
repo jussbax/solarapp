@@ -229,3 +229,19 @@ def test_pricing_flow(client):
     doc3["panels"] = [{"id": "p1", "name": "Odd 999W", "watt_peak": 999, "length_m": 2.278, "width_m": 1.134}]
     res4 = client.post(f"/api/assessments/{aid}/compute", json=doc3).json()["results"]["pricing"]
     assert not res4["available"]
+
+
+def test_quick_estimate_and_lead(client):
+    # public: no login needed, but synthetic weather data blocks the public estimate
+    client.post("/api/auth/logout")
+    st = client.get("/api/quick/status").json()
+    assert st["data"] and not st["enabled"]
+    r = client.post("/api/quick/estimate", json={"goal": "combination", "lat": 14.65, "lon": 121.03, "monthly_kwh": 338, "pattern": "evening"})
+    assert r.status_code == 503
+    r = client.post("/api/quick/lead", json={"goal": "combination", "lat": 14.65, "lon": 121.03, "monthly_kwh": 338, "pattern": "evening", "name": "Lead Person", "contact": "0917 000 0000", "address": "Tanauan"})
+    assert r.status_code == 200 and r.json()["ok"]
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    leads = [a for a in client.get("/api/assessments").json() if a["stage"] == "lead"]
+    assert leads and leads[0]["customer_name"] == "Lead Person"
+    doc = client.get(f"/api/assessments/{leads[0]['id']}").json()["doc"]
+    assert doc["audit"]["system"]["kind"] == "combination" and doc["audit"]["bills"][0]["kwh"] == 338 and "0917" in doc["notes"]

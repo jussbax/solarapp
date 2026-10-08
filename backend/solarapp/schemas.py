@@ -173,7 +173,7 @@ class PaymentPlanIn(BaseModel):
     installment_first_offset_days: int = Field(default=30, ge=0)
 
 
-JobStage = Literal["assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
+JobStage = Literal["lead", "assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
 
 
 class ProgramJob(BaseModel):
@@ -321,3 +321,19 @@ class MaterialItemPatch(BaseModel):
     panel_length_m: Optional[float] = Field(default=None, gt=0)
     panel_width_m: Optional[float] = Field(default=None, gt=0)
     active: Optional[bool] = None
+
+
+class QuickRequest(BaseModel):
+    """The four questions of the free quick estimate."""
+    goal: Literal["net_metering", "combination", "off_grid"] = "combination"
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    monthly_kwh: Optional[float] = Field(default=None, gt=0, le=20000)
+    monthly_php: Optional[float] = Field(default=None, gt=0, le=1000000)
+    pattern: Literal["morning", "balanced", "evening"] = "balanced"
+
+
+class QuickLead(QuickRequest):
+    name: str = Field(min_length=1, max_length=120)
+    contact: str = Field(min_length=3, max_length=120)
+    address: str = Field(default="", max_length=200)

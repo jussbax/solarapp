@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from sqlmodel import Session
 
-from .api import appliances, assessments, auth_routes, data_routes, pricing_routes, settings_routes
+from .api import appliances, assessments, auth_routes, data_routes, pricing_routes, quick_routes, settings_routes
 from .config import Settings, get_settings
 from .core.dataset import NasaReference, PvgisDataset
 from .db import init_engine
@@ -37,6 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(data_routes.router)
     app.include_router(appliances.router)
     app.include_router(pricing_routes.router)
+    app.include_router(quick_routes.router)
 
     @app.get("/api/health")
     def health() -> dict:

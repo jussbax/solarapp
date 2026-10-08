@@ -66,6 +66,10 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    and carbon avoided. The proposal PDF, laid out like a utility statement
    with the company's own branding, carries the charges, savings, payment
    stub, details and schedule.
+10. Free quick estimate at `/quick`, no login: goal, location, monthly use,
+    usage pattern. Returns the system, price, savings and payback from the
+    same engines with typical-roof assumptions, and books the free roof
+    visit as a lead on the job list.
 
 ## Brand
 
@@ -183,6 +187,7 @@ customer PDF while synthetic data is in use.
 backend/solarapp/core/kfactor.py      k per reading, site factor, thermal rise, quality checks
 backend/solarapp/core/layout.py       panel fitting row by row on rectangle, hip and triangle faces
 backend/solarapp/core/shade.py        wall strips and hourly shade from walls, trees and buildings
+backend/solarapp/core/quick.py        quick estimate from four answers
 backend/solarapp/core/simulation.py   hourly pvlib simulation and monthly aggregation
 backend/solarapp/core/dataset.py      nearest-cell lookup and TMY loading
 backend/solarapp/core/audit.py        appliance types and duty factors, load profiles, bill reconciliation
