@@ -76,77 +76,72 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
     below). The job list shows the funnel for the last 30 days: estimates
     run, leads, visits, proposals, signed.
 
-## The estimate on your website
+## The website and the estimate
 
-The estimate is meant to live on the company website; the back office stays
-private.
+The company website lives in `site/` as plain HTML and CSS (pages under
+`site/pages/`, the shared frame in `site/layout.html`, styles and the small
+script under `site/static/`). `python site/build.py` writes it to
+`site/dist/`; the Docker build does this. Contact details, the owner, the
+PEE, warranties, brands and the service area are filled in at page load
+from the company profile under Settings, so the pages never need editing
+for those. The estimate page (`/estimate`) embeds the widget. Photos are
+placeholders until real ones replace them (`site/pages/index.html` and
+`about.html`, the `.photo.placeholder` blocks).
 
-**Before the website exists: the estimate page is the website.** Route the
-domain to the same tunnel and tell the app which hostname is public:
+The website runs as its own process from the same image
+(`solarapp.public:app`, the `solarapp-public` service): it serves the
+built site, the brand marks and the widget, and forwards only the three
+estimate calls (`/api/quick/status`, `estimate`, `lead`) to the private app
+over the Docker network, with a shared token. It holds no database, no
+documents and no login. The private app answers those three calls only to
+the token or to a signed-in user.
 
-1. In `/etc/cloudflared/config.yml`, add two ingress entries above the
-   catch-all, pointing at the same service as `solar.pldevinc.com`:
+### Set it up: two tunnels as containers
 
-   ```yaml
-     - hostname: pldevinc.com
-       service: http://localhost:8000
-     - hostname: www.pldevinc.com
-       service: http://localhost:8000
+1. In `.env` set `SOLARAPP_INTERNAL_TOKEN` to a long random string
+   (`openssl rand -hex 24`) and `SOLARAPP_PUBLIC_URL=https://solar.pldevinc.com`.
+2. In the Cloudflare Zero Trust dashboard (Networks › Tunnels) create two
+   tunnels of the Docker type and copy each token into `.env`:
+   - **office**: public hostname `solar.pldevinc.com` → service
+     `http://solarapp:8000`. Token into `CF_TUNNEL_TOKEN_OFFICE`.
+   - **website**: public hostnames `pldevinc.com` and `www.pldevinc.com` →
+     service `http://solarapp-public:8000`. Token into `CF_TUNNEL_TOKEN_PUBLIC`.
+   The dashboard creates the DNS records for you.
+3. Start everything, tunnels included:
+
+   ```
+   docker compose --profile tunnels up -d --build
    ```
 
-2. Create the DNS records for the tunnel (replace the tunnel name):
+4. Stop and remove the old host-level `cloudflared` service
+   (`sudo systemctl disable --now cloudflared`) once the containers are up,
+   and delete the old tunnel in the dashboard. You may then also delete the
+   `ports:` block on the `solarapp` service in `docker-compose.yml`: the
+   host no longer needs to publish anything.
+5. Protect the back office with Cloudflare Access: in Zero Trust › Access ›
+   Applications add a self-hosted application for `solar.pldevinc.com` with
+   a policy that allows your email (one-time PIN) and nothing else. The
+   website on `pldevinc.com` needs no Access rule. The owner's own link to
+   the estimate page (`solar.pldevinc.com/estimate`) keeps working behind
+   Access.
 
-   ```
-   sudo cloudflared tunnel route dns <tunnel-name> pldevinc.com
-   sudo cloudflared tunnel route dns <tunnel-name> www.pldevinc.com
-   sudo systemctl restart cloudflared
-   ```
+Single-container fallback: without the public process, set
+`SOLARAPP_PUBLIC_HOST=pldevinc.com` and route that hostname to the private
+app; it then serves the estimate page alone at the root of that hostname
+and refuses everything else there.
 
-3. In `.env`, set `SOLARAPP_PUBLIC_HOST=pldevinc.com` and
-   `SOLARAPP_PUBLIC_URL=https://solar.pldevinc.com`, then
-   `docker compose up -d --build`.
+### Embedding the estimate elsewhere
 
-On `pldevinc.com` the app serves the estimate at the root and answers 404
-to everything else: no login page, no API, no documents. The card's QR code
-and the ads point at `https://pldevinc.com`. The back office stays at
-`solar.pldevinc.com`.
-
-**With a real website later**, two ways to put the estimate on it:
-
-**Script widget (preferred, works on WordPress, Webflow, Framer and any
-builder that allows custom HTML):** put this where the estimate should
-appear, on a page such as `pldevinc.com/estimate`:
+Any page can carry the estimate with
 
 ```html
 <div id="pld-solar-estimate"></div>
-<script src="https://solar.pldevinc.com/widget/quick.js" defer></script>
+<script src="https://pldevinc.com/widget/quick.js" defer></script>
 ```
 
-The script calls the server it was loaded from. Add
-`data-api="https://solar.pldevinc.com"` on the script tag if the script is
-copied elsewhere. The widget inherits the page's font unless Montserrat is
-loaded on the site.
-
-**Iframe or link (Wix, Squarespace, or when custom scripts are not
-allowed):** embed or link `https://solar.pldevinc.com/estimate`. The page
-is standalone (no login shell) and fits a phone.
-
-Either way, set in `.env`:
-
-```
-SOLARAPP_PUBLIC_ORIGINS=https://pldevinc.com,https://www.pldevinc.com
-SOLARAPP_PUBLIC_URL=https://solar.pldevinc.com
-```
-
-and drop `SOLARAPP_PUBLIC_HOST` once the website takes over the domain.
-
-The first allows the website's origin to call `/api/quick/*` (nothing else
-is reachable cross-origin, and the login cookie never travels with those
-calls). Fill in the company profile under Settings (phone, Messenger link,
-Facebook page, owner, PEE, warranties, brands, where you install): the
-page prints what is filled in and leaves the rest off.
-
-Links to the page can carry UTM tags
+The script calls the server it was loaded from. From a different origin,
+list that origin in `SOLARAPP_PUBLIC_ORIGINS` on the private app and point
+the script at it with `data-api`. Links to the estimate can carry UTM tags
 (`?utm_source=fb&utm_medium=ad&utm_campaign=brownout1`); they are stored
 with the lead and counted on the job list. The widget raises a
 `pld-estimate` browser event (`estimate_shown`, `lead_submitted`) and pushes
@@ -157,14 +152,6 @@ exists, so a Meta Pixel or Google Tag on the website can fire Lead events.
 to get an email for each booking (Gmail works with an app password). Without
 it, leads simply appear at the top of the job list with their contact and
 what they saw.
-
-**Keep the back office private (Cloudflare Access):** on the tunnel's
-hostname (`solar.pldevinc.com`) add an Access application that requires a
-login for everything, then a bypass policy for these paths only:
-`/estimate`, `/api/quick/*`, `/widget/*`, `/assets/*`, `/brand/*`,
-`/favicon.png`. The estimate and the widget stay public; the login page,
-the API and the documents need the Cloudflare login before the app's own
-login.
 
 Messenger templates, ad angles and offer notes for the funnel are in
 `docs/marketing.md`.

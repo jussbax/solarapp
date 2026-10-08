@@ -1,13 +1,60 @@
 services:
+  # The private app: back office, engine, database, documents. Never published to the internet directly.
   solarapp:
     build: .
     image: solarapp:latest
     restart: unless-stopped
     env_file: .env
     ports:
-      # Default: reachable from this machine only; the Cloudflare Tunnel connects to it locally.
-      # Set SOLARAPP_BIND=0.0.0.0 in .env to open it to the local network (http://<server ip>:8000).
+      # Local only by default, for a host-level cloudflared or LAN testing. Set SOLARAPP_BIND=0.0.0.0 in .env
+      # to open it to the office network. With the tunnel containers below you can delete this block entirely.
       - "${SOLARAPP_BIND:-127.0.0.1}:8000:8000"
     volumes:
       # Weather dataset and the SQLite database live here, outside the image.
       - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # The public website and estimate: same image, a different process, no database, no documents, no secrets
+  # beyond the internal token. It forwards only the three estimate calls to the private app.
+  solarapp-public:
+    image: solarapp:latest
+    restart: unless-stopped
+    depends_on:
+      - solarapp
+    environment:
+      SOLARAPP_UPSTREAM: http://solarapp:8000
+      SOLARAPP_INTERNAL_TOKEN: ${SOLARAPP_INTERNAL_TOKEN:-}
+      SOLARAPP_SITE_DIR: /app/site/dist
+      SOLARAPP_STATIC_DIR: /app/frontend/dist
+    command: ["uvicorn", "solarapp.public:app", "--host", "0.0.0.0", "--port", "8000"]
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Two Cloudflare tunnels as containers (docker compose --profile tunnels up -d): one for the back office
+  # hostname, one for the website. The host then publishes no ports at all. Tokens come from the Zero Trust
+  # dashboard (Networks > Tunnels > Create a tunnel > Docker).
+  tunnel-office:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ["tunnels"]
+    depends_on:
+      - solarapp
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CF_TUNNEL_TOKEN_OFFICE:-}"]
+
+  tunnel-public:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ["tunnels"]
+    depends_on:
+      - solarapp-public
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CF_TUNNEL_TOKEN_PUBLIC:-}"]

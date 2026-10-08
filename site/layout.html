@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{title}}</title>
+    <meta name="description" content="{{description}}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="{{title}}" />
+    <meta property="og:description" content="{{description}}" />
+    <meta property="og:image" content="/brand/icon-512.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#111111" />
+    <link rel="stylesheet" href="/static/site.css" />
+    {{extra_head}}
+  </head>
+  <body data-page="{{nav}}">
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-head">
+      <div class="wrap head-row">
+        <a class="brand" href="/">
+          <img src="/brand/logo-mark-white.png" alt="" width="36" height="36" />
+          <span><span class="brand-name">PL Development</span><span class="brand-tag">Solar for homes</span></span>
+        </a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav">Menu</button>
+        <nav id="nav" class="nav" aria-label="Main">
+          <a href="/" data-nav="index">Home</a>
+          <a href="/brownouts" data-nav="brownouts">Brownouts</a>
+          <a href="/net-metering" data-nav="net-metering">Net metering</a>
+          <a href="/about" data-nav="about">About us</a>
+          <a href="/estimate" class="btn btn-gold" data-nav="estimate">Free estimate</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      {{body}}
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <div class="foot-grid">
+          <div>
+            <div class="foot-brand"><img src="/brand/logo-mark-white.png" alt="" width="32" height="32" /> <span data-profile="company_name">PL Development Inc.</span></div>
+            <p class="muted"><span data-profile="address">Pila, Laguna</span><br />Installs in <span data-profile="service_area">Laguna and Batangas</span>.</p>
+            <p class="muted" data-profile-hide-if-empty="pee_name">Electrical plans signed and sealed by <span data-profile="pee_name"></span>, Professional Electrical Engineer<span data-profile-hide-if-empty="pee_license">, PRC No. <span data-profile="pee_license"></span></span>.</p>
+          </div>
+          <div>
+            <h3>Talk to us</h3>
+            <ul class="contact-list">
+              <li data-profile-hide-if-empty="owner_name"><span data-profile="owner_name"></span></li>
+              <li data-profile-hide-if-empty="phone"><a data-profile-href="phone" href="#"><span data-profile="phone"></span></a></li>
+              <li data-profile-hide-if-empty="messenger"><a data-profile-href="messenger" href="#" target="_blank" rel="noreferrer">Messenger</a></li>
+              <li data-profile-hide-if-empty="facebook"><a data-profile-href="facebook" href="#" target="_blank" rel="noreferrer">Facebook</a></li>
+              <li data-profile-hide-if-empty="email"><a data-profile-href="email" href="#"><span data-profile="email"></span></a></li>
+            </ul>
+            <p class="muted small" data-profile-empty-note>Contact details appear here once they are filled in under Settings.</p>
+          </div>
+          <div>
+            <h3>Start here</h3>
+            <p><a class="btn btn-gold" href="/estimate">Get my free estimate</a></p>
+            <p class="muted small">Four questions, one minute, no sign-up. An estimate, not a quotation; the free roof visit gives the exact figure.</p>
+          </div>
+        </div>
+        <div class="foot-bottom muted small">
+          <span>&copy; <span data-year></span> <span data-profile="company_name">PL Development Inc.</span></span>
+          <a href="/privacy">Privacy notice</a>
+        </div>
+      </div>
+    </footer>
+    <script src="/static/site.js" defer></script>
+    {{extra_body}}
+  </body>
+</html>

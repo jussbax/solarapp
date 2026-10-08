@@ -546,3 +546,33 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   point at that address; the back office keeps its own hostname.
   Financing and instalments are a future module and stay out of the
   marketing text until then.
+
+## The website and the public process
+
+- The company website is plain HTML and CSS in `site/`, built by a
+  stdlib-only script into `site/dist`. No CMS, no framework, no outside
+  calls: the brand font is self-hosted, the only dynamic work is the
+  estimate widget and a small script that fills contact details from the
+  company profile, so the owner edits those in Settings and the pages
+  never go stale. Pages: home, estimate, brownouts (battery angle), net
+  metering (bill angle), about, privacy notice (Data Privacy Act), 404.
+  Photos are marked placeholders until real ones exist; nothing is
+  fabricated.
+- The website runs as a separate process from the same image
+  (`solarapp.public`). It holds no database, no documents, no login and
+  no secret beyond an internal token; it serves the site, the widget and
+  the brand marks, and forwards only the three estimate calls to the
+  private app over the Docker network with that token, passing the real
+  client address on for the rate limiter. The private app answers those
+  calls only to the token or to a signed-in user. A compromise of the
+  public process yields a static website and two rate-limited endpoints.
+- Each process gets its own Cloudflare tunnel as a container, so the host
+  publishes no ports; the back office additionally sits behind Cloudflare
+  Access. The single-container host-gated mode remains as a fallback.
+- Both processes send security headers: the website a strict content
+  security policy (same-origin scripts, inline styles for the widget,
+  no frames from elsewhere), the back office no framing at all except for
+  the estimate page and the widget, no sniffing, a strict referrer policy.
+- A path-traversal hole in the static file route (any readable file,
+  without a login) was found during the security review and closed: the
+  served path must resolve inside the build folder.

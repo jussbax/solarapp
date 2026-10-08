@@ -346,3 +346,45 @@ def test_static_route_never_leaves_the_build_folder(tmp_path):
         for probe in ("/..%2fsecret.txt", "/%2e%2e/secret.txt", "/assets/..%2f..%2fsecret.txt", "/a/..%2f..%2fsecret.txt"):
             r = c.get(probe)
             assert "private" not in r.text, probe
+
+
+def test_public_process_serves_the_site_and_forwards_only_the_estimate(tmp_path):
+    """The website process has no data: pages and widget from disk, three estimate calls forwarded with the token, nothing else."""
+    import httpx
+    from fastapi.testclient import TestClient
+    from solarapp.config import Settings
+    from solarapp.main import create_app
+    from solarapp.public import create_public_app
+    site = tmp_path / "site"
+    (site / "static").mkdir(parents=True)
+    (site / "index.html").write_text("<html>home</html>")
+    (site / "estimate.html").write_text("<html>estimate</html>")
+    (site / "404.html").write_text("<html>lost</html>")
+    (site / "static" / "site.css").write_text("body{}")
+    (tmp_path / "secret.txt").write_text("private")
+    token = "t" * 32
+    private = create_app(Settings(data_dir=tmp_path / "data", app_username="u", app_password="p", secret_key="s" * 32, internal_token=token))
+    public = create_public_app(Settings(data_dir=tmp_path / "data2", site_dir=site, static_dir=tmp_path / "nodist", upstream="http://private", internal_token=token),
+                               transport=httpx.ASGITransport(app=private))
+    with TestClient(private) as priv, TestClient(public) as pub:
+        # pages and clean URLs
+        assert pub.get("/").text == "<html>home</html>" and pub.get("/estimate").text == "<html>estimate</html>"
+        assert pub.get("/estimate.html").status_code == 200 and pub.get("/static/site.css").status_code == 200
+        r = pub.get("/nothing-here")
+        assert r.status_code == 404 and "lost" in r.text
+        assert "private" not in pub.get("/..%2fsecret.txt").text
+        # security headers
+        h = pub.get("/").headers
+        assert "default-src 'self'" in h["content-security-policy"] and h["x-content-type-options"] == "nosniff"
+        # the estimate calls cross with the token; the back office never does
+        st = pub.get("/api/quick/status")
+        assert st.status_code == 200 and "towns" in st.json()
+        assert pub.get("/api/assessments").status_code == 404
+        assert pub.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 404
+        assert pub.get("/api/quick/anything").status_code == 404
+        # the private app refuses the estimate routes without the token or a session
+        assert priv.get("/api/quick/status").status_code == 404
+        assert priv.get("/api/quick/status", headers={"x-internal-token": token}).status_code == 200
+        priv.post("/api/auth/login", json={"username": "u", "password": "p"})
+        assert priv.get("/api/quick/status").status_code == 200  # a signed-in owner may still open the estimate page
+        assert priv.get("/").headers.get("x-frame-options") == "DENY"

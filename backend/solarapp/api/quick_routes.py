@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlmodel import Session
 
+from ..auth import current_user
 from ..config import Settings, get_settings
 from ..core.dataset import PvgisDataset
 from ..core.quick import GOAL_LABEL, PATTERN_LABEL, quick_estimate
@@ -27,7 +28,17 @@ from ..profile import public_profile, warranty_lines
 from ..schemas import AssessmentDoc, BillEntry, EnergyAudit, LeadInfo, ProgramJob, QuickLead, QuickRequest
 from .deps import get_pvgis
 
-router = APIRouter(prefix="/api/quick", tags=["quick"])
+
+
+def internal_or_user(request: Request, settings: Settings = Depends(get_settings), user: str | None = Depends(current_user)) -> None:
+    """With an internal token configured, only the public website process (token) or a signed-in user may call these."""
+    if not settings.internal_token or user:
+        return
+    if request.headers.get("x-internal-token", "") != settings.internal_token:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+router = APIRouter(prefix="/api/quick", tags=["quick"], dependencies=[Depends(internal_or_user)])
 _hits: dict[str, deque] = defaultdict(deque)
 ADDRESS_MULTIPLIER = 20  # mobile networks put thousands of phones behind one address
 UNAVAILABLE = "The estimate isn't available right now. Please try again later or message us on Facebook."

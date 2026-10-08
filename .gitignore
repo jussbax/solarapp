@@ -8,6 +8,7 @@ backend/.venv/
 # Node
 frontend/node_modules/
 frontend/dist/
+site/dist/
 
 # App runtime
 data/

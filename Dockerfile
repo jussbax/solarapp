@@ -14,6 +14,10 @@ COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend/ ./backend/
 COPY --from=web /web/dist ./frontend/dist
+COPY frontend/public/brand ./frontend/public/brand
+COPY frontend/public/favicon.png frontend/public/apple-touch-icon.png ./frontend/public/
+COPY site/ ./site/
+RUN python site/build.py
 ENV SOLARAPP_DATA_DIR=/app/data \
     SOLARAPP_STATIC_DIR=/app/frontend/dist
 VOLUME ["/app/data"]

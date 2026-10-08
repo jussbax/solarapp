@@ -41,6 +41,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     PUBLIC_PATHS = ("/api/quick/", "/assets/", "/widget/", "/brand/", "/favicon", "/apple-touch-icon", "/api/health")
 
     @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        path = request.url.path
+        if not (path.startswith("/estimate") or path.startswith("/widget/") or path.startswith("/assets/") or path.startswith("/brand/")):
+            response.headers.setdefault("X-Frame-Options", "DENY")
+        return response
+
+    @app.middleware("http")
     async def estimate_only_host(request: Request, call_next):
         """On the public hostname only the estimate and what it needs exist; the login, the API and the documents do not."""
         host = (request.headers.get("host") or "").split(":")[0].lower()
