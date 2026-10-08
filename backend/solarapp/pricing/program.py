@@ -298,9 +298,9 @@ def build_program(doc: AssessmentDoc, results: dict, cfg: PricingConfig, today: 
     permit_days = pj.permit_approval_days if pj.permit_approval_days is not None else pr.permit_approval_days
     nm_app_days = pj.netmeter_application_days if pj.netmeter_application_days is not None else pr.netmeter_application_days
     nm_meter_days = pj.netmeter_meter_days if pj.netmeter_meter_days is not None else pr.netmeter_meter_days
-    assumptions.append(f"LGU electrical permit approval {permit_days} days, CFEI {pr.cfei_days} days after installation (no data yet).")
+    assumptions.append(f"Assumed: permit approval {permit_days} days; final inspection certificate {pr.cfei_days} days after installation. Replace with real figures under Pricing settings when you have them.")
     if net_metering:
-        assumptions.append(f"Net metering: DU application and agreement {nm_app_days} days, inspection and bi-directional meter {nm_meter_days} days after commissioning (no data yet).")
+        assumptions.append(f"Assumed for net metering: application and agreement {nm_app_days} days; inspection and two-way meter {nm_meter_days} days after switch-on.")
 
     permit_prep_end = signing + timedelta(days=pr.permit_prep_days)
     permit_approved = permit_prep_end + timedelta(days=permit_days)

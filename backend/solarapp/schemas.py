@@ -259,6 +259,7 @@ class AssessmentDoc(BaseModel):
     program: ProgramJob = Field(default_factory=ProgramJob)
     economics: EconomicsJob = Field(default_factory=EconomicsJob)
     lead: Optional[LeadInfo] = None
+    card_next_step: str = ""  # the card's next-step line, saved with the record
 
 
 class ApplianceCatalogOut(BaseModel):

@@ -60,13 +60,37 @@ def _qr(url: str, size: int) -> Image.Image | None:
     return q.make_image(fill_color=INK, back_color="white").convert("RGB").resize((size, size), Image.NEAREST)
 
 
+def reading_lines(results: dict) -> list[str]:
+    """The roof readings in the customer's words: sunlight with the sky and the time, and the test panel's
+    share of its rating before and after the heat and sun-angle allowance. Printed on the card and the roof check PDF."""
+    k = results.get("k") or {}
+    sets = k.get("sets") or []
+    kset = sets[k["selected_set_index"]] if sets and k.get("selected_set_index") is not None else None
+    if not (kset and kset.get("valid")):
+        return ["No sun reading on the day; we used long-term sun records only."]
+    when_t = ""
+    try:
+        when_t = datetime.fromisoformat(kset["measured_at"]).strftime("%I:%M %p").lstrip("0") if kset.get("measured_at") else ""
+    except (TypeError, ValueError):
+        when_t = ""
+    lines = [f"Sunlight on the roof: {kset['avg_irradiance_wm2']:,.0f} W/m² ({(kset.get('sky_condition') or 'clear')} sky{', ' + when_t if when_t else ''})"]
+    good = " That is a good roof." if k.get("k_site", 0) >= 0.9 else ""
+    lines.append(f"Test panel: {k['k_raw'] * 100:.0f}% of rated power at that moment; {k['k_site'] * 100:.0f}% once heat and sun angle are allowed for.{good}")
+    return lines
+
+
+def estimate_line(doc: AssessmentDoc) -> str:
+    """The website estimate the lead saw, so the card bridges the two figures (blank when the record has none)."""
+    est = doc.lead.estimate if doc.lead else None
+    if not est or not est.price:
+        return ""
+    return f"Your estimate said about PHP {est.price:,.0f}; the visit settles the exact figure."
+
+
 def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_step: str = "", public_url: str = "") -> bytes:
     prod = results["production"]
     selected = next(p for p in results["panels"] if p["panel"]["id"] == results["selected_panel_id"])
     panel = selected["panel"]
-    k = results.get("k") or {}
-    sets = k.get("sets") or []
-    kset = sets[k["selected_set_index"]] if sets and k.get("selected_set_index") is not None else None
     shade = results.get("shade") or {}
     audit = results.get("audit") or {}
     bills = (audit.get("audit_vs_bill") or {}).get("bills") or []
@@ -116,18 +140,23 @@ def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_ste
             d.text((cx + 24, y + 128 + j * 30), line, font=f_small, fill=MUTED)
     y += 190 + 40
 
-    # bill: what the full roof makes, in the customer's unit
+    # bill: what the full roof makes, in the customer's unit; then the website estimate, when the record carries one
+    box: list[tuple[str, ImageFont.FreeTypeFont]] = []
     if bill_kwh:
         ratio = prod["avg_monthly_kwh"] / bill_kwh
         if ratio >= 1.05:
             text = f"Your bill shows {bill_kwh:,.0f} kWh a month. Your roof can make about {monthly:,.0f} kWh, around {ratio:.1f} times what your house uses. The system we propose will be sized to your bill, so it needs only part of the roof."
         else:
             text = f"Your bill shows {bill_kwh:,.0f} kWh a month. Your roof can make about {monthly:,.0f} kWh, about {ratio * 100:.0f}% of what your house uses."
-        lines = _wrap(d, text, f_body_b, W - 2 * P - 48)
-        bh = 40 + len(lines) * 44
+        box.append((text, f_body_b))
+    if estimate_line(doc):
+        box.append((estimate_line(doc), f_body))
+    if box:
+        wrapped = [(line, font) for text, font in box for line in _wrap(d, text, font, W - 2 * P - 48)]
+        bh = 40 + len(wrapped) * 44
         d.rounded_rectangle([P, y, W - P, y + bh], radius=16, fill=GOLD_SOFT)
-        for j, line in enumerate(lines):
-            d.text((P + 24, y + 22 + j * 44), line, font=f_body_b, fill=GOLD_INK)
+        for j, (line, font) in enumerate(wrapped):
+            d.text((P + 24, y + 22 + j * 44), line, font=font, fill=GOLD_INK)
         y += bh + 40
 
     def heading(t: str) -> None:
@@ -147,18 +176,7 @@ def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_ste
     y += 20
 
     heading("Measured on your roof")
-    lines = []
-    if kset and kset.get("valid"):
-        when_t = ""
-        try:
-            when_t = datetime.fromisoformat(kset["measured_at"]).strftime("%I:%M %p").lstrip("0") if kset.get("measured_at") else ""
-        except Exception:  # noqa: BLE001
-            when_t = ""
-        lines.append(f"Sunlight on the roof: {kset['avg_irradiance_wm2']:,.0f} W/m² ({(kset.get('sky_condition') or 'clear')} sky{', ' + when_t if when_t else ''})")
-        good = " That is a good roof." if k.get("k_site", 0) >= 0.9 else ""
-        lines.append(f"Test panel: {k['k_raw'] * 100:.0f}% of rated power at that moment; {k['k_site'] * 100:.0f}% once heat and sun angle are allowed for.{good}")
-    else:
-        lines.append("No sun reading on the day; we used long-term sun records only.")
+    lines = reading_lines(results)
     for f in doc.faces:
         lines.append(f"{f.name}: pitch {f.tilt_deg:g}°, faces {f.azimuth_deg:g}° ({compass(f.azimuth_deg)}), {f.length_m:g} m wide × {f.width_m:g} m up the slope" + (f", {f.ridge_m:g} m at the ridge" if f.shape == "hip" and f.ridge_m else "") + (" (triangle)" if f.shape == "tri" else ""))
     for t in lines:

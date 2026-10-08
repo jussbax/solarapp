@@ -18,7 +18,7 @@ from reportlab.lib import colors  # noqa: E402
 from reportlab.lib.pagesizes import A4  # noqa: E402
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # noqa: E402
 from reportlab.lib.units import mm  # noqa: E402
-from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
+from reportlab.platypus import CondPageBreak, Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
 
 from xml.sax.saxutils import escape  # noqa: E402
 
@@ -76,9 +76,89 @@ def contact_line(company: dict) -> str:
     return " · ".join(p for p in parts if p)
 
 
+def bom_battery_kwh(pricing: dict) -> float:
+    """Battery the customer pays for: BOM units × the catalogue kWh rating; 0 when the BOM has no battery line."""
+    total = 0.0
+    for l in pricing.get("lines") or []:
+        if not l.get("found", True) or not l.get("rating"):
+            continue
+        if (l.get("role") == "battery" or l.get("category") == "Battery") and (l.get("rating_unit") or "").lower() == "kwh":
+            total += float(l["qty"]) * float(l["rating"])
+    return total
+
+
+def customer_battery_kwh(pricing: dict, sizing: dict) -> float:
+    """One battery figure for the whole proposal: the BOM's, falling back to the sizing only when there is no BOM line."""
+    return bom_battery_kwh(pricing) or float((sizing.get("battery") or {}).get("installed_kwh") or 0)
+
+
+def customer_sections(cust: dict) -> list[dict]:
+    """The proposal's charge sections: the tools charge folded into Installation and permits as one of its lines.
+    The engine's customer block and the internal build-up keep it separate."""
+    sections = [dict(s, items=list(s.get("items", []))) for s in cust["sections"]]
+    labor = next((s for s in sections if s["key"] == "labor"), None)
+    equip = next((s for s in sections if s["key"] == "equipment"), None)
+    if labor is None or equip is None:
+        return sections
+    labor["items"][1:1] = equip["items"]  # after the crew line
+    labor["amount"] = float(labor["amount"]) + float(equip["amount"])
+    return [s for s in sections if s["key"] != "equipment"]
+
+
+def payment_rows(payments: list[dict]) -> list[dict]:
+    """Payment lines for the customer. The delivery and switch-on milestones on one day (a one-day installation)
+    print as one line, "On installation day, after switch-on and testing"; any other same-day line says so."""
+    groups: list[list[dict]] = []
+    for p in payments:
+        if groups and groups[-1][0]["date"] == p["date"]:
+            groups[-1].append(p)
+        else:
+            groups.append([p])
+    rows: list[dict] = []
+    for g in groups:
+        if len(g) > 1 and {p["key"] for p in g} <= {"delivery", "completion"}:
+            rows.append({"key": "installation_day", "label": "On installation day, after switch-on and testing", "date": g[0]["date"],
+                         "amount": sum(float(p["amount"]) for p in g), "share": sum(float(p["share"]) for p in g)})
+            continue
+        rows.append(dict(g[0]))
+        rows += [dict(p, label=f"Same day, {p['label'][:1].lower() + p['label'][1:]}") for p in g[1:]]
+    return rows
+
+
+def lead_estimate_sentence(doc: AssessmentDoc, eco: dict | None) -> str:
+    """The bridge from the website estimate to the measured proposal, when the record started as a website lead."""
+    est = doc.lead.estimate if doc.lead else None
+    if not est or not est.price:
+        return ""
+    when = ""
+    if doc.lead.created_at:
+        try:
+            when = " on " + datetime.fromisoformat(doc.lead.created_at).strftime("%-d %b %Y")
+        except ValueError:
+            when = ""
+    panels = f"{est.panels} {'panel' if est.panels == 1 else 'panels'}"
+    battery = f" and a {est.battery_kwh:.0f} kWh battery" if est.battery_kwh >= 0.5 else ""
+    future = bool((eco or {}).get("includes_future_loads")) or any(a.status == "future" for a in doc.audit.appliances)
+    return (f"Your website estimate{when} was PHP {est.price:,.0f} for {panels}{battery}. "
+            f"This proposal is measured on your roof{' and includes the appliances you plan to add' if future else ''}.")
+
+
+def what_you_get(sizing: dict, prog: dict, has_warranties: bool) -> list[str]:
+    """What the firm delivers, in the customer's words: the promises the website already makes, nothing new."""
+    lines = ["A system designed to your bill from the readings we took on your roof.", "Every part on page 2 with its quantity."]
+    if prog.get("available"):
+        lines.append("The schedule on page 2, with dates.")
+    papers = "Electrical plans signed and sealed by a Professional Electrical Engineer, the electrical permit and final inspection"
+    if sizing.get("kind") != "off_grid":
+        papers += ", the ERC certificate of compliance and the net metering application"
+    lines.append(papers + ", all filed by us.")
+    lines.append("A test and switch-on report on installation day" + (", and the warranties listed after Your questions." if has_warranties else "."))
+    return lines
+
+
 def _bill_chart(eco: dict | None, sizing: dict | None, audit: dict | None) -> tuple[Image | None, str]:
     """Pesos before and after by month when the savings exist; kWh used otherwise."""
-    fig, ax = plt.subplots(figsize=(4.2, 2.2), dpi=160)
+    fig, ax = plt.subplots(figsize=(4.2, 2.0), dpi=160)
     x = range(12)
     title = "YOUR BILL, MONTH BY MONTH"
     if eco and eco.get("available"):
@@ -112,7 +192,7 @@ def _bill_chart(eco: dict | None, sizing: dict | None, audit: dict | None) -> tu
     fig.savefig(buf, format="png")
     plt.close(fig)
     buf.seek(0)
-    return Image(buf, width=84 * mm, height=44 * mm), title
+    return Image(buf, width=84 * mm, height=40 * mm), title
 
 
 def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, proposal_no: str = "") -> bytes:
@@ -121,7 +201,10 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     eco = results.get("economics") or {}
     prog = results.get("program") or {}
     cust = pricing["customer"]
+    sections = customer_sections(cust)
     lines = pricing["lines"]
+    battery_kwh = customer_battery_kwh(pricing, sizing)
+    wl = warranty_lines(company)
     _sec = {s["key"]: float(s["amount"]) for s in cust["sections"]}
     _base = _sec.get("materials", 0) + _sec.get("labor", 0) + _sec.get("equipment", 0)
     vat_rate = (_sec.get("tax", 0) / _base) if _base > 0 else 0.12
@@ -198,8 +281,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     tot_rows = [[Paragraph("TOTAL CONTRACT PRICE (VAT INCLUDED)", big_lbl)], [Paragraph(php(cust["total"]), big)]]
     if battery_part > 0:
         tot_rows.append([Paragraph(f"Solar system {php0(cust['total'] - battery_part)} · battery for brownouts {php0(battery_part)}", ParagraphStyle("bl2", parent=big_lbl, alignment=2))])
-    tot_rows.append([Paragraph(f"Valid until {valid.strftime('%-d %b %Y')}", ParagraphStyle("bl3", parent=big_lbl, alignment=2))])
-    tot = Table(tot_rows, colWidths=[64 * mm])
+    tot = Table(tot_rows, colWidths=[64 * mm])  # "Valid until" prints once, in the header strip
     tot.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), ACCENT), ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
                              ("TOPPADDING", (0, 0), (0, 0), 6), ("BOTTOMPADDING", (0, -1), (0, -1), 6)]))
     cb = Table([[cust_block, tot]], colWidths=[118 * mm, 64 * mm])
@@ -219,8 +301,8 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         ["System size", f"{pricing['totals']['kwp']:.2f} kWp (the size of the solar array)"],
         ["Inverter", (f"{int(inv.get('units', 1))} × " if int(inv.get("units", 1) or 1) > 1 else "") + f"{inv.get('size_kw', 0):g} kW hybrid inverter" if inv else "-"],
     ]
-    if bat.get("installed_kwh", 0) > 0 and sizing.get("kind") != "net_metering":
-        sysinfo.append(["Battery", f"{bat['installed_kwh']:.0f} kWh lithium battery (LiFePO4)"])
+    if battery_kwh > 0 and sizing.get("kind") != "net_metering":
+        sysinfo.append(["Battery", f"{battery_kwh:.0f} kWh lithium battery (LiFePO4)"])
     if company.get("brands"):
         sysinfo.append(["Brands", escape(company["brands"])])
     annual = sizing.get("annual_production_kwh") or (results.get("production") or {}).get("annual_kwh")
@@ -232,9 +314,10 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     chart, chart_title = _bill_chart(eco if eco.get("available") else None, sizing or None, results.get("audit"))
     if chart is not None:
         left_col += [section(chart_title, 90 * mm), Spacer(1, 3), chart, Spacer(1, 4)]
-    left_col += [section("SYSTEM INFORMATION", 90 * mm), kv(sysinfo, [36 * mm, 54 * mm])]
+    left_col += [section("SYSTEM INFORMATION", 90 * mm), kv(sysinfo, [36 * mm, 54 * mm]), Spacer(1, 4), section("WHAT YOU GET", 90 * mm), Spacer(1, 2)]
+    left_col += [Paragraph(f"· {w}", small) for w in what_you_get(sizing, prog, bool(wl))]
 
-    charges = [[s["label"], php(s["amount"])] for s in cust["sections"]] + [["TOTAL CONTRACT PRICE", php(cust["total"])]]
+    charges = [[s["label"], php(s["amount"])] for s in sections] + [["TOTAL CONTRACT PRICE", php(cust["total"])]]
     right_col = [section("SUMMARY OF CHARGES", 90 * mm), kv(charges, [52 * mm, 38 * mm], bold_last=True), Spacer(1, 4)]
     if eco.get("available"):
         a = eco["assumptions"]
@@ -242,8 +325,10 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         sav = [["Your bill today (per month)", php(eco["bill_today_monthly"])]]
         if future:
             sav.append(["With the appliances you plan to add, before solar", php(eco["bill_before_monthly"])])
+        sav.append(["Your bill with solar (per month)", php(eco["bill_after_monthly"])])
+        if future:
+            sav.append(["Savings against your bill today", php(float(eco["bill_today_monthly"]) - float(eco["bill_after_monthly"]))])
         sav += [
-            ["Your bill with solar (per month)", php(eco["bill_after_monthly"])],
             ["Monthly savings" + (" (against the bill with the new appliances)" if future else ""), php(eco["savings_monthly"])],
             ["Savings in the first year", php(eco["year1"]["savings"])],
             ["Pays for itself in", f"{eco['payback_years']:.1f} years" if eco.get("payback_years") is not None else f"more than {a['analysis_years']} years"],
@@ -256,14 +341,16 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     cols = Table([[left_col, right_col]], colWidths=[92 * mm, 92 * mm])
     cols.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     story.append(cols)
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 4))
 
     # ---- reminders and the payment schedule
     reminders = [
         "The price includes delivery, installation by our crew, testing and switch-on, and the permits listed.",
-        "Quantities are based on our roof assessment and may change after the final check before installation. We will confirm any change with you first.",
+        "Quantities are based on your roof check and may change after the final check before installation. We will confirm any change with you first.",
         f"This proposal is good for {validity} days from the proposal date.",
     ]
+    if lead_estimate_sentence(doc, eco):
+        reminders.insert(0, lead_estimate_sentence(doc, eco))
     if eco.get("available"):
         a = eco["assumptions"]
         src = "from your latest bill" if str(a.get("tariff_source", "")).startswith("bill") else "our usual rate; your bill may differ"
@@ -283,11 +370,11 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     story.append(section("REMINDERS"))
     for r in reminders:
         story.append(Paragraph(r, small))
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 6))
 
     stub_rows = [["PAYMENT SCHEDULE", "Due", "Amount"]]
     if prog.get("available"):
-        for p in prog["payments"]:
+        for p in payment_rows(prog["payments"]):
             stub_rows.append([f"{p['label']} ({p['share'] * 100:.0f}%)", _d(p["date"]), php(p["amount"])])
     else:
         stub_rows.append(["On signing", "", php(cust["total"])])
@@ -299,11 +386,11 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         ("ALIGN", (2, 0), (2, -1), "RIGHT"), ("LINEBELOW", (0, 1), (-1, -2), 0.3, LINE), ("FONTNAME", (0, -1), (-1, -1), FB),
         ("TOPPADDING", (0, 0), (-1, 0), 8), ("BACKGROUND", (0, -1), (-1, -1), ACCENT_LIGHT),
     ]))
-    story.append(Paragraph(f"Payment schedule for proposal {escape(proposal_no or '-')}, {escape(doc.customer_name or '-')}. Please keep this for your records.", small))
-    story.append(stub)
+    caption = Paragraph(f"Payment schedule for proposal {escape(proposal_no or '-')}, {escape(doc.customer_name or '-')}. Please keep this for your records.", small)
+    story.append(KeepTogether([caption, stub]))  # the stub moves as one block; its total row never sits alone on a page
 
     # ---- page two: details of charges, schedule, your questions, acceptance
-    story.append(PageBreak())
+    story.append(CondPageBreak(120 * mm))  # a new page unless the stub already spilled over and left the room
     story.append(section("DETAILS OF CHARGES"))
     rows = [["Item", "Qty", "Unit", "Amount"]]
     styles = [
@@ -311,7 +398,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("ALIGN", (3, 0), (3, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("TOPPADDING", (0, 0), (-1, -1), 2.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
     ]
-    for s in cust["sections"]:
+    for s in sections:
         rows.append([s["label"], "", "", ""])
         r = len(rows) - 1
         styles += [("FONTNAME", (0, r), (-1, r), FB), ("SPAN", (0, r), (2, r)), ("TEXTCOLOR", (0, r), (-1, r), brand.GOLD_DARK)]
@@ -345,7 +432,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
 
     # ---- your questions: the objections, answered on paper
     kind = sizing.get("kind", "")
-    bat_kwh = float(bat.get("installed_kwh") or 0)
+    bat_kwh = battery_kwh  # the same figure as System information
     ev = {e["key"]: e for e in prog.get("events", [])} if prog.get("available") else {}
     days = int((prog.get("install") or {}).get("days") or 1) if prog.get("available") else 1
     qa: list[tuple[str, str]] = []
@@ -359,7 +446,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         gap = ""
         if ev.get("commissioning") and ev.get("meter_installed"):
             gap = f" Between switch-on ({_d(ev['commissioning']['date'])}) and the two-way meter ({_d(ev['meter_installed']['date'])}) the system already cuts your daytime bill, but power sent to the grid is not yet credited."
-        qa.append(("Who handles net metering?", "We prepare and file the net metering application, the ERC Certificate of Compliance and the meter request with your electric company; you sign the forms." + gap))
+        qa.append(("Who handles net metering?", "We prepare and file the net metering application, the ERC certificate of compliance (the net metering certificate) and the two-way meter request with your electric company; you sign the forms." + gap))
     qa.append(("What if we move house?", "The system stays with the house and adds to its value. The net metering agreement transfers to the new owner."))
     qa.append(("Who looks after it?", "Rinse the panels with water two or three times a year, more in the dry season. The inverter shows its output on its screen or app, and we check the system at switch-on and whenever you ask."))
     qa.append(("What does the installation do to the roof?", f"The rails clamp to the roof framing through the sheet with sealed fasteners. Installation takes {days} {'day' if days == 1 else 'days'} and leaves no open holes."))
@@ -368,7 +455,6 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         block = [Paragraph(q, q_style), Paragraph(ans, body)]
         story.append(KeepTogether(([section("YOUR QUESTIONS"), Spacer(1, 2)] if first else []) + block))
         first = False
-    wl = warranty_lines(company)
     if wl:
         story.append(Paragraph("Warranties", q_style))
         for w in wl:
