@@ -49,24 +49,34 @@ def resolve_panel(panel: CandidatePanel, catalog: Catalog, cfg: PricingConfig) -
     return None, None
 
 
-def rows_from_layout(doc: AssessmentDoc, panel: CandidatePanel, selected_panel_result: dict, count: int, gap_m: float) -> list[RoofRow]:
-    """Fill rows face by face using the fitted rows (from the eave up); the panel's long side runs along the row in landscape."""
+def rows_from_layout(doc: AssessmentDoc, panel: CandidatePanel, selected_panel_result: dict, count: int, gap_m: float,
+                     allocation: Optional[list[dict]] = None) -> list[RoofRow]:
+    """Fill rows face by face using the fitted rows (from the eave up); the panel's long side runs along the row in
+    landscape. With the sizing's face allocation (best face first, `sizing["faces"]`) the rows follow it, so the
+    priced mounting sits on the faces the production figures assume; without it, the faces in document order."""
     rows: list[RoofRow] = []
     left = count
-    for f in doc.faces:
+    order: list[tuple[str, Optional[int]]] = [(f.id, None) for f in doc.faces]
+    if allocation:
+        order = [(str(x["face_id"]), int(x["panels"])) for x in allocation]
+        listed = {fid for fid, _ in order}
+        order += [(f.id, None) for f in doc.faces if f.id not in listed]
+    for fid, cap in order:
         if left <= 0:
             break
-        lr = selected_panel_result["faces"].get(f.id) or {}
+        lr = selected_panel_result["faces"].get(fid) or {}
         best = lr.get("best") or {}
         fitted = [int(r) for r in (best.get("rows") or []) if int(r) > 0]
         if not fitted and best.get("along_length") and best.get("along_width"):
             fitted = [int(best["along_length"])] * int(best["along_width"])
         dim = panel.length_m if best.get("orientation") == "landscape" else panel.width_m
+        face_left = min(left, cap) if cap is not None else left
         for per_row in fitted:
-            if left <= 0:
+            if face_left <= 0:
                 break
-            n = min(per_row, left)
+            n = min(per_row, face_left)
             rows.append(RoofRow(n, dim, gap_m))
+            face_left -= n
             left -= n
     if left > 0:  # more panels than the layout holds (override): one more row
         rows.append(RoofRow(left, panel.length_m, gap_m))
@@ -119,7 +129,7 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
     count = int(sizing["panels"])
     if count <= 0:
         return {"available": False, "reason": "The sizing recommends no panels.", "warnings": warnings}
-    rows = rows_from_layout(doc, panel_doc, selected, count, doc.gap_m)
+    rows = rows_from_layout(doc, panel_doc, selected, count, doc.gap_m, sizing.get("faces"))
     pj = doc.pricing
     cfg_job = cfg.model_copy(deep=True)
     if pj.max_panels_per_string:
@@ -127,7 +137,7 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
     inv = sizing["inverter"]
     bat_kwh = float(sizing["battery"]["installed_kwh"]) if sizing["kind"] != "net_metering" else 0.0
     req = BoqRequest(
-        panel_code=db_panel.code, panel_count=count, rows=rows,
+        panel_code=db_panel.code, panel_count=count, rows=rows, kind=str(sizing["kind"]),
         inverter_kw=float(inv["size_kw"]), inverter_units=int(inv["units"]), inverter_required_kw=float(inv.get("required_kw") or 0) or None, battery_kwh=bat_kwh,
         strings_override=pj.strings_override, inverter_code=pj.inverter_code, battery_code=pj.battery_code,
         pv_run_m=pj.pv_run_m, ac_run_m=pj.ac_run_m, grounding_run_m=pj.grounding_run_m, conduit_m=pj.conduit_m,

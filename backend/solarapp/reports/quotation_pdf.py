@@ -93,6 +93,35 @@ def customer_battery_kwh(pricing: dict, sizing: dict) -> float:
     return bom_battery_kwh(pricing) or float((sizing.get("battery") or {}).get("installed_kwh") or 0)
 
 
+def inverter_certificate(pricing: dict) -> str:
+    """The grid listing of the inverter in the BOM (IEC 61727 / 62116 or the like), when the item carries one."""
+    for l in pricing.get("lines") or []:
+        if l.get("found", True) and (l.get("role") == "inverter" or l.get("category") == "Inverter") and l.get("certifications"):
+            return str(l["certifications"])
+    return ""
+
+
+def battery_backup_line(sizing: dict) -> str:
+    """One honest line about the battery: the evenings it is designed to carry and, from the balance over a real
+    year of weather, how often it still runs out (the grid steps in on a hybrid; an off-grid house goes without)."""
+    kind = sizing.get("kind", "")
+    aut = (sizing.get("battery") or {}).get("days_of_autonomy")
+    if kind == "net_metering" or not aut:
+        return ""
+    evenings = f"{aut:g} {'evening' if float(aut) == 1 else 'evenings'}"
+    hy = sizing.get("hourly_year") or {}
+    if kind == "off_grid":
+        line = f"Designed to carry {evenings} without sun."
+        if hy.get("available"):
+            hours, days = int(hy.get("loss_of_load_hours") or 0), int(hy.get("loss_of_load_days") or 0)
+            if hours > 0:
+                line += f" In a typical year of weather (PVGIS records) expect about {hours} {'hour' if hours == 1 else 'hours'} without power, on {days} {'day' if days == 1 else 'days'}, mostly in long rainy spells."
+            else:
+                line += " In a typical year of weather (PVGIS records) the battery does not run out; a longer rainy spell than the records hold still can."
+        return line
+    return f"Designed to carry {evenings} without sun; in the rainy season the grid covers the rest."
+
+
 def customer_sections(cust: dict) -> list[dict]:
     """The proposal's charge sections: the tools charge folded into Installation and permits as one of its lines.
     The engine's customer block and the internal build-up keep it separate."""
@@ -302,13 +331,20 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         ["System size", f"{pricing['totals']['kwp']:.2f} kWp (the size of the solar array)"],
         ["Inverter", (f"{int(inv.get('units', 1))} × " if int(inv.get("units", 1) or 1) > 1 else "") + f"{inv.get('size_kw', 0):g} kW hybrid inverter" if inv else "-"],
     ]
+    certs = inverter_certificate(pricing)
+    if certs:
+        sysinfo.append(["Inverter certificate", escape(certs)])
     if battery_kwh > 0 and sizing.get("kind") != "net_metering":
         sysinfo.append(["Battery", f"{battery_kwh:.0f} kWh lithium battery (LiFePO4)"])
+        backup = battery_backup_line(sizing)
+        if backup:
+            sysinfo.append(["Battery backup", backup])
     if company.get("brands"):
         sysinfo.append(["Brands", escape(company["brands"])])
-    annual = sizing.get("annual_production_kwh") or (results.get("production") or {}).get("annual_kwh")
+    # at the meter: the sizing's balance carries the system losses; the roof simulation's AC figure is the fallback
+    annual = sizing.get("annual_production_kwh") or (results.get("production") or {}).get("annual_kwh_ac") or (results.get("production") or {}).get("annual_kwh")
     if annual:
-        sysinfo.append(["Solar power made", f"about {annual:,.0f} kWh a year"])
+        sysinfo.append(["Solar power made", f"about {annual:,.0f} kWh a year at your meter"])
     if sizing.get("coverage_pct") is not None:
         sysinfo.append(["Share of your usage covered by solar", f"{sizing['coverage_pct']:.0f}%"])
     left_col = []
@@ -445,7 +481,11 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     days = int((prog.get("install") or {}).get("days") or 1) if prog.get("available") else 1
     qa: list[tuple[str, str]] = []
     if kind == "off_grid":
-        qa.append(("What happens in a brownout?", f"Nothing changes: the house runs on the panels and the {bat_kwh:.0f} kWh battery all the time and does not depend on the grid."))
+        hy = sizing.get("hourly_year") or {}
+        tail = ""
+        if hy.get("available") and int(hy.get("loss_of_load_hours") or 0) > 0:
+            tail = f" In a long rainy spell the battery can run out: in a typical year of weather that is about {int(hy['loss_of_load_hours'])} hours on {int(hy['loss_of_load_days'])} days."
+        qa.append(("What happens in a brownout?", f"Nothing changes: the house runs on the panels and the {bat_kwh:.0f} kWh battery all the time and does not depend on the grid.{tail}"))
     elif bat_kwh > 0:
         qa.append(("What happens in a brownout?", f"The battery takes over the moment the grid drops. A {bat_kwh:.0f} kWh battery carries lights, fans, the refrigerator, TV and wifi through a typical evening; running aircon shortens that. By day the panels keep charging it."))
     else:

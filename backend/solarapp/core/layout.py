@@ -303,18 +303,36 @@ def string_rule(panel_count: int, max_panels_per_string: int, strings_override: 
     return strings, (int(math.ceil(n / strings)) if n > 0 else 0)
 
 
-def mark_used(geometry: list[dict], used_total: int, per_string: Optional[int] = None) -> None:
-    """Flag the panels the sized system uses: faces in order, rows from the eave up, left to right (the BOQ fills its
-    rows the same way, see pricing/job.py rows_from_layout). With `per_string`, consecutive used panels get their
-    string number, 1 upwards; unused panels carry no string."""
+def mark_used(geometry: list[dict], used_total: int, per_string: Optional[int] = None,
+              allocation: Optional[list[tuple[str, int]]] = None) -> None:
+    """Flag the panels the sized system uses, rows from the eave up, left to right, the same way the BOQ fills its
+    rows (pricing/job.py rows_from_layout). With `allocation` (the sizing's best-face-first list of (face_id, panels))
+    the faces are taken in that order with that many panels each; without it, faces in order until the total is
+    reached. With `per_string`, consecutive used panels get their string number, 1 upwards."""
+    by_id = {f["face_id"]: f for f in geometry}
+    plan: list[tuple[dict, int]] = []
+    if allocation:
+        seen = set()
+        for fid, n in allocation:
+            if fid in by_id and fid not in seen:
+                plan.append((by_id[fid], max(int(n), 0)))
+                seen.add(fid)
+        plan += [(f, 0) for f in geometry if f["face_id"] not in seen]
+    else:
+        left = max(int(used_total), 0)
+        for f in geometry:
+            take = min(left, len(f["panels"]))
+            plan.append((f, take))
+            left -= take
     k = 0
-    for face in geometry:
+    for face, take in plan:
         used = 0
         for p in face["panels"]:
-            p["used"] = k < used_total
+            p["used"] = used < take
+            p.pop("string", None)
             if p["used"]:
                 used += 1
                 if per_string:
                     p["string"] = k // per_string + 1
-            k += 1
+                k += 1
         face["used"] = used

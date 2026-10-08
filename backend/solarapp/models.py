@@ -135,6 +135,23 @@ class MaterialItem(SQLModel, table=True):
     panel_length_m: Optional[float] = None
     panel_width_m: Optional[float] = None
     active: bool = True
+    # Electrical data from the datasheet (contract C4); all optional, None until the owner or the workbook fills them.
+    grid_interactive: Optional[bool] = None     # inverters: may export to the grid (anti-islanding certified); None = unknown
+    certifications: str = ""                    # inverters: the listing the DU asks for, e.g. "IEC 61727 / 62116"
+    max_pv_voltage_v: Optional[float] = None    # inverters: maximum PV input voltage
+    mppt_min_v: Optional[float] = None          # inverters: MPPT window, low end
+    mppt_max_v: Optional[float] = None          # inverters: MPPT window, high end
+    mppt_count: Optional[int] = None            # inverters: number of MPPT inputs
+    mppt_max_a: Optional[float] = None          # inverters: maximum current per MPPT
+    ac_input_a: Optional[float] = None          # inverters: maximum AC input (grid pass-through) current
+    battery_max_a: Optional[float] = None       # inverters: maximum battery charge/discharge current
+    continuous_a: Optional[float] = None        # batteries: continuous discharge current
+    voc_v: Optional[float] = None               # panels: open-circuit voltage at STC
+    vmp_v: Optional[float] = None               # panels: voltage at maximum power
+    isc_a: Optional[float] = None               # panels: short-circuit current
+    imp_a: Optional[float] = None               # panels: current at maximum power
+    temp_coeff_voc_pct: Optional[float] = None  # panels: Voc temperature coefficient, % per degree C (negative)
+    temp_coeff_isc_pct: Optional[float] = None  # panels: Isc temperature coefficient, % per degree C
     updated_at: datetime = Field(default_factory=utcnow)
 
 

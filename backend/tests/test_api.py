@@ -202,7 +202,9 @@ def test_pricing_flow(client):
     panel_line = next(l for l in pr["lines"] if l["role"] == "panel")
     assert panel_line["qty"] == res["sizing"]["panels"]
     inv_line = next(l for l in pr["lines"] if l["role"] == "inverter")
-    assert inv_line["code"] == "FS-INV-008" and inv_line["rating"] * inv_line["qty"] >= res["sizing"]["inverter"]["required_kw"]
+    # a net-metering job takes the grid-interactive default (FS-INV-001), never the off-grid FS-INV-008
+    assert inv_line["code"] == "FS-INV-001" and inv_line["rating"] * inv_line["qty"] >= res["sizing"]["inverter"]["required_kw"]
+    assert inv_line["grid_interactive"] is True and "62116" in inv_line["certifications"]
     assert pr["totals"]["contract_rounded"] % 100 == 0 and pr["totals"]["contract_rounded"] > 100000
     secs = [s["key"] for s in pr["customer"]["sections"]]
     assert secs == ["materials", "labor", "equipment", "tax"]

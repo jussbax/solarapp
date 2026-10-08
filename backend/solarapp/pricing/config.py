@@ -4,9 +4,9 @@ role defaults. Stored as one JSON document in the app; seeded from the workbook
 by the importer and editable in the app (the app is the master)."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TruckConfig(BaseModel):
@@ -237,9 +237,28 @@ class BoqRoles(BaseModel):
     sealant: str = "IAN-CSM-001"
     sealants: int = 2
     max_panels_per_string: int = 10
-    default_inverter_code: str = "FS-INV-008"   # Felicity 6 kW eco-hybrid on every job, in parallel units when more is needed; blank = cheapest that fits
+    # One default inverter per system kind, in parallel units when more is needed; blank = the cheapest that fits.
+    # Grid jobs (net metering, with or without a battery) need a grid-interactive unit the DU accepts; the importer
+    # sets the grid default to the first grid-interactive hybrid in the workbook (FS-INV-001 in the bundled one).
+    default_inverter_code_grid: str = "FS-INV-001"
+    default_inverter_code_offgrid: str = "FS-INV-008"   # Felicity 6 kW eco-hybrid, an off-grid type
     inverter_exclude_words: list[str] = Field(default_factory=lambda: ["3P", "3-phase", "high-voltage", "HV"])
     battery_exclude_words: list[str] = Field(default_factory=lambda: ["rack", "controller module", "slave", "per kWh", "12V", "24V", "25.6V", "12 V", "24 V"])
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_single_default(cls, data: Any) -> Any:
+        """A config saved before the per-kind defaults carried one `default_inverter_code` (an off-grid unit on
+        every job); it moves into the off-grid slot and the grid slot takes the class default."""
+        if isinstance(data, dict) and "default_inverter_code" in data:
+            data = dict(data)
+            old = data.pop("default_inverter_code")
+            if "default_inverter_code_offgrid" not in data:
+                data["default_inverter_code_offgrid"] = old or ""
+        return data
+
+    def default_inverter_for(self, kind: str) -> str:
+        return self.default_inverter_code_offgrid if kind == "off_grid" else self.default_inverter_code_grid
 
 
 class PaymentMilestone(BaseModel):
@@ -281,7 +300,32 @@ class ProgramConfig(BaseModel):
     labour_paid_days_after_job: int = 0
     commission_paid_days_after_job: int = 0
     vat_remit_days_after_completion: int = 30
+    # Floors for the hour-by-hour plan only (minutes of wall-clock time per task); the labour price is not changed.
+    # Today's rates give a ten-minute commissioning, which no PEE or DU inspector accepts.
+    min_task_minutes: dict[str, int] = Field(default_factory=lambda: {"commissioning": 120, "battery": 60, "inverter": 60})
     payment: PaymentPlan = Field(default_factory=PaymentPlan)
+
+
+class SystemLosses(BaseModel):
+    """Losses after the panels, as the share of energy that gets through. The simulation is "at the panels"
+    (k_site is measured in the plane of the array and contains none of these); the product is applied to the
+    per-kWp profile before sizing and economics, so the array is sized on energy at the meter and the customer
+    documents print the figure the bill will later show."""
+    inverter: float = Field(default=0.96, gt=0, le=1)   # DC to AC conversion, the datasheet's weighted efficiency
+    wiring: float = Field(default=0.98, gt=0, le=1)     # DC and AC cable runs, connectors and terminations
+    soiling: float = Field(default=0.97, gt=0, le=1)    # dust and dirt between rains; verify locally (rice-field roofs collect more in the dry season)
+    other: float = Field(default=0.99, gt=0, le=1)      # module mismatch, availability, anything else after the panels
+
+    @property
+    def factor(self) -> float:
+        return self.inverter * self.wiring * self.soiling * self.other
+
+
+class SizingRules(BaseModel):
+    """Design choices that are the owner's, not the engine's."""
+    # The evenings the battery must carry without sun. 1 = the night deficit of the worst typical day (the rule
+    # until now); 2 = twice that, and so on. The hourly-year balance then reports how often it still runs out.
+    days_of_autonomy: float = Field(default=1.0, ge=0.5, le=7.0)
 
 
 class EconomicsConfig(BaseModel):
@@ -328,6 +372,8 @@ class PricingConfig(BaseModel):
     job_defaults: JobDefaults = Field(default_factory=JobDefaults)
     program: ProgramConfig = Field(default_factory=ProgramConfig)
     economics: EconomicsConfig = Field(default_factory=EconomicsConfig)
+    system_losses: SystemLosses = Field(default_factory=SystemLosses)
+    sizing: SizingRules = Field(default_factory=SizingRules)
     quick: QuickConfig = Field(default_factory=QuickConfig)
     wiring: WiringRules = Field(default_factory=WiringRules)
     roles: BoqRoles = Field(default_factory=BoqRoles)

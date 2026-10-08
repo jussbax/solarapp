@@ -13,8 +13,82 @@ from typing import Any, Optional
 
 import openpyxl
 
-from .catalog import Catalog, Item, Supplier, parse_panel_dims
+from .catalog import ELECTRICAL_FIELDS, Catalog, Item, Supplier, certifications_in_remarks, electrical_from_remarks, infer_grid_interactive, parse_panel_dims
 from .config import CategoryRule, GroundTask, PricingConfig
+
+# Optional electrical columns on MATERIALS DB (contract C4): matched by header text, in any column, when present.
+# The bundled workbook has none; figures then come from the remarks (see catalog.electrical_from_remarks) or stay blank.
+ELECTRICAL_HEADERS: dict[str, tuple[str, ...]] = {
+    "grid_interactive": ("gridinteractive", "gridtie", "exportallowed"),
+    "certifications": ("certifications", "certification", "certificate", "listing"),
+    "max_pv_voltage_v": ("maxpvvoltage", "maxpvvoltagev", "pvvoltagemax", "maxdcvoltage", "maxinputvoltage"),
+    "mppt_min_v": ("mpptmin", "mpptminv", "mpptrangemin", "mpptlow"),
+    "mppt_max_v": ("mpptmax", "mpptmaxv", "mpptrangemax", "mppthigh"),
+    "mppt_count": ("mpptcount", "mppts", "numberofmppt", "mpptinputs"),
+    "mppt_max_a": ("mpptmaxa", "maxcurrentpermppt", "mpptcurrent", "currentpermppt"),
+    "ac_input_a": ("acinputa", "acinputcurrent", "maxacinput", "maxacinputcurrent"),
+    "battery_max_a": ("batterymaxa", "maxbatterycurrent", "batterycurrent", "batterychargecurrent"),
+    "continuous_a": ("continuousa", "continuouscurrent", "continuousdischarge", "continuousdischargecurrent"),
+    "voc_v": ("voc", "vocv", "opencircuitvoltage"),
+    "vmp_v": ("vmp", "vmpv", "vmpp"),
+    "isc_a": ("isc", "isca", "shortcircuitcurrent"),
+    "imp_a": ("imp", "impa", "impp"),
+    "temp_coeff_voc_pct": ("tempcoeffvoc", "tempcoeffvocpct", "voctempcoeff", "betavoc"),
+    "temp_coeff_isc_pct": ("tempcoeffisc", "tempcoeffiscpct", "isctempcoeff", "alphaisc"),
+}
+_INT_FIELDS = {"mppt_count"}
+
+
+def _norm_header(v: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(v or "").lower().split("(")[0])
+
+
+def electrical_columns(header_row: tuple) -> dict[str, int]:
+    """Column index per electrical field, from a header row; fields whose header is absent are left out."""
+    found: dict[str, int] = {}
+    for idx, cell in enumerate(header_row):
+        key = _norm_header(cell)
+        if not key:
+            continue
+        for field_name, aliases in ELECTRICAL_HEADERS.items():
+            if key in aliases and field_name not in found:
+                found[field_name] = idx
+    return found
+
+
+def _bool(v: Any) -> Optional[bool]:
+    s = _s(v).lower()
+    if s in ("yes", "y", "true", "1", "grid-tie", "grid tie"):
+        return True
+    if s in ("no", "n", "false", "0", "off-grid", "off grid"):
+        return False
+    return None
+
+
+def electrical_values(row: tuple, cols: dict[str, int], category: str, name: str, spec: str, remarks: str) -> dict:
+    """The electrical fields for one row: the workbook column when present and filled, else what the remarks say,
+    else None. `grid_interactive` is inferred from the name and remarks when no column answers it."""
+    out: dict = dict.fromkeys(ELECTRICAL_FIELDS, None)
+    out["certifications"] = ""
+    out.update(electrical_from_remarks(category, name, spec, remarks))
+    if category == "Inverter":
+        out["certifications"] = certifications_in_remarks(remarks)
+        out["grid_interactive"] = infer_grid_interactive(name, remarks)
+    for field_name, idx in cols.items():
+        v = row[idx] if idx < len(row) else None
+        if v is None or v == "":
+            continue
+        if field_name == "grid_interactive":
+            b = _bool(v)
+            if b is not None:
+                out[field_name] = b
+        elif field_name == "certifications":
+            out[field_name] = _s(v)
+        elif field_name in _INT_FIELDS:
+            out[field_name] = int(_f(v))
+        else:
+            out[field_name] = _f(v)
+    return out
 
 
 @dataclass
@@ -62,6 +136,8 @@ def read_workbook(path: str | Path) -> ImportResult:
     # ---- items
     items: dict[str, Item] = {}
     ws = wb["MATERIALS DB"]
+    header = next(ws.iter_rows(min_row=3, max_row=3, values_only=True), ())
+    elec_cols = electrical_columns(header)
     for row in ws.iter_rows(min_row=4, values_only=True):
         code = _s(row[0])
         if not code or not re.match(r"^[A-Z]+-[A-Z]+-\d+$", code):
@@ -69,14 +145,17 @@ def read_workbook(path: str | Path) -> ImportResult:
         spec = _s(row[4])
         length, width = parse_panel_dims(spec)
         rating = row[10]
+        category, name = _s(row[1]), _s(row[3])
+        remarks = _s(row[29]) if len(row) > 29 else ""
         items[code] = Item(
-            code=code, category=_s(row[1]), supplier=_s(row[2]), name=_s(row[3]), spec=spec,
+            code=code, category=category, supplier=_s(row[2]), name=name, spec=spec,
             unit=_s(row[5]) or "pc", sold_as=_s(row[6]) or "pc", list_price=_f(row[7]),
             rating=None if rating in (None, "") else _f(rating), rating_unit=_s(row[11]),
             weight_kg=_f(row[13]), volume_m3=_f(row[14]), weight_source=_s(row[15]), storage=_f(row[21]),
-            price_list_date=_s(row[27]) if len(row) > 27 else "", remarks=_s(row[29]) if len(row) > 29 else "",
-            panel_length_m=length if _s(row[1]) == "Solar Panel" else None,
-            panel_width_m=width if _s(row[1]) == "Solar Panel" else None,
+            price_list_date=_s(row[27]) if len(row) > 27 else "", remarks=remarks,
+            panel_length_m=length if category == "Solar Panel" else None,
+            panel_width_m=width if category == "Solar Panel" else None,
+            **electrical_values(row, elec_cols, category, name, spec, remarks),
         )
     for it in items.values():
         if it.category == "Solar Panel" and it.panel_length_m is None:
@@ -236,3 +315,15 @@ def resolve_roles(cfg: PricingConfig, items: dict[str, Item], warnings: list[str
     for role in ("rail", "l_foot", "end_clamp", "mid_clamp", "splice", "mc4_pair", "dc_breaker", "dc_spd", "battery_breaker_fallback", "ats", "ac_breaker", "ac_spd", "enclosure", "cable_tray", "conduit", "ground_rod", "earth_lug", "sealant"):
         if getattr(r, role) not in items:
             warnings.append(f"Role {role}: default code {getattr(r, role)} is not in the DB; set it on the materials page.")
+    # the grid default: the first grid-interactive hybrid in the catalogue (code order), else blank = the cheapest that fits
+    excluded = [w.lower() for w in r.inverter_exclude_words]
+    grid_ok = sorted(
+        (i for i in items.values() if i.category == "Inverter" and i.is_hybrid_inverter and i.grid_interactive is True
+         and not any(w in f"{i.name} {i.spec}".lower() for w in excluded)),
+        key=lambda i: i.code,
+    )
+    r.default_inverter_code_grid = grid_ok[0].code if grid_ok else ""
+    if not grid_ok:
+        warnings.append("No grid-interactive hybrid inverter in the workbook; net-metering jobs take the cheapest grid-interactive unit that fits once one is marked on the Materials page.")
+    if r.default_inverter_code_offgrid and r.default_inverter_code_offgrid not in items:
+        warnings.append(f"Default off-grid inverter {r.default_inverter_code_offgrid} is not in the DB; set it under BOM item roles.")

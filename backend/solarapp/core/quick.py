@@ -113,11 +113,13 @@ def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, l
         raise LookupError("The estimate's panel code is not in the materials list; set it under Pricing settings › Quick estimate.")
     panel_wp = float(panel.rating)
     per_kwp, loc = per_kwp_profile(pvgis, lat, lon, q.tilt_deg, q.azimuth_deg, q.k_site)
+    loss = cfg.system_losses.factor
     load = load_profile(monthly_kwh, pattern)
     peak = float(load.max() * q.peak_factor)
     s = size_system(
-        load, per_kwp, roof_max_panels=q.max_panels, panel_wp=panel_wp, kind=goal, peak_load_kw=peak,
-        largest_motor_kw=0.0, largest_motor_multiplier=1.0, battery=BatterySpec(), inverter=InverterRules(), offgrid=OffGridRules(),
+        load, per_kwp * loss, roof_max_panels=q.max_panels, panel_wp=panel_wp, kind=goal, peak_load_kw=peak,   # sized at the meter
+        largest_motor_kw=0.0, largest_motor_multiplier=1.0, battery=BatterySpec(days_of_autonomy=cfg.sizing.days_of_autonomy),
+        inverter=InverterRules(), offgrid=OffGridRules(),
     )
     panels = int(s["panels"])
     if panels <= 0:
@@ -129,7 +131,7 @@ def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, l
     # the sizing's nominal kWh picks the unit; the visitor sees the unit the price includes
     required_kwh = float(s["battery"]["installed_kwh"]) if goal != "net_metering" else 0.0
     boq = generate_boq(BoqRequest(panel.code, panels, rows, inverter_kw=float(inv["size_kw"]), inverter_units=int(inv["units"]),
-                                  inverter_required_kw=float(inv.get("required_kw") or 0) or None, battery_kwh=required_kwh), catalog, cfg)
+                                  inverter_required_kw=float(inv.get("required_kw") or 0) or None, battery_kwh=required_kwh, kind=goal), catalog, cfg)
     bat_kwh = _priced_battery_kwh(boq, catalog, required_kwh)
     pin = extra_km_from_pin(lat, lon, cfg)
     d = cfg.job_defaults
@@ -157,7 +159,8 @@ def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, l
             "roof_area_m2": panels * dim * width, "roof_limited": bool(s.get("roof_limited")),
         },
         "production": {
-            "annual_kwh": float(s["annual_production_kwh"]), "monthly_kwh": [m["production_kwh"] for m in s["monthly"]],
+            "annual_kwh": float(s["annual_production_kwh"]), "monthly_kwh": [m["production_kwh"] for m in s["monthly"]],   # at the meter
+            "loss_factor": loss, "annual_kwh_at_panels": float(s["annual_production_kwh"]) / loss if loss > 0 else float(s["annual_production_kwh"]),
             "coverage_pct": float(s["coverage_pct"]), "self_consumption_pct": float(s["self_consumption_pct"]),
             "annual_export_kwh": float(s["annual_export_kwh"]), "annual_import_kwh": float(s["annual_import_kwh"]),
             "annual_unserved_kwh": float(s["annual_unserved_kwh"]), "annual_consumption_kwh": float(s["annual_consumption_kwh"]),
@@ -203,10 +206,12 @@ def quick_estimate(req: QuickRequest, pvgis: PvgisDataset, ctx: PricingContext) 
         travel = f"Prices are from our current supplier list and include the {road:.0f} km trip from Pila, Laguna."
     else:
         travel = "Prices are from our current supplier list; no travel charge within Pila."
+    loss = cfg.system_losses.factor
     assumptions += [
         f"Sized for a house using about {monthly_kwh:,.0f} kWh a month, {PATTERN_LABEL[req.pattern]}: {GOAL_LABEL[req.goal]}.",
         f"We assumed a typical roof facing {facing} with a {q.tilt_deg:g}° pitch, and used long-term sun records for your area (PVGIS). "
-        f"Panels are taken at {q.k_site * 100:.0f}% of their rating, which is what we usually measure on roofs here.",
+        f"Panels are taken at {q.k_site * 100:.0f}% of their rating, which is what we usually measure on roofs here. "
+        f"The figures are what reaches your meter: about {(1 - loss) * 100:.0f}% is lost in the inverter, the cables and dust on the panels.",
         travel,
         f"Savings assume electricity at ₱{tariff:.2f} per kWh, rising {cfg.economics.tariff_escalation * 100:.0f}% a year."
         + (f" Power you send back to the grid is credited at ₱{cfg.economics.export_rate_php_per_kwh:.2f} per kWh (the net metering rate)." if req.goal != "off_grid" else ""),

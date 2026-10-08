@@ -45,15 +45,22 @@ export default function ResultsView({ doc, results }: { doc: AssessmentDoc; resu
           <div className="value">{n2(prod.system_kwp)} kWp</div>
         </div>
         <div className="kpi">
-          <div className="label">Production per year</div>
+          <div className="label">Production per year, at the panels</div>
           <div className="value">{n0(prod.annual_kwh)} kWh</div>
-          <div className="sub">{n0(prod.faces.reduce((a, f) => a + f.specific_yield_kwh_per_kwp * f.panel_count, 0) / Math.max(prod.total_panels, 1))} kWh per kWp</div>
+          <div className="sub">{n0(prod.faces.reduce((a, f) => a + f.specific_yield_kwh_per_kwp * f.panel_count, 0) / Math.max(prod.total_panels, 1))} kWh per kWp, before any losses</div>
+        </div>
+        <div className="kpi">
+          <div className="label">At the meter</div>
+          <div className="value">{n0(prod.annual_kwh_ac ?? prod.annual_kwh)} kWh</div>
+          <div className="sub">
+            after inverter, wiring, soiling and other losses ({Math.round((1 - (prod.loss_factor ?? 1)) * 100)}% in all); the figure on the customer documents
+          </div>
         </div>
         <div className="kpi">
           <div className="label">Average month</div>
           <div className="value">{n0(prod.avg_monthly_kwh)} kWh</div>
           <div className="sub">
-            low {n0(Math.min(...prod.monthly_kwh))}, high {n0(Math.max(...prod.monthly_kwh))}
+            low {n0(Math.min(...prod.monthly_kwh))}, high {n0(Math.max(...prod.monthly_kwh))} at the panels; {n0(prod.avg_monthly_kwh_ac ?? prod.avg_monthly_kwh)} at the meter
           </div>
         </div>
         <div className="kpi">

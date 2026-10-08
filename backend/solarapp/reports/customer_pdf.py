@@ -92,15 +92,20 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
         story.append(Paragraph(f"Map pin: {doc.lat:.5f}, {doc.lon:.5f}", small))
     story.append(Spacer(1, 6))
 
+    # the customer's figures are at the meter (contract C2); the simulation's own figures stay at the panels
+    annual_ac = float(prod.get("annual_kwh_ac") or prod["annual_kwh"])
+    monthly_ac = [float(v) for v in (prod.get("monthly_kwh_ac") or prod["monthly_kwh"])]
+    avg_ac = float(prod.get("avg_monthly_kwh_ac") or prod["avg_monthly_kwh"])
+    loss = float(prod.get("loss_factor") or 1.0)
     kpi = [
         ["Panels your roof can hold", f"{prod['total_panels']} × {panel['watt_peak']:.0f} W"],
         ["Panel", panel.get("name") or "-"],
         ["System size", f"{prod['system_kwp']:.2f} kWp (the size of the solar array)"],
-        ["Solar power made in a year", f"about {prod['annual_kwh']:,.0f} kWh"],
-        ["In a typical month", f"about {prod['avg_monthly_kwh']:,.0f} kWh"],
+        ["Solar power made in a year", f"about {annual_ac:,.0f} kWh at your meter"],
+        ["In a typical month", f"about {avg_ac:,.0f} kWh"],
     ]
     if bill_kwh:
-        ratio = prod["avg_monthly_kwh"] / bill_kwh
+        ratio = avg_ac / bill_kwh
         kpi.append(["Your bill shows", f"{bill_kwh:,.0f} kWh a month" + (f", so the full roof makes around {ratio:.1f} times what you use" if ratio >= 1.05 else f", about {ratio * 100:.0f}% of which the full roof can make")])
     key_style = ParagraphStyle("key", parent=body, fontSize=10, leading=13, textColor=brand.MUTED)
     val_style = ParagraphStyle("val", parent=body, fontName=FB, fontSize=10, leading=13, textColor=brand.GRAY)
@@ -112,10 +117,10 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     story.append(t)
     story.append(Paragraph("This is what the roof can hold. The system we propose after the energy audit is usually smaller, sized to your bill.", small))
 
-    story.append(Paragraph("What your roof can make each month", h2))
-    story.append(_chart(prod["monthly_kwh"]))
+    story.append(Paragraph("What your roof can make each month, at your meter", h2))
+    story.append(_chart(monthly_ac))
     rows = [["Month"] + MONTHS + ["Year"]]
-    rows.append(["kWh"] + [f"{v:,.0f}" for v in prod["monthly_kwh"]] + [f"{prod['annual_kwh']:,.0f}"])
+    rows.append(["kWh"] + [f"{v:,.0f}" for v in monthly_ac] + [f"{annual_ac:,.0f}"])
     mt = Table(rows, colWidths=[14 * mm] + [11.5 * mm] * 12 + [18 * mm])
     mt.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 7.5), ("FONTNAME", (0, 0), (-1, -1), F),
@@ -156,7 +161,8 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     notes = [
         "We estimated production hour by hour for a typical year of weather at your location (PVGIS records), using your roof's pitch and direction.",
         "We adjusted it with readings taken on your roof: a test panel, a sunlight meter and a power meter.",
-        "These are the panels' output in a typical year. Real weather varies, so some years will be higher and some lower.",
+        (f"The figures are what reaches your meter: about {(1 - loss) * 100:.0f}% of what the panels make is lost in the inverter, the cables and dust on the panels. " if loss < 1 else "")
+        + "They are for a typical year. Real weather varies, so some years will be higher and some lower.",
         "This is a roof check, not a quotation.",
     ]
     tail = [Paragraph("About this estimate", h2)] + [Paragraph(n, small) for n in notes]

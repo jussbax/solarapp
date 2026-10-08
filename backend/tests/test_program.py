@@ -15,8 +15,11 @@ WB = Path(__file__).resolve().parent.parent / "data_seed" / "PLD_Materials_DB.xl
 
 @pytest.fixture(scope="module")
 def priced():
+    """The owner's typical small hybrid job, priced. The task floors are off here so the schedule mechanics keep
+    their pinned dates; test_task_floors_stretch_the_plan_and_warn covers the floors on the same job."""
     imp = read_workbook(WB)
     cat, cfg = imp.catalog, imp.config
+    cfg.program.min_task_minutes = {}
     req = BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=9.9)
     boq = generate_boq(req, cat, cfg)
     pr = price_job(boq.lines, cat, cfg, JobInputs(extra_km=26.7, net_metering=True))
@@ -114,6 +117,31 @@ def test_program_schedule_payments_and_cashflow(priced):
     # off-grid: no net metering steps
     prog3 = build_program(doc, {"pricing": pr, "sizing": {"kind": "off_grid"}}, cfg)
     assert "meter_installed" not in {e["key"] for e in prog3["events"]} and prog3["completion"] == "2026-10-27"
+
+
+def test_task_floors_stretch_the_plan_and_warn(priced):
+    """E15: the floors (commissioning 120, battery 60, inverter 60 minutes by default) stretch the hour-by-hour
+    plan, never the labour price; when they push the plan past the priced days the overrun warning fires."""
+    cfg0, pr = priced
+    cfg = cfg0.model_copy(deep=True)
+    cfg.program.min_task_minutes = {"commissioning": 120, "battery": 60, "inverter": 60}
+    plan = plan_install_days(pr, cfg, AssessmentDoc())
+    by_task: dict[str, int] = {}
+    for s in plan["segments"]:
+        if s["stream"] == "ground":
+            by_task[s["task"]] = by_task.get(s["task"], 0) + (s["end"] - s["start"])
+    assert by_task["Energize, test and commission"] >= 120
+    assert by_task["Mount the hybrid inverter"] >= 60 and by_task["Anchor and connect the battery"] >= 60
+    applied = {x["task"]: x for x in plan["task_floors"]["applied"]}
+    assert applied["Energize, test and commission"]["minutes"] == 120 and applied["Energize, test and commission"]["priced_minutes"] < 120
+    # the small job no longer fits the priced day: the plan says so instead of hiding it; the price is untouched
+    assert plan["days"] == 2 and plan["paid_days"] == 1
+    assert any(w["code"] == "schedule_overrun" for w in plan["warnings"]) and not any(w["code"] == "early_finish" for w in plan["warnings"])
+    assert plan["man_hours"]["total"] == pr["labor"]["total_mh"]
+    # a floor the crew already meets changes nothing
+    cfg.program.min_task_minutes = {"commissioning": 5, "battery": 5, "inverter": 5}
+    plan2 = plan_install_days(pr, cfg, AssessmentDoc())
+    assert plan2["days"] == 1 and plan2["task_floors"]["applied"] == [] and any(w["code"] == "early_finish" for w in plan2["warnings"])
 
 
 def test_two_day_job_hourly_plan(priced):

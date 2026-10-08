@@ -128,8 +128,8 @@ def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_ste
 
     # big numbers
     col_w = (W - 2 * P - 40) // 3
-    monthly = round(prod["avg_monthly_kwh"] / 10) * 10
-    for i, (val, lab) in enumerate([(f"{prod['total_panels']}", "panels fit"), (f"{prod['system_kwp']:.2f}", "kWp system size"), (f"~{monthly:,.0f}", "kWh a month, typical")]):
+    monthly = round(float(prod.get("avg_monthly_kwh_ac") or prod["avg_monthly_kwh"]) / 10) * 10   # at the meter (contract C2)
+    for i, (val, lab) in enumerate([(f"{prod['total_panels']}", "panels fit"), (f"{prod['system_kwp']:.2f}", "kWp system size"), (f"~{monthly:,.0f}", "kWh a month at your meter")]):
         cx = P + i * (col_w + 20)
         d.rounded_rectangle([cx, y, cx + col_w, y + 190], radius=16, fill=FIELD)
         fv = f_big
@@ -167,7 +167,7 @@ def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_ste
     heading("Each part of your roof")
     for fs, f in zip(prod["faces"], doc.faces):
         t1 = f"{f.name}  ·  faces {compass(f.azimuth_deg)}, {f.tilt_deg:g}° pitch"
-        t2 = f"{fs['panel_count']} panels  ·  {fs['panel_count'] * panel['watt_peak'] / 1000:.2f} kWp  ·  about {round(fs['annual_kwh'] / 12 / 10) * 10:,.0f} kWh a month"
+        t2 = f"{fs['panel_count']} panels  ·  {fs['panel_count'] * panel['watt_peak'] / 1000:.2f} kWp  ·  about {round(float(fs.get('annual_kwh_ac') or fs['annual_kwh']) / 12 / 10) * 10:,.0f} kWh a month"
         d.text((P, y), t1, font=f_body_b, fill=INK)
         d.text((P, y + 44), t2, font=f_body, fill=MUTED)
         y += 100

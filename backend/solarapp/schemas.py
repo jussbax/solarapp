@@ -379,6 +379,23 @@ class MaterialItemIn(BaseModel):
     panel_length_m: Optional[float] = Field(default=None, gt=0)
     panel_width_m: Optional[float] = Field(default=None, gt=0)
     active: bool = True
+    # electrical data (contract C4), all optional
+    grid_interactive: Optional[bool] = None
+    certifications: str = ""
+    max_pv_voltage_v: Optional[float] = Field(default=None, gt=0)
+    mppt_min_v: Optional[float] = Field(default=None, ge=0)
+    mppt_max_v: Optional[float] = Field(default=None, gt=0)
+    mppt_count: Optional[int] = Field(default=None, ge=1)
+    mppt_max_a: Optional[float] = Field(default=None, gt=0)
+    ac_input_a: Optional[float] = Field(default=None, gt=0)
+    battery_max_a: Optional[float] = Field(default=None, gt=0)
+    continuous_a: Optional[float] = Field(default=None, gt=0)
+    voc_v: Optional[float] = Field(default=None, gt=0)
+    vmp_v: Optional[float] = Field(default=None, gt=0)
+    isc_a: Optional[float] = Field(default=None, gt=0)
+    imp_a: Optional[float] = Field(default=None, gt=0)
+    temp_coeff_voc_pct: Optional[float] = None
+    temp_coeff_isc_pct: Optional[float] = None
 
 
 class MaterialItemPatch(BaseModel):
@@ -400,6 +417,22 @@ class MaterialItemPatch(BaseModel):
     panel_length_m: Optional[float] = Field(default=None, gt=0)
     panel_width_m: Optional[float] = Field(default=None, gt=0)
     active: Optional[bool] = None
+    grid_interactive: Optional[bool] = None
+    certifications: Optional[str] = None
+    max_pv_voltage_v: Optional[float] = Field(default=None, gt=0)
+    mppt_min_v: Optional[float] = Field(default=None, ge=0)
+    mppt_max_v: Optional[float] = Field(default=None, gt=0)
+    mppt_count: Optional[int] = Field(default=None, ge=1)
+    mppt_max_a: Optional[float] = Field(default=None, gt=0)
+    ac_input_a: Optional[float] = Field(default=None, gt=0)
+    battery_max_a: Optional[float] = Field(default=None, gt=0)
+    continuous_a: Optional[float] = Field(default=None, gt=0)
+    voc_v: Optional[float] = Field(default=None, gt=0)
+    vmp_v: Optional[float] = Field(default=None, gt=0)
+    isc_a: Optional[float] = Field(default=None, gt=0)
+    imp_a: Optional[float] = Field(default=None, gt=0)
+    temp_coeff_voc_pct: Optional[float] = None
+    temp_coeff_isc_pct: Optional[float] = None
 
 
 class QuickRequest(BaseModel):

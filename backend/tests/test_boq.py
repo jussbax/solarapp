@@ -32,20 +32,29 @@ def test_mounting_matches_sample_job(imported):
 
 
 def test_default_inverter_in_parallel(imported):
+    """One default per system kind: the grid-interactive FS-INV-001 on anything with net metering, the off-grid
+    FS-INV-008 on off-grid jobs; parallel units when the sizing needs more kW; a per-job override wins."""
     cat, cfg = imported.catalog, imported.config
-    res = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6), cat, cfg)
+    res = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6), cat, cfg)   # kind defaults to combination
     inv = next(l for l in res.lines if l.role == "inverter")
-    assert inv.code == "FS-INV-008" and inv.qty == 1   # Felicity 6 kW eco-hybrid on every job
-    big = generate_boq(BoqRequest("BC-PNL-001", 20, rows_for(20, 10, 1.134), inverter_kw=8, inverter_required_kw=7.4, battery_kwh=10), cat, cfg)
+    assert inv.code == "FS-INV-001" and inv.qty == 1 and "grid-interactive: yes" in inv.note
+    off = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6, kind="off_grid"), cat, cfg)
+    assert next(l for l in off.lines if l.role == "inverter").code == "FS-INV-008"   # Felicity 6 kW eco-hybrid off the grid
+    big = generate_boq(BoqRequest("BC-PNL-001", 20, rows_for(20, 10, 1.134), inverter_kw=8, inverter_required_kw=7.4, battery_kwh=10, kind="off_grid"), cat, cfg)
     inv2 = next(l for l in big.lines if l.role == "inverter")
     assert inv2.code == "FS-INV-008" and inv2.qty == 2 and "parallel" in inv2.note
     assert next(l for l in big.lines if l.role == "thhn").qty == 2 * 35 and next(l for l in big.lines if l.role == "ac_breaker").qty == 8
-    over = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6, inverter_code="BC-INV-002"), cat, cfg)
+    big_grid = generate_boq(BoqRequest("BC-PNL-001", 20, rows_for(20, 10, 1.134), inverter_kw=8, inverter_required_kw=7.4, battery_kwh=10), cat, cfg)
+    assert next(l for l in big_grid.lines if l.role == "inverter").qty == 2
+    over = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6, inverter_code="BC-INV-002", kind="off_grid"), cat, cfg)
     assert next(l for l in over.lines if l.role == "inverter").code == "BC-INV-002"
     cfg2 = cfg.model_copy(deep=True)
-    cfg2.roles.default_inverter_code = ""
+    cfg2.roles.default_inverter_code_grid = ""
+    cfg2.roles.default_inverter_code_offgrid = ""
     cheap = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6), cat, cfg2)
-    assert next(l for l in cheap.lines if l.role == "inverter").code == select_inverter(6, cat, cfg2)[0][0].code
+    assert next(l for l in cheap.lines if l.role == "inverter").code == select_inverter(6, cat, cfg2, "combination")[0][0].code
+    cheap_off = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6, kind="off_grid"), cat, cfg2)
+    assert next(l for l in cheap_off.lines if l.role == "inverter").code == select_inverter(6, cat, cfg2, "off_grid")[0][0].code
 
 
 def test_cheapest_inverter_and_battery(imported):

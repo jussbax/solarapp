@@ -981,3 +981,76 @@ export interface GanttEvent {
   amount?: number
 }
 
+
+// ---- Engineering numbers batch: electrical data on items (contract C4), figures at the meter (contract C2),
+// the sizing's face allocation and hourly-year balance. Declared here so the earlier interfaces merge with them.
+export interface MaterialItem {
+  grid_interactive?: boolean | null
+  certifications?: string
+  max_pv_voltage_v?: number | null
+  mppt_min_v?: number | null
+  mppt_max_v?: number | null
+  mppt_count?: number | null
+  mppt_max_a?: number | null
+  ac_input_a?: number | null
+  battery_max_a?: number | null
+  continuous_a?: number | null
+  voc_v?: number | null
+  vmp_v?: number | null
+  isc_a?: number | null
+  imp_a?: number | null
+  temp_coeff_voc_pct?: number | null
+  temp_coeff_isc_pct?: number | null
+}
+
+export interface FaceSimulation {
+  annual_kwh_ac?: number
+  monthly_kwh_ac?: number[]
+}
+
+export interface SimulationResult {
+  loss_factor?: number
+  annual_kwh_ac?: number
+  monthly_kwh_ac?: number[]
+  avg_monthly_kwh_ac?: number
+}
+
+export interface SizingFace {
+  face_id: string
+  name: string
+  panels: number
+  capacity: number
+  rows: number[]
+  kwp: number
+  annual_kwh: number
+  specific_yield_kwh_per_kwp: number
+}
+
+export interface HourlyYear {
+  available: boolean
+  hours?: number
+  loss_of_load_hours?: number
+  loss_of_load_days?: number
+  unserved_kwh?: number
+  meaning?: 'unserved' | 'grid_covered'
+  worst_month?: number | null
+  months?: { month: number; hours: number; kwh: number }[]
+}
+
+export type BatteryAutonomy = { days_of_autonomy?: number | null }
+
+export interface SizingBlock {
+  loss_factor?: number
+  annual_production_dc_kwh?: number
+  faces?: SizingFace[] | null
+  hourly_year?: HourlyYear
+}
+
+export interface PricedLine {
+  grid_interactive?: boolean | null
+  certifications?: string
+}
+
+export interface SizingBlock {
+  system_yield_kwh_per_kwp?: number
+}
