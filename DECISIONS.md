@@ -314,5 +314,14 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
 - The customer quotation shows the bill before and after, monthly and
   first-year savings, payback, net savings over the period, the return
   and carbon avoided, with the assumptions spelled out in one sentence.
+- The proposal PDF is laid out like a utility statement so it reads as
+  familiar: header strip with proposal number, statement date and valid
+  until; a total-contract-price box where the bill has the amount due;
+  "your electricity consumption" bar chart with the grid purchase after
+  solar drawn inside it; system information; summary of charges
+  (Materials, Labor, Equipment, VAT); your savings; reminders; a payment
+  stub with the milestones; details of charges and the schedule on page
+  two. Structure only: the company's own name and colours, no utility
+  logo or colours, so it cannot be mistaken for the utility's document.
 - Not yet: close-out actuals, project dashboard, the simplified quick
   estimate.

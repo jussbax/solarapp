@@ -154,7 +154,7 @@ def customer_quotation(
     if a.results_stale:
         raise HTTPException(status_code=409, detail="Inputs changed since the last compute. Save and compute again first.")
     company = company_settings(session, settings)
-    pdf = build_quotation_pdf(AssessmentDoc.model_validate(a.doc), a.results, company)
+    pdf = build_quotation_pdf(AssessmentDoc.model_validate(a.doc), a.results, company, proposal_no=f"P-{a.created_at.year}-{a.id:04d}")
     name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="solar-quotation-{name}.pdf"'})
 

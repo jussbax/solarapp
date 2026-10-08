@@ -59,7 +59,9 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    export credit under net metering, savings by year with tariff rise and
    panel degradation, battery and inverter replacements, upkeep, payback,
    net savings over the analysis period, NPV, IRR, cost of solar energy
-   and carbon avoided. The quotation PDF carries the savings and payback.
+   and carbon avoided. The proposal PDF, laid out like a utility statement
+   with the company's own branding, carries the charges, savings, payment
+   stub, details and schedule.
 
 ## Deploy on an Ubuntu server with Docker
 
