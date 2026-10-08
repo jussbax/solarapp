@@ -54,6 +54,12 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    to carry. The quotation PDF carries the milestone schedule and payment
    terms; an internal PDF carries the full program and cashflow. Each
    assessment has a job stage for the project list.
+9. Economics for the customer: monthly bill before and after solar from
+   the sizing's hourly balance and the effective tariff on the latest bill,
+   export credit under net metering, savings by year with tariff rise and
+   panel degradation, battery and inverter replacements, upkeep, payback,
+   net savings over the analysis period, NPV, IRR, cost of solar energy
+   and carbon avoided. The quotation PDF carries the savings and payback.
 
 ## Deploy on an Ubuntu server with Docker
 
@@ -168,6 +174,7 @@ backend/solarapp/pricing/boq.py       bill of materials from the sized system an
 backend/solarapp/pricing/job.py       prices an assessment: BOQ, manual edits, extra km from the map pin
 backend/solarapp/pricing/store.py     materials tables and pricing settings in SQLite, workbook import
 backend/solarapp/pricing/program.py   program of works: schedule, hourly installation plan, cashflow
+backend/solarapp/pricing/economics.py customer economics: bill before and after, payback, NPV, IRR
 backend/data_seed/                    bundled materials workbook, loaded on first start
 backend/solarapp/compute.py           turns an assessment into results
 backend/solarapp/data_download/       one-time PVGIS and NASA download

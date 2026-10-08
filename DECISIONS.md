@@ -286,5 +286,33 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
 - Each assessment carries a job stage (assessed, quoted, signed, sourcing,
   installing, commissioned, net metering, closed) shown in the list; the
   project management dashboard and close-out actuals will build on it.
+
+## Economics for the customer (module 5)
+
+- Built from the sizing's month-by-month balance and the priced contract.
+  The tariff is the effective rate on the latest bill (amount over kWh,
+  which includes the bill's fixed and tax lines) because that is what the
+  customer feels; a setting rate applies when there is no bill, and the
+  rate can be typed per job.
+- Bill after solar per month = import x tariff less export x export
+  credit, floored at zero per month (credit beyond zero is not carried
+  over, flagged when it happens). Off-grid: no grid bill; savings count the
+  energy served and unserved kWh are flagged. The export credit defaults
+  to 6.50 pesos per kWh as a stand-in for the distribution utility's
+  blended generation rate, which is what net metering credits; it must be
+  set per utility.
+- Years: savings scale by (1 - degradation)^(y-1) and (1 + tariff
+  rise)^(y-1); costs are upkeep (0.5 percent of the contract a year,
+  escalating), a battery replacement every battery life (10 years) and an
+  inverter replacement every inverter life (12 years), both at the
+  quotation's customer price for that line, skipped in the final year.
+  Outputs: payback and discounted payback (interpolated), NPV at the
+  discount rate (8 percent), IRR by bisection, net savings over the
+  period, lifetime cost per kWh produced, and CO2 avoided at 0.71 kg per
+  kWh (Philippine grid factor). All defaults editable in settings and per
+  job.
+- The customer quotation shows the bill before and after, monthly and
+  first-year savings, payback, net savings over the period, the return
+  and carbon avoided, with the assumptions spelled out in one sentence.
 - Not yet: close-out actuals, project dashboard, the simplified quick
   estimate.

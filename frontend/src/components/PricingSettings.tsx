@@ -6,6 +6,7 @@ const SECTION_LABELS: Record<string, string> = {
   truck: 'Truck and freight run', handling: 'Handling at base', route: 'Route (stops, km and toll matrices)', categories: 'Categories: wastage and markup tiers',
   labor: 'Labour day rates', roof: 'Roof work', ground: 'Ground work', hauling: 'Hauling', mobdemob: 'Mob/demob', tools: 'Tools', job: 'Job level: fees, markups, VAT, rounding',
   job_defaults: 'Job defaults', wiring: 'Wiring rules and voltage drop', roles: 'BOQ item roles (codes used by the generator)',
+  program: 'Program of works: site day, durations, payment terms', economics: 'Economics: tariff, export credit, escalation, lifetimes',
 }
 const SKIP = new Set(['imported_from', 'imported_at'])
 

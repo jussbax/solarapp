@@ -284,6 +284,20 @@ class ProgramConfig(BaseModel):
     payment: PaymentPlan = Field(default_factory=PaymentPlan)
 
 
+class EconomicsConfig(BaseModel):
+    """Customer economics defaults. The tariff comes from the latest bill when there is one."""
+    tariff_php_per_kwh: float = 12.0          # used when the audit has no bill amount
+    export_rate_php_per_kwh: float = 6.5      # net metering credit: the DU's blended generation rate, not the retail rate
+    tariff_escalation: float = 0.03           # per year
+    degradation: float = 0.005                # panel output loss per year
+    analysis_years: int = 25
+    discount_rate: float = 0.08
+    battery_life_years: int = 10
+    inverter_life_years: int = 12
+    om_share_per_year: float = 0.005          # cleaning and checks, share of the contract price per year
+    co2_kg_per_kwh: float = 0.71              # Philippine grid emission factor
+
+
 class PricingConfig(BaseModel):
     company_base: str = "PL Development Inc., Pila, Laguna"
     truck: TruckConfig = Field(default_factory=TruckConfig)
@@ -299,6 +313,7 @@ class PricingConfig(BaseModel):
     job: JobLevel = Field(default_factory=JobLevel)
     job_defaults: JobDefaults = Field(default_factory=JobDefaults)
     program: ProgramConfig = Field(default_factory=ProgramConfig)
+    economics: EconomicsConfig = Field(default_factory=EconomicsConfig)
     wiring: WiringRules = Field(default_factory=WiringRules)
     roles: BoqRoles = Field(default_factory=BoqRoles)
     imported_from: Optional[str] = None

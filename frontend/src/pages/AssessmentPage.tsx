@@ -12,7 +12,8 @@ import AuditEditor from '../components/AuditEditor'
 import AuditResults from '../components/AuditResults'
 import { PricingInputs, PricingResults } from '../components/PricingSection'
 import { ProgramInputs, ProgramResults } from '../components/ProgramSection'
-import { emptyPricingJob, emptyProgramJob } from '../types'
+import { EconomicsInputs, EconomicsResults } from '../components/EconomicsSection'
+import { emptyEconomicsJob, emptyPricingJob, emptyProgramJob } from '../types'
 
 export default function AssessmentPage({ status }: { status: DataStatus | null }) {
   const { id } = useParams()
@@ -163,6 +164,11 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
       </div>
 
       <div className="card">
+        <h2>Economics inputs</h2>
+        <EconomicsInputs job={doc.economics ?? emptyEconomicsJob()} eco={results?.economics ?? null} onChange={(economics) => patch({ economics })} />
+      </div>
+
+      <div className="card">
         <h2>Program of works inputs</h2>
         <ProgramInputs job={doc.program ?? emptyProgramJob()} program={results?.program ?? null} onChange={(program) => patch({ program })} />
       </div>
@@ -215,6 +221,12 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             quotationUrl={api.quotationUrl(aid)}
             stale={a.results_stale || dirty}
           />
+        </div>
+      )}
+      {results && results.economics && (
+        <div className="card" id="economics">
+          <h2>Economics for the customer</h2>
+          <EconomicsResults eco={results.economics} />
         </div>
       )}
       {results && results.program && (

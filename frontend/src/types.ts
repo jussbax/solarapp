@@ -121,6 +121,54 @@ export interface AssessmentDoc {
   audit: EnergyAudit
   pricing: PricingJob
   program: ProgramJob
+  economics: EconomicsJob
+}
+
+export interface EconomicsJob {
+  tariff_php_per_kwh: number | null
+  export_rate_php_per_kwh: number | null
+  tariff_escalation: number | null
+  degradation: number | null
+  analysis_years: number | null
+  discount_rate: number | null
+  battery_life_years: number | null
+  inverter_life_years: number | null
+  om_per_year: number | null
+}
+
+export function emptyEconomicsJob(): EconomicsJob {
+  return { tariff_php_per_kwh: null, export_rate_php_per_kwh: null, tariff_escalation: null, degradation: null, analysis_years: null, discount_rate: null, battery_life_years: null, inverter_life_years: null, om_per_year: null }
+}
+
+export interface EconomicsBlock {
+  available: boolean
+  reason?: string
+  warnings: Warning[]
+  assumptions?: {
+    tariff_php_per_kwh: number; tariff_source: string; export_rate_php_per_kwh: number; tariff_escalation: number; degradation: number; analysis_years: number
+    discount_rate: number; battery_life_years: number; inverter_life_years: number; om_per_year: number; battery_replacement_cost: number; inverter_replacement_cost: number; co2_kg_per_kwh: number
+  }
+  contract?: number
+  kind?: SystemKind
+  monthly?: { month: number; consumption_kwh: number; solar_used_kwh: number; export_kwh: number; import_kwh: number; unserved_kwh: number; bill_before: number; bill_after: number; savings: number }[]
+  bill_today_monthly?: number
+  bill_today_kwh?: number
+  includes_future_loads?: boolean
+  bill_before_monthly?: number
+  bill_after_monthly?: number
+  savings_monthly?: number
+  year1?: { savings: number; solar_used_kwh: number; export_kwh: number; export_credit: number; import_kwh: number; production_kwh: number }
+  years?: { year: number; production_kwh: number; savings: number; costs: number; net: number; cumulative: number; discounted_cumulative: number; note: string }[]
+  payback_years?: number | null
+  discounted_payback_years?: number | null
+  npv?: number
+  irr?: number | null
+  lifetime_savings?: number
+  lifetime_costs?: number
+  lifetime_net?: number
+  lifetime_production_kwh?: number
+  lcoe_php_per_kwh?: number | null
+  co2_t_per_year?: number
 }
 
 export type JobStage = 'assessed' | 'quoted' | 'signed' | 'sourcing' | 'installing' | 'commissioned' | 'net_metering' | 'closed'
@@ -591,6 +639,7 @@ export interface Results {
   sizing: SizingBlock | null
   pricing: PricingBlock | null
   program: ProgramBlock | null
+  economics: EconomicsBlock | null
   nasa_reference: {
     point: { lat: number; lon: number; distance_km: number }
     nasa_ghi_psh: (number | null)[]
@@ -646,6 +695,7 @@ export function emptyDoc(): AssessmentDoc {
     audit: emptyAudit(),
     pricing: emptyPricingJob(),
     program: emptyProgramJob(),
+    economics: emptyEconomicsJob(),
   }
 }
 

@@ -95,6 +95,42 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict) -> byt
     pt.setStyle(TableStyle(styles))
     story.append(pt)
 
+    eco = results.get("economics") or {}
+    if eco.get("available"):
+        a = eco["assumptions"]
+        story.append(Paragraph("Savings and payback", h2))
+        rows = [["Your electricity bill today, monthly", php(eco["bill_today_monthly"])]]
+        if eco.get("includes_future_loads"):
+            rows.append(["Bill with your planned appliances, without solar", php(eco["bill_before_monthly"])])
+        rows += [
+            ["Estimated bill with solar, monthly average", php(eco["bill_after_monthly"])],
+            ["Monthly savings", php(eco["savings_monthly"])],
+            ["Savings in the first year", php(eco["year1"]["savings"])],
+            ["Payback", f"{eco['payback_years']:.1f} years" if eco.get("payback_years") is not None else f"beyond {a['analysis_years']} years"],
+            [f"Net savings over {a['analysis_years']} years", php(eco["lifetime_net"])],
+        ]
+        if eco.get("irr") is not None:
+            rows.append(["Return on the investment", f"{eco['irr'] * 100:.0f}% per year"])
+        rows.append(["Carbon avoided", f"about {eco['co2_t_per_year']:.1f} tonnes of CO2 a year"])
+        et = Table(rows, colWidths=[90 * mm, 80 * mm])
+        et.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 10), ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#444444")),
+            ("FONTNAME", (1, 0), (1, -1), "Helvetica-Bold"), ("LINEBELOW", (0, 0), (-1, -2), 0.3, colors.HexColor("#dddddd")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(et)
+        basis = (f"Based on {a['tariff_php_per_kwh']:.2f} PHP per kWh ({'your latest bill' if a['tariff_source'].startswith('bill') else 'an assumed rate'}), "
+                 f"electricity prices rising {a['tariff_escalation'] * 100:.0f}% a year, panel output declining {a['degradation'] * 100:.1f}% a year, ")
+        if eco["kind"] != "off_grid":
+            basis += f"export credited at {a['export_rate_php_per_kwh']:.2f} PHP per kWh under net metering, "
+        basis += f"yearly upkeep of PHP {a['om_per_year']:,.0f}"
+        if a["battery_replacement_cost"] > 0:
+            basis += f", a battery replacement after {a['battery_life_years']} years"
+        if a["inverter_replacement_cost"] > 0:
+            basis += f" and an inverter replacement after {a['inverter_life_years']} years"
+        basis += ". Savings depend on your actual consumption and the utility's rates."
+        story.append(Paragraph(basis, small))
+
     prog = results.get("program") or {}
     if prog.get("available"):
         story.append(Paragraph("Schedule", h2))

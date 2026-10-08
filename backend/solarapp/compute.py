@@ -13,6 +13,7 @@ from .core.dataset import NasaReference, PvgisDataset
 from .core.sizing import BatterySpec, InverterRules, OffGridRules, size_system
 from .core.simulation import FaceSpec, ThermalModel, prepare_sky, simulate, typical_air_temperature
 from .pricing.job import PricingContext, price_assessment
+from .pricing.economics import build_economics
 from .pricing.program import build_program
 from .schemas import AssessmentDoc
 
@@ -169,6 +170,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         "sizing": sizing_block,
         "pricing": None,
         "program": None,
+        "economics": None,
         "warnings": warnings,
     }
     if pricing is not None:
@@ -180,6 +182,10 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
             results["program"] = build_program(doc, results, pricing.config)
         except Exception as e:  # noqa: BLE001
             results["program"] = {"available": False, "reason": f"Program of works failed: {e}", "warnings": []}
+        try:
+            results["economics"] = build_economics(doc, results, pricing.config)
+        except Exception as e:  # noqa: BLE001
+            results["economics"] = {"available": False, "reason": f"Economics failed: {e}", "warnings": []}
     return results
 
 

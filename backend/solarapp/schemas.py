@@ -167,6 +167,19 @@ class ProgramJob(BaseModel):
     payment: Optional[PaymentPlanIn] = None  # blank = company default plan
 
 
+class EconomicsJob(BaseModel):
+    """Per-job economics inputs; blanks follow the settings, the tariff follows the bill."""
+    tariff_php_per_kwh: Optional[float] = Field(default=None, gt=0)
+    export_rate_php_per_kwh: Optional[float] = Field(default=None, ge=0)
+    tariff_escalation: Optional[float] = Field(default=None, ge=-0.2, le=0.5)
+    degradation: Optional[float] = Field(default=None, ge=0, le=0.1)
+    analysis_years: Optional[int] = Field(default=None, ge=1, le=40)
+    discount_rate: Optional[float] = Field(default=None, ge=0, le=0.5)
+    battery_life_years: Optional[int] = Field(default=None, ge=1, le=40)
+    inverter_life_years: Optional[int] = Field(default=None, ge=1, le=40)
+    om_per_year: Optional[float] = Field(default=None, ge=0)
+
+
 class AssessmentDoc(BaseModel):
     customer_name: str = ""
     address: str = ""
@@ -184,6 +197,7 @@ class AssessmentDoc(BaseModel):
     audit: EnergyAudit = Field(default_factory=EnergyAudit)
     pricing: PricingJob = Field(default_factory=PricingJob)
     program: ProgramJob = Field(default_factory=ProgramJob)
+    economics: EconomicsJob = Field(default_factory=EconomicsJob)
 
 
 class ApplianceCatalogOut(BaseModel):
