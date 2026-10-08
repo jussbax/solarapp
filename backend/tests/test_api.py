@@ -245,3 +245,31 @@ def test_quick_estimate_and_lead(client):
     assert leads and leads[0]["customer_name"] == "Lead Person"
     doc = client.get(f"/api/assessments/{leads[0]['id']}").json()["doc"]
     assert doc["audit"]["system"]["kind"] == "combination" and doc["audit"]["bills"][0]["kwh"] == 338 and "0917" in doc["notes"]
+
+
+def test_quick_throttle_tells_browsers_apart_behind_one_address():
+    """Two phones on one mobile address get their own allowance; one browser is still capped."""
+    from starlette.requests import Request
+    from solarapp.api import quick_routes
+    from fastapi import HTTPException
+
+    quick_routes._hits.clear()
+
+    def req(ip: str, visitor: str | None):
+        headers = [(b"x-forwarded-for", ip.encode())]
+        if visitor:
+            headers.append((b"x-visitor", visitor.encode()))
+        return Request({"type": "http", "headers": headers, "client": (ip, 1), "method": "POST", "path": "/api/quick/estimate"})
+
+    for _ in range(3):
+        quick_routes._throttle(req("10.0.0.1", "phone-a"), 3)
+    with pytest.raises(HTTPException) as e:
+        quick_routes._throttle(req("10.0.0.1", "phone-a"), 3)
+    assert e.value.status_code == 429
+    quick_routes._throttle(req("10.0.0.1", "phone-b"), 3)  # a different browser on the same address still works
+    # the address-wide cap still holds against a script that rotates tokens
+    for i in range(3 * quick_routes.ADDRESS_MULTIPLIER - 4):
+        quick_routes._throttle(req("10.0.0.1", f"bot-{i}"), 3)
+    with pytest.raises(HTTPException):
+        quick_routes._throttle(req("10.0.0.1", "bot-last"), 3)
+    quick_routes._hits.clear()

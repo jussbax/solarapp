@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { emptyDoc, JOB_STAGES, type AssessmentSummary } from '../types'
+import { fmtDateTime, php0 } from '../fmt'
 
 export default function AssessmentListPage() {
   const [items, setItems] = useState<AssessmentSummary[] | null>(null)
@@ -31,22 +32,22 @@ export default function AssessmentListPage() {
       {items === null ? (
         <div className="muted">Loading...</div>
       ) : items.length === 0 ? (
-        <div className="muted">No assessments yet.</div>
+        <div className="muted">No assessments yet. Press New assessment to start one.</div>
       ) : (
         items.map((a) => (
           <Link key={a.id} to={`/assessments/${a.id}`} className="list-item">
             <div className="title">
-              {a.customer_name || <span className="muted">(no customer name)</span>}{' '}
+              {a.customer_name || <span className="muted">Unnamed</span>}{' '}
               <span className="badge neutral">{JOB_STAGES.find((s) => s.id === a.stage)?.label ?? a.stage}</span>{' '}
-              {a.results_stale && <span className="badge neutral">edited since last compute</span>}
+              {a.results_stale && <span className="badge neutral">needs recalculating</span>}
             </div>
             <div className="muted">
-              {a.address || '-'} · {new Date(a.updated_at).toLocaleString()}
+              {a.address || 'No address'} · {fmtDateTime(a.updated_at)}
               {a.has_results && a.system_kwp != null && (
                 <>
                   {' '}
                   · {a.panel_count} panels · {a.system_kwp.toFixed(2)} kWp · {Math.round(a.annual_kwh ?? 0).toLocaleString()} kWh/yr
-                  {a.contract_php != null && ` · ₱${Math.round(a.contract_php).toLocaleString()}`}
+                  {a.contract_php != null && ` · ${php0(a.contract_php)}`}
                 </>
               )}
             </div>

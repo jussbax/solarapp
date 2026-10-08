@@ -129,3 +129,17 @@ def test_two_day_job_hourly_plan(priced):
     assert plan["segments"][-1]["day"] == plan["days"] - 1
     assert any(s["task"] == "Lunch" and s["day"] == 0 for s in plan["segments"])
     assert pr["labor"]["days"] == 2 and plan["days"] == 2
+
+
+def test_schedule_keeps_the_order_of_a_day(priced):
+    """Delivery, installation and switch-on on the same date print in that order; payments after the day's work."""
+    cfg, pr = priced
+    doc = AssessmentDoc()
+    doc.program.signing_date = "2026-10-12"
+    prog = build_program(doc, {"pricing": pr, "sizing": {"kind": "combination"}}, cfg)
+    events = prog["events"]
+    assert [e["date"] for e in events] == sorted(e["date"] for e in events)
+    day = [e["key"] for e in events if e["date"] == prog["install_start"]]
+    assert day.index("materials_on_site") < day.index("installation") < day.index("commissioning")
+    payments = [e["key"] for e in events if e["kind"] == "payment_in" and e["date"] == prog["install_start"]]
+    assert payments and all(day.index(p) > day.index("commissioning") for p in payments)

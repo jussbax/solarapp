@@ -62,12 +62,12 @@ export default function MapPicker({
   const useGps = () => {
     setGeoError(null)
     if (!navigator.geolocation) {
-      setGeoError('This browser has no location support.')
+      setGeoError("Your phone didn't share its location. Tap the house on the map instead.")
       return
     }
     navigator.geolocation.getCurrentPosition(
       (p) => onChange(+p.coords.latitude.toFixed(6), +p.coords.longitude.toFixed(6)),
-      (e) => setGeoError(e.message),
+      () => setGeoError("Your phone didn't share its location. Tap the house on the map instead."),
       { enableHighAccuracy: true, timeout: 15000 },
     )
   }
@@ -85,7 +85,7 @@ export default function MapPicker({
         </div>
         <div className="narrow">
           <button type="button" onClick={useGps}>
-            Use my location
+            Use my phone's location
           </button>
         </div>
       </div>
@@ -111,7 +111,7 @@ export default function MapPicker({
         </MapContainer>
       </div>
       <div className="muted" style={{ marginTop: 4 }}>
-        Tap the map to drop the pin on the roof, or drag the pin. Satellite imagery is not available offline, so zoom in on the street map.
+        Zoom in until you see the street, then tap the roof. Drag the pin if it's off.
       </div>
     </div>
   )

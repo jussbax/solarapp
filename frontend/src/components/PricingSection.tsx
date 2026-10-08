@@ -26,7 +26,7 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
   return (
     <div>
       <div className="muted" style={{ marginBottom: 8 }}>
-        Blank fields follow the pricing settings. Extra km is prefilled from the map pin (straight line x road factor, less the route's reference site).
+        Blank fields use the pricing settings. Extra km comes from the map pin (straight line × road factor, less the route's reference site).
       </div>
       <div className="row">
         <div className="narrow" style={{ width: 300 }}>
@@ -57,15 +57,15 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
       <div className="row" style={{ marginTop: 8 }}>
         <Num label="Max panels per string" value={job.max_panels_per_string} onChange={(v) => set({ max_panels_per_string: v })} hint="10" min={1} step={1} />
         <Num label="Strings (override)" value={job.strings_override} onChange={(v) => set({ strings_override: v })} hint={ch ? `${ch.strings} computed` : 'computed'} min={1} step={1} />
-        <Num label="Extra km one way" value={job.extra_km} onChange={(v) => set({ extra_km: v })} hint={pricing?.pin_distance ? `${pricing.pin_distance.extra_km} from pin` : '0'} min={0} />
+        <Num label="Extra km (one way)" value={job.extra_km} onChange={(v) => set({ extra_km: v })} hint={pricing?.pin_distance ? `${pricing.pin_distance.extra_km} from pin` : '0'} min={0} />
         <Num label="Extra toll (₱)" value={job.extra_toll} onChange={(v) => set({ extra_toll: v })} hint={d('extra_toll', '0')} min={0} />
       </div>
       <div className="row" style={{ marginTop: 8 }}>
-        <Num label="Roof factor" value={job.roof_factor} onChange={(v) => set({ roof_factor: v })} hint={d('roof_factor', '0.75')} min={0.1} step={0.05} />
-        <Num label="Roof closed days" value={job.roof_closed_days} onChange={(v) => set({ roof_closed_days: v })} hint={d('roof_closed_days', '1')} min={0} step={1} />
-        <Num label="Max days" value={job.max_days} onChange={(v) => set({ max_days: v })} hint={d('max_days', '2')} min={1} step={1} />
-        <Num label="Max pairs" value={job.max_pairs} onChange={(v) => set({ max_pairs: v })} hint={d('max_pairs', '2')} min={1} step={1} />
-        <Num label="Owner days" value={job.owner_days} onChange={(v) => set({ owner_days: v })} hint={d('owner_days', '0')} min={0} />
+        <Num label="Roof productivity factor" value={job.roof_factor} onChange={(v) => set({ roof_factor: v })} hint={d('roof_factor', '0.75')} min={0.1} step={0.05} />
+        <Num label="Days the roof is closed" value={job.roof_closed_days} onChange={(v) => set({ roof_closed_days: v })} hint={d('roof_closed_days', '1')} min={0} step={1} />
+        <Num label="Max installation days" value={job.max_days} onChange={(v) => set({ max_days: v })} hint={d('max_days', '2')} min={1} step={1} />
+        <Num label="Max roof pairs" value={job.max_pairs} onChange={(v) => set({ max_pairs: v })} hint={d('max_pairs', '2')} min={1} step={1} />
+        <Num label="Owner days on site" value={job.owner_days} onChange={(v) => set({ owner_days: v })} hint={d('owner_days', '0')} min={0} />
       </div>
       <div className="row" style={{ marginTop: 8 }}>
         <Num label="PV run per string (m)" value={job.pv_run_m} onChange={(v) => set({ pv_run_m: v })} hint="25" min={1} />
@@ -91,9 +91,12 @@ export function PricingResults({
   stale: boolean
 }) {
   const [adding, setAdding] = useState(false)
-  const [showInternal, setShowInternal] = useState(true)
+  const [showInternal, setShowInternal] = useState(false)
   if (!pricing.available) {
     return <div className="banner warn">{pricing.reason}</div>
+  }
+  if (!pricing.totals || !pricing.customer) {
+    return <div className="banner warn">This pricing was saved by an older version of the app. Save and compute to refresh it.</div>
   }
   const lines = pricing.lines ?? []
   const t = pricing.totals!
@@ -127,89 +130,51 @@ export function PricingResults({
   return (
     <div>
       {stale && <div className="banner warn">Inputs were edited after this calculation. Save and compute again to refresh the price.</div>}
-      {pricing.warnings.map((w, i) => (
+      {(pricing.warnings ?? []).map((w, i) => (
         <div key={w.code + i} className={`banner ${['missing_item', 'no_inverter', 'no_battery', 'ats', 'ac_breaker'].includes(w.code) ? 'bad' : 'warn'}`}>
           {w.message}
         </div>
       ))}
       <div className="kpis">
         <div className="kpi">
-          <div className="label">Contract price (VAT inc.)</div>
+          <div className="label">Contract price (VAT included)</div>
           <div className="value">{php0(t.contract_rounded)}</div>
           <div className="sub">{t.price_per_wp ? `₱${t.price_per_wp.toFixed(2)} per Wp` : ''} · {t.kwp.toFixed(2)} kWp</div>
         </div>
         <div className="kpi">
           <div className="label">Materials</div>
           <div className="value">{php0(sec('materials')?.amount)}</div>
-          <div className="sub">{(sec('materials')?.items ?? []).filter((i) => i.main).map((i) => `${qty(i.qty)} x ${i.name}`).join(', ')}; mounting, wiring, protection, enclosures, grounding; freight baked in</div>
+          <div className="sub">{(sec('materials')?.items ?? []).filter((i) => i.main).map((i) => `${qty(i.qty)} x ${i.name}`).join(', ')}; mounting, wiring, protection, enclosures, grounding; freight included</div>
         </div>
         <div className="kpi">
           <div className="label">Labor</div>
           <div className="value">{php0(sec('labor')?.amount)}</div>
           <div className="sub">
-            {String(lb.persons ?? '')} persons, {String(lb.days ?? '')} day(s), {String(lb.pairs ?? '')} pair(s) · incl. mob/demob, PPE, seal, permits and fees
+            {String(lb.persons ?? '')} persons, {Number(lb.days ?? 0)} {Number(lb.days ?? 0) === 1 ? 'day' : 'days'}, {Number(lb.pairs ?? 0)} roof {Number(lb.pairs ?? 0) === 1 ? 'pair' : 'pairs'} · includes transport, PPE, PEE seal, permits and fees
           </div>
         </div>
         <div className="kpi">
-          <div className="label">Equipment</div>
+          <div className="label">Tools</div>
           <div className="value">{php0(sec('equipment')?.amount)}</div>
-          <div className="sub">tool charge for {String(lb.days ?? '')} installation day(s)</div>
+          <div className="sub">tool charge for {Number(lb.days ?? 0)} installation {Number(lb.days ?? 0) === 1 ? 'day' : 'days'}</div>
         </div>
         <div className="kpi">
-          <div className="label">Tax</div>
+          <div className="label">VAT</div>
           <div className="value">{php0(sec('tax')?.amount)}</div>
-          <div className="sub">VAT 12% on the three sections above</div>
+          <div className="sub">12% of the three amounts above</div>
         </div>
       </div>
       <div className="actions" style={{ position: 'static', border: 0, padding: '4px 0' }}>
         <a href={stale ? undefined : quotationUrl} onClick={(e) => stale && e.preventDefault()}>
           <button disabled={stale} title={stale ? 'Save and compute first' : ''}>
-            Customer quotation PDF
+            Proposal PDF
           </button>
         </a>
         <button onClick={() => setShowInternal((v) => !v)}>{showInternal ? 'Hide' : 'Show'} internal build-up</button>
       </div>
 
       <details style={{ marginBottom: 10 }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Customer quotation lines (what the PDF shows)</summary>
-        <div className="table-wrap" style={{ marginTop: 6 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th className="num">Qty</th>
-                <th>Unit</th>
-                <th className="num">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cust.sections.map((s) => (
-                <Fragment key={s.key}>
-                  <tr style={{ fontWeight: 600, background: '#f7fafa' }}>
-                    <td colSpan={3}>{s.label}</td>
-                    <td className="num">{php(s.amount)}</td>
-                  </tr>
-                  {s.items.map((i) => (
-                    <tr key={i.key}>
-                      <td style={{ paddingLeft: 18 }}>{i.name}</td>
-                      <td className="num">{qty(i.qty)}</td>
-                      <td>{i.unit}</td>
-                      <td className="num">{php(i.amount)}</td>
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-              <tr style={{ fontWeight: 700 }}>
-                <td colSpan={3}>Total, VAT inclusive</td>
-                <td className="num">{php(cust.total)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </details>
-
-      <details style={{ marginBottom: 10 }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Customer quotation lines (what the PDF shows)</summary>
+        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Customer proposal lines (what the proposal PDF shows)</summary>
         <div className="table-wrap" style={{ marginTop: 6 }}>
           <table>
             <thead>
@@ -250,7 +215,7 @@ export function PricingResults({
         Bill of materials{' '}
         {edited && (
           <button type="button" className="toggle link" onClick={() => onJobChange({ ...job, bom_edits: [], bom_extra: [] })}>
-            reset to generated
+            Reset to generated
           </button>
         )}
       </h3>
@@ -291,7 +256,7 @@ export function PricingResults({
                 <tr key={l.code} style={!l.found ? { background: '#fdecec' } : undefined}>
                   <td>{l.code}</td>
                   <td>
-                    {l.name || <span className="badge bad">not in DB</span>} <span className="muted">{l.category}</span>
+                    {l.name || <span className="badge bad">not in list</span>} <span className="muted">{l.category}</span>
                   </td>
                   <td>{l.supplier}</td>
                   <td className="num" style={{ width: 90 }}>
@@ -406,8 +371,8 @@ export function PricingResults({
           </div>
           {fr && (
             <div className="muted" style={{ marginTop: 6 }}>
-              Freight: {fr.trips} trip(s) via {fr.stops_on_run.join(' → ')}, {fr.loop_km.toFixed(0)} km loop (extra {String(pricing.job_inputs?.extra_km ?? 0)} km each way), toll ₱{fr.toll.toLocaleString()}, run cost {php0(fr.run_cost)}; truck share{' '}
-              {(fr.truck_share * 100).toFixed(1)}%. Labour: roof {Number(lb.roof_mh ?? 0).toFixed(1)} MH, ground {Number(lb.ground_mh ?? 0).toFixed(1)} MH, carry crew {String(lb.carry_crew ?? '')}; labour {php0(Number(lb.labor ?? 0))}, mob/demob{' '}
+              Freight: {fr.trips} trip(s) via {(fr.stops_on_run ?? []).join(' → ')}, {fr.loop_km.toFixed(0)} km loop (extra {String(pricing.job_inputs?.extra_km ?? 0)} km each way), toll ₱{fr.toll.toLocaleString()}, run cost {php0(fr.run_cost)}; truck share{' '}
+              {((fr.truck_share ?? 0) * 100).toFixed(1)}%. Labour: roof {Number(lb.roof_mh ?? 0).toFixed(1)} MH, ground {Number(lb.ground_mh ?? 0).toFixed(1)} MH, carry crew {String(lb.carry_crew ?? '')}; labour {php0(Number(lb.labor ?? 0))}, mob/demob{' '}
               {php0(Number(lb.mobdemob ?? 0))}, tools {php0(Number(lb.tools ?? 0))}.
             </div>
           )}

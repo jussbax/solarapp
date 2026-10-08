@@ -121,3 +121,30 @@ tr.peak-row td { background: #fff6e0; font-weight: 600; }
 .hero .label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #b8b8b2; }
 .hero-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .step { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-dark); font-weight: 700; margin-bottom: 4px; }
+
+/* batch 1: phone fit, status chip, hints on their own line */
+.row > * { min-width: 0; }
+.row > .hint, .hint { flex: 1 1 100%; font-size: 13px; color: var(--muted); }
+label.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; color: var(--text); cursor: pointer; }
+label.check input { width: auto; margin-top: 3px; flex: 0 0 auto; }
+td.code { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.actions .banner { flex: 1 1 100%; margin: 0 0 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: #e8ecec; color: var(--muted); min-height: 26px; }
+.chip::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+.chip.unsaved { background: var(--warn-bg); color: var(--warn); }
+.chip.stale { background: var(--warn-bg); color: var(--warn); }
+.chip.ok { background: #e3f3e8; color: var(--good); }
+.chip.busy { background: var(--gold-bg); color: var(--gold-dark); }
+.chip:empty { display: none; }
+@media (hover: none) {
+  button.primary:hover { background: var(--ink); border-color: var(--ink); color: #fff; }
+}
+@media (max-width: 640px) {
+  .topbar { flex-wrap: wrap; padding: 8px 12px; row-gap: 6px; }
+  .topbar .right { flex-wrap: wrap; gap: 6px 12px; font-size: 13px; }
+  .brand .tag { display: none; }
+  .brand img { height: 26px; width: 26px; }
+  .actions { gap: 6px; }
+  .actions .chip { flex: 1 1 100%; }
+  .map { height: 260px; }
+}

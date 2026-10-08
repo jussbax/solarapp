@@ -5,12 +5,12 @@ export default function DataBanner({ status }: { status: DataStatus | null }) {
   if (!status.pvgis.available) {
     return (
       <div className="banner warn">
-        Weather dataset not downloaded yet. Run the one-time download on the server (see README) before computing.
+        Weather data is not downloaded yet. Ask whoever set up the server to run the one-time download (see README). Computing is off until then.
       </div>
     )
   }
   if (status.pvgis.synthetic) {
-    return <div className="banner bad">SYNTHETIC TEST WEATHER DATA in use. Results are not real and the customer PDF is disabled.</div>
+    return <div className="banner bad">Test weather data is in use. Results are not real and customer documents are disabled.</div>
   }
   return null
 }

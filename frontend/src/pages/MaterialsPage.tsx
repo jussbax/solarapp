@@ -267,7 +267,7 @@ export default function MaterialsPage() {
                 <th className="num">Rating</th>
                 <th className="num">List price</th>
                 <th>Unit</th>
-                <th className="num">kg</th>
+                <th className="num">Weight (kg)</th>
                 <th>Panel size</th>
                 <th></th>
               </tr>
@@ -290,7 +290,7 @@ export default function MaterialsPage() {
                   </tr>
                 ) : (
                   <tr key={it.code} style={it.active ? undefined : { opacity: 0.5 }}>
-                    <td>{it.code}</td>
+                    <td className="code">{it.code}</td>
                     <td>{it.category}</td>
                     <td>
                       {it.name}
@@ -339,10 +339,10 @@ export default function MaterialsPage() {
           <div className="narrow">
             <input ref={fileRef} type="file" accept=".xlsx" style={{ width: 'auto' }} />
           </div>
-          <div className="narrow inline" style={{ paddingBottom: 4 }}>
-            <input type="checkbox" checked={keepConfig} onChange={(e) => setKeepConfig(e.target.checked)} style={{ width: 'auto' }} /> keep the app's pricing settings (untick to
-            reload the workbook's drivers, rates and routes too)
-          </div>
+          <label className="check">
+            <input type="checkbox" checked={keepConfig} onChange={(e) => setKeepConfig(e.target.checked)} />
+            <span>Keep the app's pricing settings (untick to reload the workbook's drivers, rates and routes too)</span>
+          </label>
           <div className="narrow inline">
             <button
               type="button"
@@ -356,14 +356,14 @@ export default function MaterialsPage() {
             </button>
             {status?.seed_available && (
               <button type="button" onClick={doSeed}>
-                Reload bundled workbook
+                Reload the built-in workbook
               </button>
             )}
           </div>
         </div>
         {report && (
           <div className="banner info" style={{ marginTop: 8 }}>
-            Added {report.added}, updated {report.updated}, suppliers {report.suppliers}.
+            Added {report.added} items, updated {report.updated}, {report.suppliers} suppliers.
             {report.warnings.length > 0 && (
               <ul style={{ margin: '6px 0 0 18px' }}>
                 {report.warnings.map((w, i) => (

@@ -22,7 +22,7 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
   return (
     <>
       <form className="card" onSubmit={save}>
-        <h2>Company (shown on the customer PDF)</h2>
+        <h2>Company (shown on customer documents)</h2>
         {s && (
           <>
             <div className="field">
@@ -53,7 +53,7 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
                 <th>PVGIS</th>
                 <td>
                   {status.pvgis.available ? `${status.pvgis.cell_count} cells (${status.pvgis.radiation_db})` : 'not downloaded'}
-                  {status.pvgis.synthetic && <span className="badge bad"> SYNTHETIC</span>}
+                  {status.pvgis.synthetic && <span className="badge bad"> TEST DATA</span>}
                 </td>
               </tr>
               <tr>
@@ -67,7 +67,7 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
             </tbody>
           </table>
         ) : (
-          <div className="muted">Status unavailable.</div>
+          <div className="muted">Can't reach the server for the weather status.</div>
         )}
         <div style={{ marginTop: 10 }}>
           <button onClick={onRefresh}>Refresh</button>

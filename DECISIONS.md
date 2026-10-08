@@ -402,5 +402,34 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   blue for a reference or balance, orange for a cost; the trio passes the
   colour-blind separation checks, and the gold's low contrast on a light
   surface is relieved by the tables under every chart.
-- Not yet: close-out actuals, project dashboard, the simplified quick
-  estimate.
+- Not yet: close-out actuals, project dashboard.
+
+## Guard rails (from the UX, marketing and copy audits)
+
+- Three audits (usability, marketing, copy) were run against the app; their
+  reports live outside the repo. The first batch of fixes is defensive:
+  an error boundary around every results card, so a record computed by an
+  older version shows "save and compute to refresh" for that card instead
+  of a blank page, and the views tolerate fields added after the first
+  release (layout rows and cuts, shade, pricing sections).
+- Unsaved edits are protected three ways: the browser asks before a reload
+  or close, the router asks before an in-app link, and a draft of the
+  document is written to the device (localStorage, per assessment) 600 ms
+  after each edit and offered back on the next open. The draft is cleared
+  on a successful save or compute.
+- Errors from Save and compute render inside the sticky action bar, so
+  they are visible wherever the user is on the page, and the page scrolls
+  to the card the message is about (pin, roof faces, readings, audit).
+- Every signed-in page must fit a 390 px phone with no sideways scroll:
+  the top bar wraps, hints under rows take their own line, codes do not
+  wrap. The check is a Playwright script in the session scratchpad.
+- The public estimate's rate limit is per browser (an X-Visitor token the
+  page generates) with a wider cap per address, because Philippine mobile
+  networks put thousands of phones behind one address.
+- The schedule keeps the order of a day as built (delivery, installation,
+  switch-on) and lists payments after the day's work; a stable sort by
+  date replaces the milestones-first sort.
+- Wording moved toward the copy audit's glossary where it was cheap:
+  "needs recalculating" for stale, "Roof check" for the customer PDF and
+  card, "Proposal" for the quotation, "Tools" and "VAT" for the sections,
+  degree signs instead of "deg", US spelling, no "(s)" plurals.

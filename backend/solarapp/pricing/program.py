@@ -334,8 +334,8 @@ def build_program(doc: AssessmentDoc, results: dict, cfg: PricingConfig, today: 
         ]
     events += [
         {"key": "sourcing", "label": "Pickup run: " + ", ".join(pricing["freight"]["stops_on_run"]), "date": _iso(sourcing), "end": None, "kind": "task"},
-        {"key": "installation", "label": f"Installation, {n_days} day(s), crew of {install_plan['crew']['persons']}", "date": _iso(install_start), "end": _iso(install_end), "kind": "task"},
         {"key": "materials_on_site", "label": "Materials delivered to site", "date": _iso(install_start), "end": None, "kind": "milestone"},
+        {"key": "installation", "label": f"Installation ({n_days} {'day' if n_days == 1 else 'days'}, crew of {install_plan['crew']['persons']})", "date": _iso(install_start), "end": _iso(install_end), "kind": "task"},
         {"key": "commissioning", "label": "Energized, tested and commissioned", "date": _iso(commissioning), "end": None, "kind": "milestone"},
         {"key": "cfei", "label": "Certificate of final electrical inspection", "date": _iso(cfei), "end": None, "kind": "milestone"},
     ]
@@ -345,7 +345,7 @@ def build_program(doc: AssessmentDoc, results: dict, cfg: PricingConfig, today: 
         ]
     for e in events:
         e["customer"] = e["key"] in CUSTOMER_EVENTS
-    events.sort(key=lambda e: (e["date"], 0 if e["kind"] == "milestone" else 1))
+    events.sort(key=lambda e: e["date"])  # stable: the build order above is the order of a day
 
     # ---- payments in
     plan = _plan(cfg, doc)
@@ -366,9 +366,9 @@ def build_program(doc: AssessmentDoc, results: dict, cfg: PricingConfig, today: 
         each = contract * plan.installment_share * scale / plan.installments
         for i in range(plan.installments):
             d = base + timedelta(days=i * plan.installment_interval_days)
-            payments.append({"key": f"installment_{i + 1}", "label": f"Instalment {i + 1} of {plan.installments}", "date": _iso(d), "amount": each, "share": plan.installment_share * scale / plan.installments})
+            payments.append({"key": f"installment_{i + 1}", "label": f"Installment {i + 1} of {plan.installments}", "date": _iso(d), "amount": each, "share": plan.installment_share * scale / plan.installments})
     events += [{"key": p["key"], "label": p["label"], "date": p["date"], "end": None, "kind": "payment_in", "customer": True, "amount": p["amount"]} for p in payments]
-    events.sort(key=lambda e: (e["date"], {"milestone": 0, "payment_in": 1}.get(e["kind"], 2)))
+    events.sort(key=lambda e: (e["date"], 1 if e["kind"] == "payment_in" else 0))  # payments after the day's work
 
     # ---- cash out
     lines = pricing["lines"]

@@ -36,21 +36,21 @@ export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; on
               </select>
             </div>
             <div className="narrow" style={{ width: 110 }}>
-              <label>Eave (m)</label>
+              <label>Eave length (m)</label>
               <NumberInput value={f.length_m} onChange={(v) => update(i, { length_m: v ?? 0 })} min={0} step={0.1} />
             </div>
             {f.shape === 'hip' && (
               <div className="narrow" style={{ width: 110 }}>
-                <label>Ridge (m)</label>
+                <label>Ridge length (m)</label>
                 <NumberInput value={f.ridge_m} onChange={(v) => update(i, { ridge_m: v })} allowEmpty min={0} step={0.1} placeholder="top edge" />
               </div>
             )}
             <div className="narrow" style={{ width: 110 }}>
-              <label>Slope (m)</label>
+              <label>Slope length (m)</label>
               <NumberInput value={f.width_m} onChange={(v) => update(i, { width_m: v ?? 0 })} min={0} step={0.1} />
             </div>
             <div className="narrow" style={{ width: 90 }}>
-              <label>Tilt (deg)</label>
+              <label>Tilt (°)</label>
               <NumberInput value={f.tilt_deg} onChange={(v) => update(i, { tilt_deg: v ?? 0 })} min={0} max={90} />
             </div>
             <div className="narrow" style={{ width: 90 }}>
@@ -64,7 +64,7 @@ export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; on
               </select>
             </div>
             <div className="narrow" style={{ width: 100 }}>
-              <label>Azimuth (deg)</label>
+              <label>Facing (°)</label>
               <NumberInput value={f.azimuth_deg} onChange={(v) => update(i, { azimuth_deg: (((v ?? 0) % 360) + 360) % 360 })} min={0} max={359.9} />
             </div>
             <div className="narrow" style={{ width: 110 }}>
@@ -72,7 +72,7 @@ export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; on
               <NumberInput value={f.panels_left_out} onChange={(v) => update(i, { panels_left_out: Math.max(0, Math.round(v ?? 0)) })} min={0} step={1} />
             </div>
             <div className="narrow" style={{ width: 100 }}>
-              <label>Count override</label>
+              <label>Panel count (override)</label>
               <NumberInput value={f.panel_count_override} onChange={(v) => update(i, { panel_count_override: v == null ? null : Math.max(0, Math.round(v)) })} allowEmpty min={0} step={1} placeholder="auto" />
             </div>
             <div className="narrow inline" style={{ paddingBottom: 4 }}>
@@ -104,7 +104,7 @@ export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; on
           {f.walls.map((w, k) => (
             <div key={w.id} className="row" style={{ marginTop: 6 }}>
               <div className="narrow" style={{ width: 140 }}>
-                <label>Wall along the</label>
+                <label>Wall on the</label>
                 <select value={w.edge} onChange={(e) => setWall(i, k, { edge: e.target.value as WallEdge })}>
                   {EDGES.map((e) => (
                     <option key={e.id} value={e.id}>
@@ -125,34 +125,34 @@ export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; on
                 <button type="button" className="toggle link" onClick={() => update(i, { walls: f.walls.filter((_, m) => m !== k) })}>
                   remove
                 </button>
-                <span className="muted">Left and right as you face the roof from the ground.</span>
               </div>
+              <div className="hint">Left and right as you face the roof from the ground.</div>
             </div>
           ))}
           {f.obstacles.map((t, k) => (
             <div key={t.id} className="row" style={{ marginTop: 6 }}>
               <div className="narrow" style={{ width: 180 }}>
-                <label>What it is</label>
+                <label>Obstacle</label>
                 <input value={t.label} placeholder="Mango tree, neighbor's house" onChange={(e) => setTree(i, k, { label: e.target.value })} />
               </div>
               <div className="narrow" style={{ width: 110 }}>
-                <label>Direction (deg)</label>
+                <label>Direction (°)</label>
                 <NumberInput value={t.direction_deg} onChange={(v) => setTree(i, k, { direction_deg: (((v ?? 0) % 360) + 360) % 360 })} min={0} max={359.9} />
               </div>
               <div className="narrow" style={{ width: 130 }}>
-                <label>Angle to its top (deg)</label>
+                <label>Angle to top (°)</label>
                 <NumberInput value={t.elevation_deg} onChange={(v) => setTree(i, k, { elevation_deg: v ?? 0 })} min={0} max={89} />
               </div>
               <div className="narrow" style={{ width: 120 }}>
-                <label>How wide (deg)</label>
+                <label>Width (°)</label>
                 <NumberInput value={t.width_deg} onChange={(v) => setTree(i, k, { width_deg: v ?? 40 })} min={1} max={180} step={5} />
               </div>
               <div className="narrow inline" style={{ paddingBottom: 4 }}>
                 <button type="button" className="toggle link" onClick={() => update(i, { obstacles: f.obstacles.filter((_, m) => m !== k) })}>
                   remove
                 </button>
-                <span className="muted">Angle read with a clinometer from panel height, a hand's width above the roof sheet.</span>
               </div>
+              <div className="hint">Angle read with a clinometer from panel height, a hand's width above the roof sheet.</div>
             </div>
           ))}
         </div>
@@ -161,9 +161,9 @@ export default function FacesEditor({ faces, onChange }: { faces: RoofFace[]; on
         <button type="button" onClick={add}>
           Add roof face
         </button>
-        <span className="muted" style={{ marginLeft: 10 }}>
-          Azimuth: 0 = north, 90 = east, 180 = south, 270 = west. Tilt 0 = flat. Walls cut a no-panel strip; walls and trees also shade the simulation hour by hour.
-        </span>
+        <div className="hint" style={{ marginTop: 6 }}>
+          Facing: 0 = north, 90 = east, 180 = south, 270 = west. Tilt 0 = flat. Walls cut a no-panel strip; walls and trees also shade the simulation hour by hour.
+        </div>
       </div>
     </div>
   )

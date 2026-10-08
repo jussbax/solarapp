@@ -11,11 +11,12 @@ const pct = (v: number | null | undefined) => (v == null ? '-' : `${v > 0 ? '+' 
 export default function ResultsView({ doc, results, stale }: { doc: AssessmentDoc; results: Results; stale: boolean }) {
   const prod = results.production
   const ref = results.reference
-  const selected = results.panels.find((p) => p.panel.id === results.selected_panel_id)!
+  const selected = results.panels.find((p) => p.panel.id === results.selected_panel_id)
   const dev = results.comparison.deviation_pct
   const chart = results.months.map((m, i) => ({ month: m, 'This roof': Math.round(prod.monthly_kwh[i]), 'PVGIS reference': Math.round(ref.monthly_kwh[i]) }))
   const k = results.k
   const best = results.best_panel
+  if (!selected) return <div className="banner warn">The selected panel is no longer in the list. Save and compute again.</div>
 
   return (
     <div>
@@ -45,7 +46,7 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
           <div className="value">{n2(prod.system_kwp)} kWp</div>
         </div>
         <div className="kpi">
-          <div className="label">Per year</div>
+          <div className="label">Production per year</div>
           <div className="value">{n0(prod.annual_kwh)} kWh</div>
           <div className="sub">{n0(prod.faces.reduce((a, f) => a + f.specific_yield_kwh_per_kwp * f.panel_count, 0) / Math.max(prod.total_panels, 1))} kWh per kWp</div>
         </div>
@@ -63,7 +64,7 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
               {pct(dev)}
             </span>
           </div>
-          <div className="sub">PVGIS-style roof: {n0(ref.annual_kwh)} kWh/yr</div>
+          <div className="sub">Same roof, standard model: {n0(ref.annual_kwh)} kWh/yr</div>
         </div>
       </div>
 
@@ -166,7 +167,7 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
       </div>
 
       <details className="internal" style={{ marginTop: 16 }}>
-        <summary>Internal details (not on the customer PDF)</summary>
+        <summary>Internal details (not on customer documents)</summary>
         <h3>Site factor</h3>
         <table>
           <tbody>
@@ -212,20 +213,20 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
               {doc.faces.map((f) => {
                 const l = selected.faces[f.id]
                 if (!l) return null
-                const p = l.options.find((o) => o.orientation === 'portrait')!
-                const q = l.options.find((o) => o.orientation === 'landscape')!
+                const p = (l.options ?? []).find((o) => o.orientation === 'portrait')
+                const q = (l.options ?? []).find((o) => o.orientation === 'landscape')
                 const sh = results.shade?.[f.id]
                 const cuts = l.cuts ? (['eave', 'ridge', 'left', 'right'] as const).filter((e) => l.cuts[e] > 0).map((e) => `${e} ${n1(l.cuts[e])} m`) : []
                 return (
                   <tr key={f.id}>
                     <td>{f.name}</td>
                     <td>
-                      {l.shape === 'hip' ? 'hip face' : l.shape === 'tri' ? 'triangle' : 'rectangle'}, {n1(l.usable_length_m)} x {n1(l.usable_width_m)}
+                      {l.shape === 'hip' ? 'hip face' : l.shape === 'tri' ? 'triangle' : 'rectangle'}, {n1(l.usable_length_m ?? 0)} × {n1(l.usable_width_m ?? 0)}
                     </td>
-                    <td className="num">{p.count}</td>
-                    <td className="num">{q.count}</td>
+                    <td className="num">{p?.count ?? '-'}</td>
+                    <td className="num">{q?.count ?? '-'}</td>
                     <td>
-                      {l.best.rows.join(', ') || '0'} ({l.best.orientation}){l.left_out > 0 && `, ${l.left_out} left out`}
+                      {l.best?.rows ? l.best.rows.join(', ') || '0' : '-'} ({l.best?.orientation ?? '-'}){(l.left_out ?? 0) > 0 && `, ${l.left_out} left out`}
                     </td>
                     <td className="num">
                       {l.count} {l.override_applied && <span className="badge neutral">override</span>}

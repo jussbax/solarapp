@@ -12,6 +12,34 @@ export class ApiError extends Error {
 }
 
 let onUnauthorized: (() => void) | null = null
+
+/** A random id per browser so the public estimate's rate limit tells visitors apart behind one shared address. */
+export function visitorId(): string {
+  try {
+    let v = localStorage.getItem('solarapp:visitor')
+    if (!v) {
+      v = Math.random().toString(36).slice(2) + Date.now().toString(36)
+      localStorage.setItem('solarapp:visitor', v)
+    }
+    return v
+  } catch {
+    return 'anon'
+  }
+}
+
+/** Pydantic returns a list of {loc, msg}; show them as "field: message". */
+export function describeDetail(detail: unknown, status: number): string {
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const parts = detail.map((d) => {
+      const loc = Array.isArray(d?.loc) ? d.loc.filter((x: unknown) => x !== 'body').join('.') : ''
+      return loc ? `${loc}: ${d?.msg ?? 'invalid'}` : String(d?.msg ?? 'invalid')
+    })
+    return `Some fields are invalid. ${parts.join('; ')}`
+  }
+  if (status >= 500) return 'Something went wrong on the server. Try again; if it keeps happening, tell the developer.'
+  return detail ? JSON.stringify(detail) : `Request failed (HTTP ${status}).`
+}
 export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn
 }
@@ -19,21 +47,20 @@ export function setUnauthorizedHandler(fn: () => void) {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    headers: { 'Content-Type': 'application/json', ...(path.startsWith('/api/quick/') ? { 'X-Visitor': visitorId() } : {}), ...(init?.headers || {}) },
     ...init,
   })
   if (res.status === 401 && !path.endsWith('/auth/login') && !path.endsWith('/auth/me')) {
     onUnauthorized?.()
   }
   if (!res.ok) {
-    let detail = res.statusText
+    let detail: unknown = null
     try {
-      const body = await res.json()
-      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+      detail = (await res.json()).detail
     } catch {
-      /* ignore */
+      /* no JSON body */
     }
-    throw new ApiError(res.status, detail)
+    throw new ApiError(res.status, describeDetail(detail, res.status))
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -88,13 +115,13 @@ export const api = {
     fd.append('file', file)
     const res = await fetch(`/api/pricing/import?keep_config=${keepConfig}`, { method: 'POST', body: fd, credentials: 'same-origin' })
     if (!res.ok) {
-      let detail = res.statusText
+      let detail: unknown = null
       try {
         detail = (await res.json()).detail
       } catch {
-        /* ignore */
+        /* no JSON body */
       }
-      throw new ApiError(res.status, typeof detail === 'string' ? detail : JSON.stringify(detail))
+      throw new ApiError(res.status, describeDetail(detail, res.status))
     }
     return (await res.json()) as ImportReport
   },

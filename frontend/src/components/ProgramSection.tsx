@@ -7,8 +7,8 @@ import NumberInput from './NumberInput'
 const php0 = (v: number | null | undefined) => (v == null ? '-' : `₱${Math.round(v).toLocaleString()}`)
 const d = (s: string | null | undefined) => (s ? new Date(s + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '')
 const EVENTS: { id: string; label: string }[] = [
-  { id: 'signing', label: 'signing' }, { id: 'materials_on_site', label: 'delivery to site' }, { id: 'installation_done', label: 'end of installation' },
-  { id: 'commissioning', label: 'commissioning' }, { id: 'cfei', label: 'CFEI' }, { id: 'meter_installed', label: 'meter installed' },
+  { id: 'signing', label: 'Signing' }, { id: 'materials_on_site', label: 'Delivery to site' }, { id: 'installation_done', label: 'End of installation' },
+  { id: 'commissioning', label: 'Switch-on' }, { id: 'cfei', label: 'Final inspection certificate' }, { id: 'meter_installed', label: 'Meter installed' },
 ]
 // colours validated for colour-blind separation and contrast on the light surface
 const C_IN = '#C9A227'
@@ -29,12 +29,13 @@ function PaymentPlanEditor({ plan, defaults, onChange }: { plan: PaymentPlan | n
   const set = (p: Partial<PaymentPlan>) => onChange({ ...base, ...p })
   const setM = (i: number, p: Partial<PaymentMilestone>) => set({ milestones: base.milestones.map((m, j) => (j === i ? { ...m, ...p } : m)) })
   const total = base.milestones.reduce((a, m) => a + m.share, 0) + (base.installments > 0 ? base.installment_share : 0)
+  const known = plan != null || defaults != null // before the first compute the company default is not loaded yet
   return (
     <div className="set-card">
       <div className="inline" style={{ justifyContent: 'space-between', width: '100%' }}>
         <b>Payment terms</b>
         <span className="muted">
-          {plan ? 'custom for this job' : 'company default'}{' '}
+          {plan ? 'custom for this job' : known ? 'company default' : 'company default (shown after the first compute)'}{' '}
           {plan && (
             <button type="button" className="toggle link" onClick={() => onChange(null)}>
               use default
@@ -48,7 +49,7 @@ function PaymentPlanEditor({ plan, defaults, onChange }: { plan: PaymentPlan | n
             <th>Milestone</th>
             <th className="num">Share %</th>
             <th>Due at</th>
-            <th className="num">+ days</th>
+            <th className="num">Plus days</th>
             <th></th>
           </tr>
         </thead>
@@ -88,12 +89,12 @@ function PaymentPlanEditor({ plan, defaults, onChange }: { plan: PaymentPlan | n
             Add milestone
           </button>
         </div>
-        <Num label="Instalments (count)" value={base.installments} onChange={(v) => set({ installments: v ?? 0 })} step={1} min={0} width={140} />
-        <Num label="Instalment share %" value={Math.round(base.installment_share * 1000) / 10} onChange={(v) => set({ installment_share: (v ?? 0) / 100 })} min={0} width={140} />
-        <Num label="Every (days)" value={base.installment_interval_days} onChange={(v) => set({ installment_interval_days: v ?? 30 })} step={1} min={1} width={110} />
-        <Num label="First after (days)" value={base.installment_first_offset_days} onChange={(v) => set({ installment_first_offset_days: v ?? 30 })} step={1} min={0} width={120} />
+        <Num label="Installments" value={base.installments} onChange={(v) => set({ installments: v ?? 0 })} step={1} min={0} width={140} />
+        <Num label="Installment share %" value={Math.round(base.installment_share * 1000) / 10} onChange={(v) => set({ installment_share: (v ?? 0) / 100 })} min={0} width={140} />
+        <Num label="Every N days" value={base.installment_interval_days} onChange={(v) => set({ installment_interval_days: v ?? 30 })} step={1} min={1} width={110} />
+        <Num label="First one after (days)" value={base.installment_first_offset_days} onChange={(v) => set({ installment_first_offset_days: v ?? 30 })} step={1} min={0} width={120} />
         <div className="narrow" style={{ width: 170 }}>
-          <label>Instalments start at</label>
+          <label>Counted from</label>
           <select value={base.installment_start_event} onChange={(e) => set({ installment_start_event: e.target.value })}>
             {EVENTS.map((ev) => (
               <option key={ev.id} value={ev.id}>
@@ -103,9 +104,11 @@ function PaymentPlanEditor({ plan, defaults, onChange }: { plan: PaymentPlan | n
           </select>
         </div>
       </div>
-      <div className={`muted ${Math.abs(total - 1) > 0.001 ? 'badge bad' : ''}`} style={{ marginTop: 4 }}>
-        Shares add up to {(total * 100).toFixed(0)}%{Math.abs(total - 1) > 0.001 ? ' (scaled to 100% when computing)' : ''}
-      </div>
+      {known && (
+        <div className={`muted ${Math.abs(total - 1) > 0.001 ? 'badge bad' : ''}`} style={{ marginTop: 4 }}>
+          Shares add up to {(total * 100).toFixed(0)}%{Math.abs(total - 1) > 0.001 ? ' (scaled to 100% when computing)' : ''}
+        </div>
+      )}
     </div>
   )
 }
@@ -177,11 +180,11 @@ export function ProgramResults({ program, programUrl, stale }: { program: Progra
           <div className="label">Installation</div>
           <div className="value">{d(program.install_start)}</div>
           <div className="sub">
-            {inst.days} day(s), {inst.crew.description}; {inst.crew.roof_pairs} roof pair(s), {inst.crew.ground_persons} on the ground
+            {inst.days} {inst.days === 1 ? 'day' : 'days'}, {inst.crew.description}; {inst.crew.roof_pairs} roof {inst.crew.roof_pairs === 1 ? 'pair' : 'pairs'}, {inst.crew.ground_persons} on the ground
           </div>
         </div>
         <div className="kpi">
-          <div className="label">Commissioning</div>
+          <div className="label">Switch-on</div>
           <div className="value">{d(program.events?.find((e) => e.key === 'commissioning')?.date)}</div>
           <div className="sub">{program.net_metering ? `meter installed ${d(program.events?.find((e) => e.key === 'meter_installed')?.date)}` : 'off-grid, no utility steps'}</div>
         </div>
@@ -195,7 +198,7 @@ export function ProgramResults({ program, programUrl, stale }: { program: Progra
         <div className="kpi">
           <div className="label">Lowest balance</div>
           <div className="value" style={{ color: cf.lowest_balance < 0 ? C_OUT : undefined }}>{php0(cf.lowest_balance)}</div>
-          <div className="sub">on {d(cf.lowest_balance_date)}; cash the company carries</div>
+          <div className="sub">on {d(cf.lowest_balance_date)}; most cash out at one time</div>
         </div>
       </div>
       <div className="actions" style={{ position: 'static', border: 0, padding: '4px 0' }}>
@@ -204,7 +207,7 @@ export function ProgramResults({ program, programUrl, stale }: { program: Progra
             Program of works PDF (internal)
           </button>
         </a>
-        <span className="muted">The customer quotation PDF carries the milestone schedule and payment terms only.</span>
+        <span className="muted">The proposal PDF carries the milestone schedule and payment terms only.</span>
       </div>
 
       <h3>Schedule</h3>
