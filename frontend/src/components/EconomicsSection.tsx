@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { EconomicsBlock, EconomicsJob } from '../types'
 import NumberInput from './NumberInput'
+import Field from './Field'
 import { php0 } from '../fmt'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 // colours validated for colour-blind separation and contrast on the light surface
@@ -10,12 +11,7 @@ const C_COST = '#c84f2b'
 const C_CUM = '#2f5fd8'
 
 function Num({ label, value, onChange, hint, step, min }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number }) {
-  return (
-    <div>
-      <label>{label}</label>
-      <NumberInput value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />
-    </div>
-  )
+  return <Field label={label}>{(id) => <NumberInput id={id} value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />}</Field>
 }
 
 const pctIn = (v: number | null) => (v == null ? null : Math.round(v * 10000) / 100)

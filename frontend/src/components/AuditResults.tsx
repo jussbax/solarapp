@@ -1,15 +1,19 @@
 import { useState } from 'react'
 import { Area, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { AuditBlock, BatteryAutonomy, SizingBlock } from '../types'
+import MonthTable from './MonthTable'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const n0 = (v: number) => Math.round(v).toLocaleString()
 const n1 = (v: number) => v.toFixed(1)
 const n2 = (v: number) => v.toFixed(2)
 const pct = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
-const KIND_LABEL: Record<string, string> = { off_grid: 'Off-grid (battery, no grid)', net_metering: 'Net metering (no battery)', combination: 'Net metering + battery (hybrid)' }
+export const KIND_LABEL: Record<string, string> = { off_grid: 'Off-grid (battery, no grid)', net_metering: 'Net metering (no battery)', combination: 'Net metering + battery (hybrid)' }
 
-export default function AuditResults({ audit, sizing, panelName, panelWp }: { audit: AuditBlock; sizing: SizingBlock | null; panelName: string; panelWp: number }) {
+/** The energy audit against the sized system: the typical day, audit versus bill, the appliances, the peak and the
+ * month-by-month balance. With `tiles` the sizing KPIs and the sizing warnings are shown too; the System design card
+ * renders those itself and passes tiles={false}. */
+export default function AuditResults({ audit, sizing, panelName, panelWp, tiles = true }: { audit: AuditBlock; sizing: SizingBlock | null; panelName: string; panelWp: number; tiles?: boolean }) {
   const avb = audit.audit_vs_bill
   const billMonth = avb?.bills[0] ? parseInt(avb.bills[0].billing_month.split('-')[1], 10) : new Date().getMonth() + 1
   const [month, setMonth] = useState(billMonth)
@@ -26,7 +30,7 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
     'To battery': prof ? +prof.charge[h].toFixed(3) : 0,
     [surplusLabel]: prof ? +(prof.export[h] + prof.curtailed[h]).toFixed(3) : 0,
   }))
-  const warnings = [...audit.warnings, ...(sizing?.warnings ?? [])]
+  const warnings = tiles ? [...audit.warnings, ...(sizing?.warnings ?? [])] : audit.warnings
   const autonomy = sizing ? (sizing.battery as SizingBlock['battery'] & BatteryAutonomy).days_of_autonomy ?? null : null
   const evenings = autonomy != null ? `${autonomy} ${autonomy === 1 ? 'evening' : 'evenings'} without sun` : ''
   const hy = sizing?.hourly_year
@@ -35,12 +39,12 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
   return (
     <div>
       {warnings.map((w, i) => (
-        <div key={w.code + i} className={`banner ${['roof_limited', 'reconcile_floor', 'reconcile_ceiling', 'audit_gap', 'autonomy_not_met'].includes(w.code) ? 'warn' : 'info'}`}>
+        <div key={w.code + i} className={`banner ${w.hard ? 'bad' : ['roof_limited', 'reconcile_floor', 'reconcile_ceiling', 'audit_gap', 'autonomy_not_met'].includes(w.code) ? 'warn' : 'info'}`}>
           {w.message}
         </div>
       ))}
 
-      {sizing && (
+      {tiles && sizing && (
         <div className="kpis">
           <div className="kpi">
             <div className="label">Recommended solar</div>
@@ -94,7 +98,7 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
           )}
         </div>
       )}
-      {sizing?.faces && sizing.faces.length > 0 && (
+      {tiles && sizing?.faces && sizing.faces.length > 0 && (
         <div className="muted" style={{ marginTop: 6 }}>
           Panels on the roof, best face first:{' '}
           {sizing.faces.map((f) => `${f.name} ${f.panels} of ${f.capacity} (rows ${f.rows.join(', ')}; ${n0(f.specific_yield_kwh_per_kwp)} kWh per kWp at the panels)`).join('; ')}.
@@ -131,6 +135,39 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
         </ResponsiveContainer>
       </div>
 
+      {sizing && (
+        <>
+          <h3>Month by month</h3>
+          <MonthTable
+            months={MONTHS}
+            firstHeader=""
+            rows={(
+              [
+                ['Consumption kWh', 'Used', 'consumption_kwh'],
+                ['Solar production kWh', 'Solar', 'production_kwh'],
+                ['Used directly kWh', 'Direct', 'direct_kwh'],
+                ['From battery kWh', 'Battery', 'battery_kwh'],
+                [offGrid ? 'Unused surplus kWh' : 'Exported kWh', offGrid ? 'Unused' : 'Export', offGrid ? 'curtailed_kwh' : 'export_kwh'],
+                [offGrid ? 'Unserved kWh' : 'From grid kWh', offGrid ? 'Unserved' : 'Grid', offGrid ? 'unserved_kwh' : 'import_kwh'],
+              ] as [string, string, keyof SizingBlock['monthly'][number]][]
+            ).map(([label, short, key]) => ({
+              key,
+              label,
+              short,
+              values: sizing.monthly.map((m) => n0(m[key] as number)),
+              total: n0(sizing.monthly.reduce((s, m) => s + (m[key] as number), 0)),
+            }))}
+          />
+          <div className="muted" style={{ marginTop: 6 }}>
+            {KIND_LABEL[sizing.kind]}
+            {sizing.offgrid && ` (worst month produces ${sizing.offgrid.pv_margin}x consumption; the battery is sized for ${evenings || 'the night'})`}. Yield {n0(sizing.system_yield_kwh_per_kwp ?? sizing.annual_yield_kwh_per_kwp)} kWh per kWp per year at the meter on the faces the panels occupy (whole roof {n0(sizing.annual_yield_kwh_per_kwp)}), from this roof's measured simulation
+            {loss < 1 ? ` with ${Math.round((1 - loss) * 100)}% system losses applied` : ''}. Self-consumption {n0(sizing.self_consumption_pct)}% of production.
+            {hy?.available ? ` Month totals and the typical days come from the balance over the real hourly year (${n0(hy.hours ?? 0)} hours).` : ''}
+            {tiles && ` Inverter check: peak ${n1(sizing.inverter.peak_load_kw)} kW, surge ${n1(sizing.inverter.surge_requirement_kw)} kW at ${sizing.inverter.surge_factor}x, PV ${n1(sizing.inverter.pv_requirement_kw)} kW at ${sizing.inverter.pv_ratio_max}x.`}
+          </div>
+        </>
+      )}
+
       {avb && (
         <>
           <h3>Audit vs bill</h3>
@@ -166,73 +203,72 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
         </>
       )}
 
-      <h3>Appliances</h3>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Appliance</th>
-              <th>Status</th>
-              <th className="num">Qty</th>
-              <th className="num">W</th>
-              <th className="num">Duty</th>
-              <th className="num">Hours per use day</th>
-              <th className="num">Days/wk</th>
-              <th className="num">kWh/day typed</th>
-              <th className="num">kWh/day used</th>
-              <th className="num">Share</th>
-            </tr>
-          </thead>
-          <tbody>
-            {audit.appliances.map((a) => (
-              <tr key={a.id} className={a.status === 'retiring' ? 'muted' : ''}>
-                <td>
-                  {a.name} <span className="muted">{a.category_label}</span>
-                  {a.warnings.map((w) => (
-                    <div key={w.code} className="badge bad" style={{ display: 'block', marginTop: 2 }}>
-                      {w.message}
-                    </div>
-                  ))}
-                </td>
-                <td>
-                  {a.status === 'existing' ? '' : <span className="badge neutral">{a.status === 'future' ? 'future' : 'removed'}</span>}
-                  {a.scale_inherited && <span className="muted" title="scaled like the existing appliances of this type"> ~</span>}
-                </td>
-                <td className="num">{a.quantity}</td>
-                <td className="num">{a.input_power_w}</td>
-                <td className="num" style={{ whiteSpace: 'nowrap' }}>
-                  {n2(a.duty_factor)}
-                  {a.uncertain ? '*' : ''}
-                </td>
-                <td className="num">{n1(a.hours_per_use_day)}</td>
-                <td className="num">{a.days_per_week}</td>
-                <td className="num">{n2(a.kwh_per_day_audit)}</td>
-                <td className="num">{a.status === 'retiring' ? '-' : n2(a.kwh_per_day_reconciled)}</td>
-                <td className="num">{a.status === 'retiring' ? '-' : `${a.share_pct.toFixed(0)}%`}</td>
+      <details className="internal" style={{ marginTop: 10 }}>
+        <summary>Appliances and the peak hour</summary>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Appliance</th>
+                <th>Status</th>
+                <th className="num">Qty</th>
+                <th className="num">W</th>
+                <th className="num">Duty</th>
+                <th className="num">Hours per use day</th>
+                <th className="num">Days/wk</th>
+                <th className="num">kWh/day typed</th>
+                <th className="num">kWh/day used</th>
+                <th className="num">Share</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="muted" style={{ marginTop: 6 }}>
-        * uncertain type, scaled first during reconciliation. ~ future appliance scaled like the existing ones of its type.
-      </div>
-      <h3>Peak load</h3>
-      <div className="muted">
-        Hour table peak: <b>{n2(audit.peak_kw)} kW</b>
-        {audit.peak_detail.label && ` at ${audit.peak_detail.label} on a ${audit.peak_detail.weekday} (${MONTHS[audit.peak_detail.month - 1]})`}, the sum of every appliance touching that hour at quantity x watts x duty.
-        Highest hourly average of energy {n2(audit.peak_avg_kw)} kW
-        {audit.largest_motor_kw > 0 && `; largest motor ${n1(audit.largest_motor_kw)} kW starting at ${audit.largest_motor_multiplier}x for the surge check`}.
-      </div>
-      {audit.peak_detail.contributors && audit.peak_detail.contributors.length > 0 && (
-        <div className="muted" style={{ marginTop: 4 }}>
-          In that hour: {audit.peak_detail.contributors.map((c) => `${c.name} ${Math.round(c.watts).toLocaleString()} W`).join(', ')}.
+            </thead>
+            <tbody>
+              {audit.appliances.map((a) => (
+                <tr key={a.id} className={a.status === 'retiring' ? 'muted' : ''}>
+                  <td>
+                    {a.name} <span className="muted">{a.category_label}</span>
+                    {a.warnings.map((w) => (
+                      <div key={w.code} className="badge bad" style={{ display: 'block', marginTop: 2 }}>
+                        {w.message}
+                      </div>
+                    ))}
+                  </td>
+                  <td>
+                    {a.status === 'existing' ? '' : <span className="badge neutral">{a.status === 'future' ? 'future' : 'removed'}</span>}
+                    {a.scale_inherited && <span className="muted" title="scaled like the existing appliances of this type"> ~</span>}
+                  </td>
+                  <td className="num">{a.quantity}</td>
+                  <td className="num">{a.input_power_w}</td>
+                  <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                    {n2(a.duty_factor)}
+                    {a.uncertain ? '*' : ''}
+                  </td>
+                  <td className="num">{n1(a.hours_per_use_day)}</td>
+                  <td className="num">{a.days_per_week}</td>
+                  <td className="num">{n2(a.kwh_per_day_audit)}</td>
+                  <td className="num">{a.status === 'retiring' ? '-' : n2(a.kwh_per_day_reconciled)}</td>
+                  <td className="num">{a.status === 'retiring' ? '-' : `${a.share_pct.toFixed(0)}%`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
-      {audit.hour_table.length > 0 && (
-        <details className="internal" style={{ marginTop: 6 }}>
-          <summary>Hour table for that day</summary>
-          <div className="table-wrap">
+        <div className="muted" style={{ marginTop: 6 }}>
+          * uncertain type, scaled first during reconciliation. ~ future appliance scaled like the existing ones of its type.
+        </div>
+        <h3>Peak load</h3>
+        <div className="muted">
+          Hour table peak: <b>{n2(audit.peak_kw)} kW</b>
+          {audit.peak_detail.label && ` at ${audit.peak_detail.label} on a ${audit.peak_detail.weekday} (${MONTHS[audit.peak_detail.month - 1]})`}, the sum of every appliance touching that hour at quantity x watts x duty.
+          Highest hourly average of energy {n2(audit.peak_avg_kw)} kW
+          {audit.largest_motor_kw > 0 && `; largest motor ${n1(audit.largest_motor_kw)} kW starting at ${audit.largest_motor_multiplier}x for the surge check`}.
+        </div>
+        {audit.peak_detail.contributors && audit.peak_detail.contributors.length > 0 && (
+          <div className="muted" style={{ marginTop: 4 }}>
+            In that hour: {audit.peak_detail.contributors.map((c) => `${c.name} ${Math.round(c.watts).toLocaleString()} W`).join(', ')}.
+          </div>
+        )}
+        {audit.hour_table.length > 0 && (
+          <div className="table-wrap" style={{ marginTop: 6 }}>
             <table>
               <thead>
                 <tr>
@@ -252,58 +288,8 @@ export default function AuditResults({ audit, sizing, panelName, panelWp }: { au
               </tbody>
             </table>
           </div>
-        </details>
-      )}
-
-      {sizing && (
-        <>
-          <h3>Month by month</h3>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th></th>
-                  {MONTHS.map((m) => (
-                    <th key={m} className="num">
-                      {m}
-                    </th>
-                  ))}
-                  <th className="num">Year</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(
-                  [
-                    ['Consumption kWh', 'consumption_kwh'],
-                    ['Solar production kWh', 'production_kwh'],
-                    ['Used directly kWh', 'direct_kwh'],
-                    ['From battery kWh', 'battery_kwh'],
-                    [offGrid ? 'Unused surplus kWh' : 'Exported kWh', offGrid ? 'curtailed_kwh' : 'export_kwh'],
-                    [offGrid ? 'Unserved kWh' : 'From grid kWh', offGrid ? 'unserved_kwh' : 'import_kwh'],
-                  ] as [string, keyof SizingBlock['monthly'][number]][]
-                ).map(([label, key]) => (
-                  <tr key={key}>
-                    <td>{label}</td>
-                    {sizing.monthly.map((m) => (
-                      <td key={m.month} className="num">
-                        {n0(m[key] as number)}
-                      </td>
-                    ))}
-                    <td className="num">{n0(sizing.monthly.reduce((s, m) => s + (m[key] as number), 0))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="muted" style={{ marginTop: 6 }}>
-            {KIND_LABEL[sizing.kind]}
-            {sizing.offgrid && ` (worst month produces ${sizing.offgrid.pv_margin}x consumption; the battery is sized for ${evenings || 'the night'})`}. Yield {n0(sizing.system_yield_kwh_per_kwp ?? sizing.annual_yield_kwh_per_kwp)} kWh per kWp per year at the meter on the faces the panels occupy (whole roof {n0(sizing.annual_yield_kwh_per_kwp)}), from this roof's measured simulation
-            {loss < 1 ? ` with ${Math.round((1 - loss) * 100)}% system losses applied` : ''}. Self-consumption {n0(sizing.self_consumption_pct)}% of production.
-            {hy?.available ? ` Month totals and the typical days come from the balance over the real hourly year (${n0(hy.hours ?? 0)} hours).` : ''}
-            Inverter check: peak {n1(sizing.inverter.peak_load_kw)} kW, surge {n1(sizing.inverter.surge_requirement_kw)} kW at {sizing.inverter.surge_factor}x, PV {n1(sizing.inverter.pv_requirement_kw)} kW at {sizing.inverter.pv_ratio_max}x.
-          </div>
-        </>
-      )}
+        )}
+      </details>
     </div>
   )
 }

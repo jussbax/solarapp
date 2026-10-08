@@ -10,6 +10,7 @@ export default function NumberInput({
   max,
   placeholder,
   style,
+  id,
 }: {
   value: number | null
   onChange: (v: number | null) => void
@@ -19,6 +20,8 @@ export default function NumberInput({
   max?: number
   placeholder?: string
   style?: React.CSSProperties
+  /** Set by Field so the label's htmlFor points here. */
+  id?: string
 }) {
   const [text, setText] = useState(value == null ? '' : String(value))
   useEffect(() => {
@@ -26,6 +29,7 @@ export default function NumberInput({
   }, [value])
   return (
     <input
+      id={id}
       type="number"
       inputMode="decimal"
       step={step ?? 'any'}

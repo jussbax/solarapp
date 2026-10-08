@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { PaymentMilestone, PaymentPlan, ProgramBlock, ProgramJob } from '../types'
-import { JOB_STAGES } from '../types'
 import { api } from '../api'
 import NumberInput from './NumberInput'
+import Field from './Field'
+import { Gantt } from './Gantt'
+import { useElementWidth } from './responsive'
 import { fmtDate, fmtDateShort, php0 } from '../fmt'
 
 const d = fmtDate
@@ -18,10 +20,9 @@ const C_BAL = '#2f5fd8'
 
 function Num({ label, value, onChange, hint, step, min, width }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number; width?: number }) {
   return (
-    <div className={width ? 'narrow' : undefined} style={width ? { width } : undefined}>
-      <label>{label}</label>
-      <NumberInput value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />
-    </div>
+    <Field label={label} className={width ? 'narrow' : undefined} style={width ? { width } : undefined}>
+      {(id) => <NumberInput id={id} value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />}
+    </Field>
   )
 }
 
@@ -44,7 +45,8 @@ export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = 
           )}
         </span>
       </div>
-      <table style={{ marginTop: 6 }}>
+      {/* under 640 px the rows stack as cards (data-label headings) so the Due at select is not 40 px wide */}
+      <table className="payments" style={{ marginTop: 6 }}>
         <thead>
           <tr>
             <th>Milestone</th>
@@ -57,14 +59,14 @@ export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = 
         <tbody>
           {base.milestones.map((m, i) => (
             <tr key={i}>
-              <td>
-                <input value={m.label} onChange={(e) => setM(i, { label: e.target.value })} />
+              <td className="cell-main" data-label="Milestone">
+                <input value={m.label} onChange={(e) => setM(i, { label: e.target.value })} aria-label={`Milestone ${i + 1} name`} />
               </td>
-              <td className="num" style={{ width: 90 }}>
+              <td className="num" style={{ width: 90 }} data-label="Share %">
                 <NumberInput value={Math.round(m.share * 1000) / 10} onChange={(v) => setM(i, { share: (v ?? 0) / 100 })} min={0} max={100} />
               </td>
-              <td>
-                <select value={m.event} onChange={(e) => setM(i, { event: e.target.value })}>
+              <td data-label="Due at">
+                <select value={m.event} onChange={(e) => setM(i, { event: e.target.value })} aria-label={`Milestone ${i + 1} due at`}>
                   {EVENTS.map((ev) => (
                     <option key={ev.id} value={ev.id}>
                       {ev.label}
@@ -72,10 +74,10 @@ export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = 
                   ))}
                 </select>
               </td>
-              <td className="num" style={{ width: 80 }}>
+              <td className="num" style={{ width: 80 }} data-label="Plus days">
                 <NumberInput value={m.offset_days} onChange={(v) => setM(i, { offset_days: v ?? 0 })} step={1} />
               </td>
-              <td>
+              <td className="cell-actions">
                 <button type="button" className="toggle link" onClick={() => set({ milestones: base.milestones.filter((_, j) => j !== i) })}>
                   remove
                 </button>
@@ -94,16 +96,17 @@ export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = 
         <Num label="Installment share %" value={Math.round(base.installment_share * 1000) / 10} onChange={(v) => set({ installment_share: (v ?? 0) / 100 })} min={0} width={140} />
         <Num label="Every N days" value={base.installment_interval_days} onChange={(v) => set({ installment_interval_days: v ?? 30 })} step={1} min={1} width={110} />
         <Num label="First one after (days)" value={base.installment_first_offset_days} onChange={(v) => set({ installment_first_offset_days: v ?? 30 })} step={1} min={0} width={120} />
-        <div className="narrow" style={{ width: 170 }}>
-          <label>Counted from</label>
-          <select value={base.installment_start_event} onChange={(e) => set({ installment_start_event: e.target.value })}>
-            {EVENTS.map((ev) => (
-              <option key={ev.id} value={ev.id}>
-                {ev.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Field label="Counted from" className="narrow" style={{ width: 170 }}>
+          {(id) => (
+            <select id={id} value={base.installment_start_event} onChange={(e) => set({ installment_start_event: e.target.value })}>
+              {EVENTS.map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
       </div>
       {known && (
         <div className={`muted ${Math.abs(total - 1) > 0.001 ? 'badge bad' : ''}`} style={{ marginTop: 4 }}>
@@ -129,52 +132,44 @@ function useTimeDefaults(program: ProgramBlock | null) {
 
 function TimeField({ label, value, fallback, onChange }: { label: string; value: string | null; fallback: string; onChange: (v: string | null) => void }) {
   return (
-    <div>
-      <label>
-        {label}
-        {!value && fallback && <span className="muted"> (default)</span>}
-      </label>
-      <input type="time" value={value ?? fallback} onChange={(e) => onChange(e.target.value && e.target.value !== fallback ? e.target.value : null)} />
-      <div className="time-default">
-        {value ? (
-          <>
-            default {fallback || 'from the program settings'}{' '}
-            <button type="button" className="toggle link" onClick={() => onChange(null)}>
-              use default
-            </button>
-          </>
-        ) : (
-          fallback ? 'from the program settings' : 'blank: the program settings decide'
-        )}
-      </div>
-    </div>
+    <Field
+      label={
+        <>
+          {label}
+          {!value && fallback && <span className="muted"> (default)</span>}
+        </>
+      }
+    >
+      {(id) => (
+        <>
+          <input id={id} type="time" value={value ?? fallback} onChange={(e) => onChange(e.target.value && e.target.value !== fallback ? e.target.value : null)} />
+          <div className="time-default">
+            {value ? (
+              <>
+                default {fallback || 'from the program settings'}{' '}
+                <button type="button" className="toggle link" onClick={() => onChange(null)}>
+                  use default
+                </button>
+              </>
+            ) : (
+              fallback ? 'from the program settings' : 'blank: the program settings decide'
+            )}
+          </div>
+        </>
+      )}
+    </Field>
   )
 }
 
+/** Schedule and cashflow inputs. The job stage is a pill in the page head, not an input here. */
 export function ProgramInputs({ job, program, onChange }: { job: ProgramJob; program: ProgramBlock | null; onChange: (j: ProgramJob) => void }) {
   const set = (p: Partial<ProgramJob>) => onChange({ ...job, ...p })
   const defaults = useTimeDefaults(program)
   return (
     <div>
       <div className="input-grid">
-        <div>
-          <label>Job stage</label>
-          <select value={job.stage} onChange={(e) => set({ stage: e.target.value as ProgramJob['stage'] })}>
-            {JOB_STAGES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label>Signing date</label>
-          <input type="date" value={job.signing_date ?? ''} onChange={(e) => set({ signing_date: e.target.value || null })} />
-        </div>
-        <div>
-          <label>Installation start</label>
-          <input type="date" value={job.install_date ?? ''} onChange={(e) => set({ install_date: e.target.value || null })} />
-        </div>
+        <Field label="Signing date">{(id) => <input id={id} type="date" value={job.signing_date ?? ''} onChange={(e) => set({ signing_date: e.target.value || null })} />}</Field>
+        <Field label="Installation start">{(id) => <input id={id} type="date" value={job.install_date ?? ''} onChange={(e) => set({ install_date: e.target.value || null })} />}</Field>
         <TimeField label="Depart base" value={job.depart_time} fallback={defaults.depart} onChange={(depart_time) => set({ depart_time })} />
         <TimeField label="Lunch at" value={job.lunch_start} fallback={defaults.lunch} onChange={(lunch_start) => set({ lunch_start })} />
         <Num label="Lunch (min)" value={job.lunch_minutes} onChange={(v) => set({ lunch_minutes: v })} hint="60" step={5} min={0} />
@@ -192,18 +187,23 @@ export function ProgramInputs({ job, program, onChange }: { job: ProgramJob; pro
   )
 }
 
-export function ProgramResults({ program, programUrl, docReason, openDocument }: { program: ProgramBlock; programUrl: string; docReason: string | null; openDocument: (url: string) => void }) {
+const localToday = () => {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+}
+
+/** Program of works: the Gantt chart first, then the schedule table, the hour-by-hour plan and the task list. */
+export function ProgramResults({ program }: { program: ProgramBlock }) {
   const [day, setDay] = useState(1)
   const [view, setView] = useState<'hourly' | 'tasks'>('hourly')
+  const [ganttRef, ganttWidth] = useElementWidth<HTMLDivElement>()
   if (!program.available) return <div className="banner warn">{program.reason}</div>
   const inst = program.install!
-  const cf = program.cashflow!
   const dayRows = inst.hourly.find((h) => h.day === day)?.rows ?? []
-  const chart = cf.weekly.map((w) => ({ week: fmtDateShort(w.week), In: Math.round(w.inflow), Out: Math.round(w.outflow), Balance: Math.round(w.balance) }))
   return (
     <div>
       {program.warnings.map((w, i) => (
-        <div key={w.code + i} className={`banner ${w.code === 'install_before_permit' || w.code === 'schedule_overrun' ? 'warn' : 'info'}`}>
+        <div key={w.code + i} className={`banner ${w.hard ? 'bad' : w.code === 'install_before_permit' || w.code === 'schedule_overrun' ? 'warn' : 'info'}`}>
           {w.message}
         </div>
       ))}
@@ -221,28 +221,18 @@ export function ProgramResults({ program, programUrl, docReason, openDocument }:
           <div className="sub">{program.net_metering ? `meter installed ${d(program.events?.find((e) => e.key === 'meter_installed')?.date)}` : 'off-grid, no utility steps'}</div>
         </div>
         <div className="kpi">
-          <div className="label">Cash margin</div>
-          <div className="value">{php0(cf.cash_margin)}</div>
-          <div className="sub">
-            in {php0(cf.total_in)}, out {php0(cf.total_out)}
-          </div>
+          <div className="label">Completion</div>
+          <div className="value">{d(program.completion)}</div>
+          <div className="sub">signing {d(program.signing_date)}; the proposal PDF carries the milestone schedule and payment terms only</div>
         </div>
-        <div className="kpi">
-          <div className="label">Lowest balance</div>
-          <div className="value" style={{ color: cf.lowest_balance < 0 ? C_OUT : undefined }}>{php0(cf.lowest_balance)}</div>
-          <div className="sub">on {d(cf.lowest_balance_date)}; most cash out at one time</div>
-        </div>
-      </div>
-      <div className="actions" style={{ position: 'static', border: 0, padding: '4px 0' }}>
-        <button type="button" disabled={!!docReason} onClick={() => openDocument(programUrl)}>
-          Program of works PDF (internal)
-        </button>
-        <span className="muted">{docReason ?? 'The proposal PDF carries the milestone schedule and payment terms only.'}</span>
       </div>
 
       <h3>Schedule</h3>
-      <div className="table-wrap">
-        <table>
+      <div ref={ganttRef} data-testid="gantt">
+        <Gantt events={program.events ?? []} today={localToday()} width={ganttWidth || 900} />
+      </div>
+      <div className="table-wrap" style={{ marginTop: 10 }}>
+        <table className="schedule">
           <thead>
             <tr>
               <th>Date</th>
@@ -255,8 +245,8 @@ export function ProgramResults({ program, programUrl, docReason, openDocument }:
           <tbody>
             {(program.events ?? []).map((e, i) => (
               <tr key={e.key + i} style={e.kind === 'milestone' ? { fontWeight: 600 } : e.kind === 'payment_in' ? { color: C_IN } : undefined}>
-                <td>{d(e.date)}</td>
-                <td>{e.end && e.end !== e.date ? d(e.end) : ''}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{d(e.date)}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{e.end && e.end !== e.date ? d(e.end) : ''}</td>
                 <td>{e.label}</td>
                 <td className="num">{e.amount != null ? php0(e.amount) : ''}</td>
                 <td>{e.customer ? 'sees this' : ''}</td>
@@ -337,8 +327,31 @@ export function ProgramResults({ program, programUrl, docReason, openDocument }:
           </table>
         )}
       </div>
+    </div>
+  )
+}
 
-      <h3>Cashflow</h3>
+/** Cashflow: the weekly chart, the flow table and what stays in the company as allocations. */
+export function CashflowResults({ program }: { program: ProgramBlock }) {
+  if (!program.available) return <div className="banner warn">{program.reason}</div>
+  const cf = program.cashflow!
+  const chart = cf.weekly.map((w) => ({ week: fmtDateShort(w.week), In: Math.round(w.inflow), Out: Math.round(w.outflow), Balance: Math.round(w.balance) }))
+  return (
+    <div>
+      <div className="kpis">
+        <div className="kpi">
+          <div className="label">Cash margin</div>
+          <div className="value">{php0(cf.cash_margin)}</div>
+          <div className="sub">
+            in {php0(cf.total_in)}, out {php0(cf.total_out)}
+          </div>
+        </div>
+        <div className="kpi">
+          <div className="label">Lowest balance</div>
+          <div className="value" style={{ color: cf.lowest_balance < 0 ? C_OUT : undefined }}>{php0(cf.lowest_balance)}</div>
+          <div className="sub">on {d(cf.lowest_balance_date)}; most cash out at one time</div>
+        </div>
+      </div>
       <div style={{ width: '100%', height: 260 }}>
         <ResponsiveContainer>
           <ComposedChart data={chart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
