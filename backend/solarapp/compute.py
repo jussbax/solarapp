@@ -8,7 +8,7 @@ from typing import Optional
 import numpy as np
 
 from .core import audit as audit_core
-from .core import kfactor, layout
+from .core import kfactor, layout, shade
 from .core.dataset import NasaReference, PvgisDataset
 from .core.sizing import BatterySpec, InverterRules, OffGridRules, size_system
 from .core.simulation import FaceSpec, ThermalModel, prepare_sky, simulate, typical_air_temperature
@@ -48,13 +48,33 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
     if pvgis.synthetic:
         warnings.append(_warn("synthetic_data", "SYNTHETIC weather data in use. Results are for testing only."))
 
+    # Shade: wall strips per face and the hourly beam factor
+    sun_el = (90.0 - sky.zenith.to_numpy(dtype=float))
+    sun_az = sky.azimuth.to_numpy(dtype=float)
+    cuts_by_face: dict[str, layout.FaceCuts] = {}
+    beam_by_face: dict[str, Optional[np.ndarray]] = {}
+    shade_block: dict[str, dict] = {}
+    for f in doc.faces:
+        cuts, wall_details = shade.face_cuts(f, doc.lat)
+        cuts_by_face[f.id] = cuts
+        beam_by_face[f.id] = shade.beam_factor(f, cuts, sun_az, sun_el, doc.lat)
+        obstacles = []
+        for t in f.obstacles:
+            cls, text = shade.obstacle_class(t.direction_deg, t.elevation_deg)
+            obstacles.append({"id": t.id, "label": t.label, "direction_deg": t.direction_deg, "elevation_deg": t.elevation_deg, "width_deg": t.width_deg, "cls": cls, "text": text})
+        shade_block[f.id] = {"walls": [w.to_dict() for w in wall_details], "obstacles": obstacles}
+        for w in wall_details:
+            if w.whole_face:
+                warnings.append(_warn("wall_shades_face", f"{f.name}: the wall on the {w.edge} side shades the whole face in the main hours."))
+
     # Panel candidates and layout
     panel_results = []
     for p in doc.panels:
         faces = {}
         total = 0
         for f in doc.faces:
-            lr = layout.fit_panels(f.length_m, f.width_m, p.length_m, p.width_m, doc.setback_m, doc.gap_m, f.panel_count_override)
+            lr = layout.fit_face(f.shape, f.length_m, f.width_m, f.ridge_m, p.length_m, p.width_m, doc.setback_m, doc.gap_m,
+                                 cuts_by_face[f.id], f.panels_left_out, f.panel_count_override)
             faces[f.id] = lr.to_dict()
             total += lr.count
         panel_results.append({
@@ -98,7 +118,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         warnings.append(_warn("low_confidence_k", f"The selected reading set '{sr.label}' is low confidence; see its warnings."))
 
     face_specs = [
-        FaceSpec(f.id, f.name, f.tilt_deg, f.azimuth_deg, selected["faces"][f.id]["count"]) for f in doc.faces
+        FaceSpec(f.id, f.name, f.tilt_deg, f.azimuth_deg, selected["faces"][f.id]["count"], beam_by_face[f.id]) for f in doc.faces
     ]
     measured = simulate(tmy, doc.lat, doc.lon, cell.elevation_m, face_specs, selected_panel.watt_peak, k_site, thermal, sky=sky)
     reference = simulate(tmy, doc.lat, doc.lon, cell.elevation_m, face_specs, selected_panel.watt_peak, 1.0, ThermalModel(), sky=sky)
@@ -126,6 +146,11 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
             "nasa_annual_psh": na_ann, "pvgis_annual_psh": pv_ann,
             "annual_diff_pct": ((na_ann - pv_ann) / pv_ann * 100.0) if (na_ann and pv_ann) else None,
         }
+
+    for fs in measured.faces:
+        shade_block[fs.face_id]["shade_loss_pct"] = fs.shade_loss_pct
+        if fs.shade_loss_pct >= 5:
+            warnings.append(_warn("shade_loss", f"{fs.name}: shade takes about {fs.shade_loss_pct:.0f}% of the direct sun over the year."))
 
     audit_block, sizing_block = compute_audit_and_sizing(doc, measured, selected, selected_panel.watt_peak)
 
@@ -155,6 +180,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         },
         "production": measured.to_dict(),
         "reference": reference.to_dict(),
+        "shade": shade_block,
         "comparison": {
             "deviation_pct": deviation,
             "monthly_deviation_pct": monthly_deviation,

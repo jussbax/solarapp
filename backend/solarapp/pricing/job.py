@@ -50,7 +50,7 @@ def resolve_panel(panel: CandidatePanel, catalog: Catalog, cfg: PricingConfig) -
 
 
 def rows_from_layout(doc: AssessmentDoc, panel: CandidatePanel, selected_panel_result: dict, count: int, gap_m: float) -> list[RoofRow]:
-    """Fill rows face by face using the chosen layout: a row runs along the face length."""
+    """Fill rows face by face using the fitted rows (from the eave up); the panel's long side runs along the row in landscape."""
     rows: list[RoofRow] = []
     left = count
     for f in doc.faces:
@@ -58,20 +58,18 @@ def rows_from_layout(doc: AssessmentDoc, panel: CandidatePanel, selected_panel_r
             break
         lr = selected_panel_result["faces"].get(f.id) or {}
         best = lr.get("best") or {}
-        per_row = int(best.get("along_length") or 0)
-        n_rows = int(best.get("along_width") or 0)
-        if per_row <= 0 or n_rows <= 0:
-            continue
-        dim = panel.length_m if best.get("orientation") == "portrait" else panel.width_m
-        for _ in range(n_rows):
+        fitted = [int(r) for r in (best.get("rows") or []) if int(r) > 0]
+        if not fitted and best.get("along_length") and best.get("along_width"):
+            fitted = [int(best["along_length"])] * int(best["along_width"])
+        dim = panel.length_m if best.get("orientation") == "landscape" else panel.width_m
+        for per_row in fitted:
             if left <= 0:
                 break
             n = min(per_row, left)
             rows.append(RoofRow(n, dim, gap_m))
             left -= n
     if left > 0:  # more panels than the layout holds (override): one more row
-        dim = panel.length_m
-        rows.append(RoofRow(left, dim, gap_m))
+        rows.append(RoofRow(left, panel.length_m, gap_m))
     return rows
 
 

@@ -24,7 +24,7 @@ import numpy as np
 from pvlib.pvarray import huld
 from pvlib.temperature import faiman
 
-LOW_IRRADIANCE_WM2 = 500.0
+LOW_IRRADIANCE_WM2 = 600.0  # field rule: readings below this are not trusted
 MAX_SPREAD_FRACTION = 0.10
 CLOUDY_SKY = {"cloudy", "overcast"}
 RISE_RANGE_C_PER_KW = (5.0, 60.0)
@@ -178,7 +178,7 @@ def evaluate_reading_set(
     if avg_g < LOW_IRRADIANCE_WM2:
         warnings.append(Warning_("low_irradiance", f"Average irradiance {avg_g:.0f} W/m2 is below {LOW_IRRADIANCE_WM2:.0f} W/m2."))
     if spread > MAX_SPREAD_FRACTION:
-        warnings.append(Warning_("unstable_irradiance", f"Irradiance readings spread by {spread*100:.0f}%, above {MAX_SPREAD_FRACTION*100:.0f}%."))
+        warnings.append(Warning_("unstable_irradiance", f"Irradiance readings spread by {spread*100:.0f}%, above {MAX_SPREAD_FRACTION*100:.0f}%: a cloud was passing. Wait for steady sun and retake."))
     if (s.sky_condition or "").strip().lower() in CLOUDY_SKY:
         warnings.append(Warning_("cloudy_sky", f"Sky condition recorded as {s.sky_condition}."))
 

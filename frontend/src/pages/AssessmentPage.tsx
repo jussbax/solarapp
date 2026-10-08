@@ -188,6 +188,13 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             </button>
           </a>
         )}
+        {results && (
+          <a href={pdfAllowed ? api.cardUrl(aid) : undefined} target="_blank" rel="noreferrer" onClick={(e) => !pdfAllowed && e.preventDefault()}>
+            <button disabled={!pdfAllowed} title={!pdfAllowed ? 'Compute with current inputs on real data first' : 'Phone-sized image to send to the customer'}>
+              Client card
+            </button>
+          </a>
+        )}
         <button className="danger" onClick={remove} disabled={!!busy}>
           Delete
         </button>

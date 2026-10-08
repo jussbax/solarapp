@@ -1,11 +1,41 @@
+export type FaceShape = 'rect' | 'hip' | 'tri'
+export type WallEdge = 'eave' | 'ridge' | 'left' | 'right'
+
+export interface WallObstacle {
+  id: string
+  edge: WallEdge
+  height_m: number
+  gap_m: number
+}
+
+export interface ShadeObstacle {
+  id: string
+  label: string
+  direction_deg: number
+  elevation_deg: number
+  width_deg: number
+  share: number
+}
+
 export interface RoofFace {
   id: string
   name: string
+  shape: FaceShape
   length_m: number
   width_m: number
+  ridge_m: number | null
   tilt_deg: number
   azimuth_deg: number
+  panels_left_out: number
   panel_count_override: number | null
+  walls: WallObstacle[]
+  obstacles: ShadeObstacle[]
+}
+
+export interface ShadeFace {
+  walls: { id: string; edge: WallEdge; side_deg: number; height_m: number; gap_m: number; strip_m: number | null; strip_all_m: number | null; whole_face: boolean }[]
+  obstacles: { id: string; label: string; direction_deg: number; elevation_deg: number; width_deg: number; cls: 'clear' | 'small' | 'main'; text: string }[]
+  shade_loss_pct?: number
 }
 
 export interface CandidatePanel {
@@ -453,6 +483,7 @@ export interface LayoutOption {
   along_length: number
   along_width: number
   count: number
+  rows: number[]
 }
 
 export interface LayoutResult {
@@ -462,6 +493,10 @@ export interface LayoutResult {
   best: LayoutOption
   count: number
   override_applied: boolean
+  shape: FaceShape
+  gross: number
+  left_out: number
+  cuts: { eave: number; ridge: number; left: number; right: number }
 }
 
 export interface PanelResult {
@@ -633,6 +668,7 @@ export interface Results {
   }
   production: SimulationResult
   reference: SimulationResult
+  shade: Record<string, ShadeFace>
   comparison: { deviation_pct: number; monthly_deviation_pct: number[]; description: string }
   legacy_method: { monthly_kwh: number; annual_kwh: number; formula: string }
   audit: AuditBlock | null
@@ -673,6 +709,10 @@ export interface AppSettings {
 
 export const SKY_CONDITIONS = ['clear', 'partly cloudy', 'hazy', 'cloudy', 'overcast']
 
+export function newFace(name: string): RoofFace {
+  return { id: newId(), name, shape: 'rect', length_m: 10, width_m: 6, ridge_m: null, tilt_deg: 15, azimuth_deg: 180, panels_left_out: 0, panel_count_override: null, walls: [], obstacles: [] }
+}
+
 export function newId(): string {
   return Math.random().toString(36).slice(2, 10)
 }
@@ -684,7 +724,7 @@ export function emptyDoc(): AssessmentDoc {
     notes: '',
     lat: null,
     lon: null,
-    faces: [{ id: newId(), name: 'Roof 1', length_m: 10, width_m: 6, tilt_deg: 15, azimuth_deg: 180, panel_count_override: null }],
+    faces: [newFace('Roof 1')],
     panels: [{ id: newId(), name: '', watt_peak: 550, length_m: 2.278, width_m: 1.134 }],
     selected_panel_id: null,
     reading_sets: [],

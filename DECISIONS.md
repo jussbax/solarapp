@@ -324,6 +324,45 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   two. Structure only: the company's own name and colours, no utility
   logo or colours, so it cannot be mistaken for the utility's document.
 
+## Ported from the earlier roof-check tool (pld-roof-check)
+
+- Faces can be a rectangle, a hip face (trapezoid, with a ridge length) or
+  a triangle. Panels are fitted row by row from the eave in both
+  orientations and the larger count kept; a hip face narrows as it rises,
+  so each row is limited by the face width at the row's top edge. The
+  rows feed the mounting takeoff directly. Orientation now follows the
+  usual meaning: portrait = the panel's long side up the slope, landscape
+  = along the eave (the earlier app's naming was the other way round).
+  Panels left out per face (vents, tanks, areas the surveyor excluded) are
+  subtracted from the fitted count.
+- Walls: a firewall or long wall along one edge, with its height above the
+  roof and gap to the edge. The sun's path at the site latitude is swept
+  over a year to find how far the shadow reaches in the main hours (9 to
+  3) and all day (8 to 4), as a multiple of the height (about 1.2 on the
+  east or west, 1.0 south, 0.3 north at Pila), corrected for the roof slope
+  on eave and ridge walls; the main-hours strip is cut out before fitting.
+  In the hourly simulation the same geometry gives, for every hour, the
+  share of the remaining panels in the wall's shadow, and that share loses
+  its beam irradiance (diffuse light stays). A wall that shades the whole
+  face is flagged.
+- Trees and buildings: direction and angle to the top from panel height,
+  with how wide they look (default 40 degrees). The field rule (under 18
+  degrees ignore, 18 to 32 small loss, over 32 leave the area out, north
+  side ignored under 60) is shown as guidance; the simulation blocks the
+  beam whenever the sun is inside the obstacle's sector and below its top.
+  Each face reports the share of the year's direct sun lost to shade.
+- Meter readings: the low-sun gate moved from 500 to 600 W/m2 and the
+  10 percent swing warning says a cloud was passing and to retake. The
+  earlier app's k cap of 0.80 is not used, since the site factor already
+  removes the heat and sun-angle effects the cap stood in for.
+- Client card: a phone-sized PNG with the company band and logo, panels,
+  kWp and typical monthly kWh, the bill coverage when a bill is on file,
+  each face, what was measured, the shade notes and the next step, for
+  sending from Messenger after the first visit. Not adopted: the lead
+  qualification rules, the 135 sun-hour formula, the clear-sky
+  orientation table and the artifact-runtime log; PVGIS and the server
+  database replace them.
+
 ## Brand
 
 - PL Development brand throughout: primary black #111111, secondary gold

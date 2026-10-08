@@ -10,9 +10,12 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
 ## What it does
 
 1. Drop a map pin on the roof. The nearest PVGIS grid cell is used.
-2. Enter roof faces (length, width, tilt, facing) and candidate panels
-   (Wp, length, width). The app fits panels in rows and columns, tries both
-   orientations, and shows the panel and count that give the most kWp.
+2. Enter roof faces (rectangle, hip face or triangle: eave, ridge, slope,
+   tilt, facing, panels left out) with any firewalls, trees or buildings
+   that shade them, and candidate panels (Wp, length, width, or picked from
+   the materials database). The app cuts the wall strips, fits panels row by
+   row in both orientations, shades the simulation hour by hour, and shows
+   the panel and count that give the most kWp.
 3. Enter the on-site readings: three simultaneous rows of irradiance, MPPT
    power and panel surface temperature per roof face. The app computes the
    owner's k per row, removes the heat and low-light effect present at the
@@ -22,8 +25,9 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    Martin-Ruiz reflection, Huld module model, site thermal rise) and reports
    monthly and annual kWh at the panels, the "measured versus PVGIS" percent,
    and the owner's original formula for continuity.
-5. Produces a trimmed customer PDF. Readings, k, warnings and dataset details
-   stay on the internal page.
+5. Produces a trimmed customer PDF and a phone-sized client card image for
+   the first visit. Readings, k, warnings and dataset details stay on the
+   internal page.
 6. Energy audit: appliances with usage windows (start, end, weekdays,
    months), duty factors per type, reconciliation with the latest bill, and
    future additions. Sizing from the hour-by-hour balance of the reconciled
@@ -177,7 +181,8 @@ customer PDF while synthetic data is in use.
 
 ```
 backend/solarapp/core/kfactor.py      k per reading, site factor, thermal rise, quality checks
-backend/solarapp/core/layout.py       panel fitting (rows x columns, both orientations)
+backend/solarapp/core/layout.py       panel fitting row by row on rectangle, hip and triangle faces
+backend/solarapp/core/shade.py        wall strips and hourly shade from walls, trees and buildings
 backend/solarapp/core/simulation.py   hourly pvlib simulation and monthly aggregation
 backend/solarapp/core/dataset.py      nearest-cell lookup and TMY loading
 backend/solarapp/core/audit.py        appliance types and duty factors, load profiles, bill reconciliation
@@ -192,7 +197,7 @@ backend/solarapp/pricing/economics.py customer economics: bill before and after,
 backend/data_seed/                    bundled materials workbook, loaded on first start
 backend/solarapp/compute.py           turns an assessment into results
 backend/solarapp/data_download/       one-time PVGIS and NASA download
-backend/solarapp/reports/             customer PDF, quotation PDF, internal program of works PDF
+backend/solarapp/reports/             customer PDF, client card PNG, proposal PDF, internal program of works PDF
 backend/solarapp/api/                 FastAPI routes
 frontend/src/                         React app (map pin, editors, results)
 data/                                 weather dataset and SQLite database (not in git)

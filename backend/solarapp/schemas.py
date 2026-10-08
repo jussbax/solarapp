@@ -7,14 +7,37 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
+class WallObstacle(BaseModel):
+    """A firewall or long wall beside a face: it lies along one edge, height above the roof at that edge."""
+    id: str
+    edge: Literal["eave", "ridge", "left", "right"] = "left"
+    height_m: float = Field(default=0, ge=0)
+    gap_m: float = Field(default=0, ge=0)
+
+
+class ShadeObstacle(BaseModel):
+    """A tree or building: compass direction from the panels and the angle to its top from panel height."""
+    id: str
+    label: str = ""
+    direction_deg: float = Field(default=180, ge=0, lt=360)
+    elevation_deg: float = Field(default=0, ge=0, le=89)
+    width_deg: float = Field(default=40, gt=0, le=180)   # how wide it looks from the roof
+    share: float = Field(default=1.0, ge=0, le=1.0)      # share of the face it shades when the sun is behind it
+
+
 class RoofFace(BaseModel):
     id: str
     name: str = "Roof"
-    length_m: float = Field(gt=0)
-    width_m: float = Field(gt=0)
+    shape: Literal["rect", "hip", "tri"] = "rect"
+    length_m: float = Field(gt=0)            # eave length
+    width_m: float = Field(gt=0)             # slope length, eave to ridge
+    ridge_m: Optional[float] = Field(default=None, ge=0)   # hip face only
     tilt_deg: float = Field(default=10, ge=0, le=90)
     azimuth_deg: float = Field(default=180, ge=0, lt=360)
+    panels_left_out: int = Field(default=0, ge=0)          # vents, tanks, areas the surveyor excluded
     panel_count_override: Optional[int] = Field(default=None, ge=0)
+    walls: list[WallObstacle] = Field(default_factory=list)
+    obstacles: list[ShadeObstacle] = Field(default_factory=list)
 
 
 class CandidatePanel(BaseModel):

@@ -32,6 +32,7 @@ class FaceSpec:
     tilt_deg: float
     azimuth_deg: float  # compass, 0 = north, 90 = east, 180 = south, 270 = west
     panel_count: int
+    beam_factor: Optional[np.ndarray] = None  # per hour, share of the panels not in shadow (1 = no shade)
 
 
 @dataclass
@@ -107,6 +108,7 @@ class FaceSimulation:
     avg_psh_per_day: float
     specific_yield_kwh_per_kwp: float
     hourly_profile_kw: list[list[float]]  # [12][24] average kW by local hour
+    shade_loss_pct: float = 0.0           # share of the year's beam irradiance lost to shade
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -171,12 +173,19 @@ def simulate_face(tmy: pd.DataFrame, sky: SkyContext, face: FaceSpec, panel_wp: 
     aoi = pvlib.irradiance.aoi(tilt, az, sky.zenith, sky.azimuth)
     iam_beam = pvlib.iam.martin_ruiz(aoi).fillna(0.0)
     iam_sky, iam_ground = _diffuse_iam(tilt)
+    beam = irr["poa_direct"].clip(lower=0.0)
+    shade_loss = 0.0
+    if face.beam_factor is not None:
+        bf = pd.Series(np.asarray(face.beam_factor, dtype=float), index=beam.index).clip(0.0, 1.0)
+        total_beam = float(beam.sum())
+        shade_loss = float((beam * (1.0 - bf)).sum() / total_beam * 100.0) if total_beam > 0 else 0.0
+        beam = beam * bf
     g_eff = (
-        irr["poa_direct"] * iam_beam
+        beam * iam_beam
         + irr["poa_sky_diffuse"] * iam_sky
         + irr["poa_ground_diffuse"] * iam_ground
     ).clip(lower=0.0)
-    poa_global = irr["poa_global"].clip(lower=0.0)
+    poa_global = (beam + irr["poa_sky_diffuse"] + irr["poa_ground_diffuse"]).clip(lower=0.0)
     t_mod = module_temperature(poa_global, tmy["temp_air"], tmy["wind_speed"], thermal)
     power_per_wp = pd.Series(np.asarray(huld(g_eff, t_mod, 1.0, cell_type="csi")), index=tmy.index).fillna(0.0).clip(lower=0.0)
     power_w = power_per_wp * panel_wp * face.panel_count * k_site
@@ -194,6 +203,7 @@ def simulate_face(tmy: pd.DataFrame, sky: SkyContext, face: FaceSpec, panel_wp: 
         avg_psh_per_day=annual_poa / max(sum(sky.days_in_month), 1),
         specific_yield_kwh_per_kwp=(annual / kwp) if kwp > 0 else 0.0,
         hourly_profile_kw=hourly_profile(power_w, sky.month, sky.hour),
+        shade_loss_pct=shade_loss,
     )
 
 

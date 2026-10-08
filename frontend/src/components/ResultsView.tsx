@@ -195,42 +195,52 @@ export default function ResultsView({ doc, results, stale }: { doc: AssessmentDo
         </div>
 
         <h3>Panel layout</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Face</th>
-              <th>Usable (m)</th>
-              <th className="num">Portrait</th>
-              <th className="num">Landscape</th>
-              <th className="num">Used</th>
-            </tr>
-          </thead>
-          <tbody>
-            {doc.faces.map((f) => {
-              const l = selected.faces[f.id]
-              if (!l) return null
-              const p = l.options.find((o) => o.orientation === 'portrait')!
-              const q = l.options.find((o) => o.orientation === 'landscape')!
-              return (
-                <tr key={f.id}>
-                  <td>{f.name}</td>
-                  <td>
-                    {n1(l.usable_length_m)} x {n1(l.usable_width_m)}
-                  </td>
-                  <td className="num">
-                    {p.count} ({p.along_length} x {p.along_width})
-                  </td>
-                  <td className="num">
-                    {q.count} ({q.along_length} x {q.along_width})
-                  </td>
-                  <td className="num">
-                    {l.count} {l.override_applied && <span className="badge neutral">override</span>}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Face</th>
+                <th>Shape and usable (m)</th>
+                <th className="num">Portrait</th>
+                <th className="num">Landscape</th>
+                <th>Rows from the eave</th>
+                <th className="num">Used</th>
+                <th>Shade</th>
+              </tr>
+            </thead>
+            <tbody>
+              {doc.faces.map((f) => {
+                const l = selected.faces[f.id]
+                if (!l) return null
+                const p = l.options.find((o) => o.orientation === 'portrait')!
+                const q = l.options.find((o) => o.orientation === 'landscape')!
+                const sh = results.shade?.[f.id]
+                const cuts = l.cuts ? (['eave', 'ridge', 'left', 'right'] as const).filter((e) => l.cuts[e] > 0).map((e) => `${e} ${n1(l.cuts[e])} m`) : []
+                return (
+                  <tr key={f.id}>
+                    <td>{f.name}</td>
+                    <td>
+                      {l.shape === 'hip' ? 'hip face' : l.shape === 'tri' ? 'triangle' : 'rectangle'}, {n1(l.usable_length_m)} x {n1(l.usable_width_m)}
+                    </td>
+                    <td className="num">{p.count}</td>
+                    <td className="num">{q.count}</td>
+                    <td>
+                      {l.best.rows.join(', ') || '0'} ({l.best.orientation}){l.left_out > 0 && `, ${l.left_out} left out`}
+                    </td>
+                    <td className="num">
+                      {l.count} {l.override_applied && <span className="badge neutral">override</span>}
+                    </td>
+                    <td className="muted">
+                      {cuts.length > 0 && `strip: ${cuts.join(', ')}. `}
+                      {(sh?.obstacles ?? []).map((o) => `${o.label || 'obstruction'} ${compassLabel(o.direction_deg)} ${o.elevation_deg}°: ${o.cls === 'clear' ? 'no effect' : o.cls === 'small' ? 'small loss' : 'main-hours shade'}`).join('; ')}
+                      {sh?.shade_loss_pct != null && sh.shade_loss_pct >= 0.5 && ` Shade takes ${sh.shade_loss_pct.toFixed(0)}% of the direct sun.`}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
 
         <h3>Weather data</h3>
         <div className="muted">

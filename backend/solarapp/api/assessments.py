@@ -13,6 +13,7 @@ from ..db import get_session
 from ..models import Assessment, utcnow
 from ..pricing.job import PricingContext
 from ..pricing.store import load_catalog, load_config
+from ..reports.card import build_client_card
 from ..reports.customer_pdf import build_customer_pdf
 from ..reports.program_pdf import build_program_pdf
 from ..reports.quotation_pdf import build_quotation_pdf
@@ -173,3 +174,22 @@ def program_of_works(
     pdf = build_program_pdf(AssessmentDoc.model_validate(a.doc), a.results, company)
     name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="program-of-works-{name}.pdf"'})
+
+
+@router.get("/{assessment_id}/card.png")
+def client_card(
+    assessment_id: int,
+    next_step: str = "",
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    """Phone-sized image of the roof check result for the customer."""
+    a = _get(session, assessment_id)
+    if not a.results:
+        raise HTTPException(status_code=409, detail="Compute the assessment first.")
+    if (a.results.get("dataset") or {}).get("synthetic"):
+        raise HTTPException(status_code=409, detail="The client card is disabled while synthetic test data is in use.")
+    company = company_settings(session, settings)
+    png = build_client_card(AssessmentDoc.model_validate(a.doc), a.results, company, next_step=next_step[:120])
+    name = (a.customer_name or f"assessment-{a.id}").strip().replace(" ", "_")
+    return Response(png, media_type="image/png", headers={"Content-Disposition": f'inline; filename="roof-check-{name}.png"'})
