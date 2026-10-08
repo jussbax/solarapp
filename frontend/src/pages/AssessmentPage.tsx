@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useBlocker, useNavigate, useParams } from 'react-router-dom'
-import { api } from '../api'
+import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
+import { api, type ApiError } from '../api'
 import type { AssessmentDoc, AssessmentOut, DataStatus } from '../types'
 import MapPicker from '../components/MapPicker'
 import FacesEditor from '../components/FacesEditor'
@@ -16,7 +16,7 @@ import { ProgramInputs, ProgramResults } from '../components/ProgramSection'
 import { EconomicsInputs, EconomicsResults } from '../components/EconomicsSection'
 import { emptyEconomicsJob, emptyPricingJob, emptyProgramJob } from '../types'
 import { clearDraft, readDraft, writeDraft, type Draft } from '../draft'
-import { fmtDateTime, php0 } from '../fmt'
+import { fmtDateShort, fmtDateTime, php0 } from '../fmt'
 
 type Step = 'site' | 'audit' | 'pricing' | 'results'
 const STEPS: { id: Step; label: string; short: string }[] = [
@@ -27,12 +27,15 @@ const STEPS: { id: Step; label: string; short: string }[] = [
 ]
 const CARD_STEP: Record<string, Step> = { 'card-site': 'site', 'card-faces': 'site', 'card-panels': 'site', 'card-readings': 'site', 'card-audit': 'audit' }
 
-/** Which card an error message is about, so the page can open its step and scroll there. */
+/** What the owner reads when Save or Calculate cannot reach the server; the draft on the device keeps the edits. */
+const OFFLINE_EDITS_KEPT = 'No connection. Your edits are kept on this phone; Save again when you have signal.'
+
+/** Which card an error message is about, so the page can open its step and scroll there. The messages use the owner's labels (see api.ts). */
 function cardForError(msg: string): string | null {
   const m = msg.toLowerCase()
   if (m.includes('location') || m.includes('map pin') || m.includes('weather')) return 'card-site'
   if (m.includes('roof face') || m.includes('no panel fits') || m.includes('face')) return 'card-faces'
-  if (m.includes('reading') || m.includes('calibration') || m.includes('test_panel')) return 'card-readings'
+  if (m.includes('reading') || m.includes('calibration') || m.includes('test panel') || m.includes('test_panel')) return 'card-readings'
   if (m.includes('panel')) return 'card-panels'
   if (m.includes('audit') || m.includes('consumption') || m.includes('bill') || m.includes('appliance')) return 'card-audit'
   return null
@@ -56,6 +59,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   const [draft, setDraft] = useState<Draft | null>(null)
   const [step, setStepState] = useState<Step>(stepFromHash)
   const draftTimer = useRef<number | null>(null)
+  const docBusy = useRef(false)
 
   const setStep = useCallback((s: Step) => {
     setStepState(s)
@@ -83,6 +87,10 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
       })
       .catch((e) => setError(e.message))
   }, [aid, setStep])
+
+  /** Until the server stores card_next_step, keep what was typed for this session so the card still prints it. */
+  const withLocalFields = (server: AssessmentDoc, local: AssessmentDoc | null): AssessmentDoc =>
+    server.card_next_step == null && local?.card_next_step ? { ...server, card_next_step: local.card_next_step } : server
 
   const patch = useCallback((p: Partial<AssessmentDoc>) => {
     setDoc((d) => (d ? { ...d, ...p } : d))
@@ -121,12 +129,21 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
     return () => window.clearTimeout(t)
   }, [toast])
 
-  if (error && !doc) return <div className="banner bad">{error}</div>
+  if (error && !doc)
+    return (
+      <div className="card">
+        <div className="banner bad">{error}</div>
+        <Link to="/">Back to the list</Link>
+      </div>
+    )
   if (!doc || !a) return <div className="muted">Loading...</div>
 
+  /** Shows an error in the bar; a validation error also opens the step and scrolls to the card it names. */
   const fail = (e: unknown) => {
-    const msg = (e as Error).message
+    const offline = (e as ApiError).status === 0
+    const msg = offline && dirty ? OFFLINE_EDITS_KEPT : (e as Error).message
     setError(msg)
+    if (offline) return
     const card = cardForError(msg)
     if (card) {
       const s = CARD_STEP[card]
@@ -146,13 +163,13 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
     try {
       const r = await api.updateAssessment(aid, doc)
       setA(r)
-      setDoc(r.doc)
+      setDoc(withLocalFields(r.doc, doc))
       setDirty(false)
       clearDraft(aid)
       setDraft(null)
       setToast('Saved')
     } catch (e) {
-      fail(e)
+      fail(e) // dirty stays true, so Save stays armed for the next try
     } finally {
       setBusy(null)
     }
@@ -164,7 +181,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
     try {
       const r = await api.computeAssessment(aid, doc)
       setA(r)
-      setDoc(r.doc)
+      setDoc(withLocalFields(r.doc, doc))
       setDirty(false)
       clearDraft(aid)
       setDraft(null)
@@ -198,10 +215,61 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
 
   const results = a.results
   const kResults = results?.k.sets ?? null
+  // One rule for every document (roof check PDF, card, proposal, program of works): the server answers 409 in the same cases.
   const stale = a.results_stale || dirty
-  const pdfAllowed = results && !a.results_stale && !results.dataset.synthetic
+  const synthetic = !!results?.dataset.synthetic
+  const docReason = !results
+    ? 'Calculate first.'
+    : stale
+      ? 'Documents need a fresh calculation. Press Calculate first.'
+      : synthetic
+        ? 'Documents are disabled while test weather data is in use.'
+        : null
   const statusText = busy ?? (dirty ? 'Unsaved changes' : a.results_stale ? 'Needs recalculating' : results ? 'Up to date' : 'Not calculated yet')
   const statusClass = busy ? 'busy' : dirty ? 'unsaved' : a.results_stale ? 'stale' : results ? 'ok' : ''
+
+  /**
+   * Opens a document without ever landing a tab on a raw error page: the file is fetched first, a 409 or an outage goes to the bar,
+   * and only a real file is shown. An inline document (the card) gets a tab opened inside the click, so phone browsers do not block it;
+   * an attachment (the PDFs) is saved under the server's file name, as the plain link did.
+   */
+  const openDocument = async (url: string, inlineHint = false) => {
+    if (docReason || docBusy.current) return
+    docBusy.current = true
+    setError(null)
+    const win = inlineHint ? window.open('', '_blank') : null
+    try {
+      if (win) {
+        try {
+          win.document.title = 'Preparing the card…'
+          win.document.body.textContent = 'Preparing the card…'
+        } catch {
+          /* a cross-origin shell: it still navigates below */
+        }
+      }
+      const d = await api.fetchDocument(url)
+      const objectUrl = URL.createObjectURL(d.blob)
+      if (d.inline && win) {
+        win.location.replace(objectUrl)
+      } else {
+        win?.close()
+        const link = document.createElement('a')
+        link.href = objectUrl
+        if (d.inline) link.target = '_blank'
+        else link.download = d.filename
+        link.rel = 'noopener'
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+    } catch (e) {
+      win?.close()
+      fail(e)
+    } finally {
+      docBusy.current = false
+    }
+  }
 
   // the on-site checklist: what Calculate needs
   const hasPin = doc.lat != null && doc.lon != null
@@ -216,6 +284,9 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   const summaryPanels = sizing?.panels ?? results?.production.total_panels
   const summaryKwp = sizing?.kwp ?? results?.production.system_kwp
   const batteryKwh = sizing?.battery?.installed_kwh ?? 0
+  // after the first calculation the three downstream cards are all "needs the audit": one line says what comes next instead
+  const auditPending =
+    !!results && !results.sizing && [results.pricing, results.economics, results.program].every((b) => b != null && !b.available)
 
   const go = (cardId: string) => () => document.getElementById(cardId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
@@ -266,12 +337,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             </div>
           )}
           <div className="card" id="card-site">
-            <div className="card-head">
-              <h2>Site</h2>
-              <button type="button" className="toggle link danger" onClick={remove} disabled={!!busy}>
-                Delete assessment
-              </button>
-            </div>
+            <h2>Site</h2>
             <div className="row">
               <div>
                 <label>Customer name</label>
@@ -286,12 +352,27 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
               <label>Notes (internal)</label>
               <textarea rows={2} value={doc.notes} onChange={(e) => patch({ notes: e.target.value })} />
             </div>
+            <div className="field">
+              <label>Next step printed on the card</label>
+              <input
+                value={doc.card_next_step ?? ''}
+                onChange={(e) => patch({ card_next_step: e.target.value })}
+                placeholder="Next step: your free energy audit"
+                maxLength={120}
+              />
+              <div className="hint">Shown on the roof check card the customer gets. A date and time help, e.g. "Energy audit: Saturday 18 Oct, 9 am, about an hour".</div>
+            </div>
             <MapPicker lat={doc.lat} lon={doc.lon} onChange={(lat, lon) => patch({ lat, lon })} />
+            <div className="card-foot">
+              <button type="button" className="danger" onClick={remove} disabled={!!busy}>
+                Delete assessment
+              </button>
+            </div>
           </div>
 
           <div className="card" id="card-faces">
             <h2>Roof faces</h2>
-            <FacesEditor faces={doc.faces} onChange={(faces) => patch({ faces })} />
+            <FacesEditor faces={doc.faces} warnings={dirty ? null : results?.warnings} onChange={(faces) => patch({ faces })} />
             <div className="row" style={{ marginTop: 10 }}>
               <div className="narrow" style={{ width: 160 }}>
                 <label>Edge setback (m)</label>
@@ -416,7 +497,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 {results.program?.available && (
                   <button type="button" className="kpi kpi-link" onClick={go('program')}>
                     <div className="label">Installation</div>
-                    <div className="value">{results.program.install_start ? new Date(results.program.install_start + 'T00:00:00').toLocaleDateString('en-PH', { day: 'numeric', month: 'short' }) : '-'}</div>
+                    <div className="value">{results.program.install_start ? fmtDateShort(results.program.install_start) : '-'}</div>
                     <div className="sub">{results.program.install?.days} {results.program.install?.days === 1 ? 'day' : 'days'} on site</div>
                   </button>
                 )}
@@ -426,7 +507,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             <div className="card" id="results-production">
               <h2>Roof and production</h2>
               <ErrorBoundary title="The production results" onRecalculate={compute}>
-                <ResultsView doc={a.doc} results={results} stale={false} />
+                <ResultsView doc={a.doc} results={results} />
               </ErrorBoundary>
             </div>
             {results.audit && (
@@ -442,21 +523,37 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 </ErrorBoundary>
               </div>
             )}
-            {results.pricing && (
+            {auditPending && (
+              <div className="card next-step" id="pricing">
+                Next:{' '}
+                <a
+                  href="#audit"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setStep('audit')
+                  }}
+                >
+                  Energy audit
+                </a>
+                , then Calculate. <span className="muted">Pricing, savings and the program of works follow the sizing.</span>
+              </div>
+            )}
+            {!auditPending && results.pricing && (
               <div className="card" id="pricing">
-                <h2>Pricing and bill of materials</h2>
+                <h2>Pricing and bill of materials (BOM)</h2>
                 <ErrorBoundary title="The pricing" onRecalculate={compute}>
                   <PricingResults
                     pricing={results.pricing}
                     job={doc.pricing ?? emptyPricingJob()}
                     onJobChange={(pricing) => patch({ pricing })}
                     quotationUrl={api.quotationUrl(aid)}
-                    stale={false}
+                    docReason={docReason}
+                    openDocument={openDocument}
                   />
                 </ErrorBoundary>
               </div>
             )}
-            {results.economics && (
+            {!auditPending && results.economics && (
               <div className="card" id="economics">
                 <h2>Savings for the customer</h2>
                 <ErrorBoundary title="The savings" onRecalculate={compute}>
@@ -464,11 +561,11 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 </ErrorBoundary>
               </div>
             )}
-            {results.program && (
+            {!auditPending && results.program && (
               <div className="card" id="program">
                 <h2>Program of works and cashflow</h2>
                 <ErrorBoundary title="The program of works" onRecalculate={compute}>
-                  <ProgramResults program={results.program} programUrl={api.programUrl(aid)} stale={false} />
+                  <ProgramResults program={results.program} programUrl={api.programUrl(aid)} docReason={docReason} openDocument={openDocument} />
                 </ErrorBoundary>
               </div>
             )}
@@ -495,26 +592,21 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
           Calculate
         </button>
         {results && (
-          <a href={pdfAllowed ? api.reportUrl(aid) : undefined} onClick={(e) => !pdfAllowed && e.preventDefault()}>
-            <button disabled={!pdfAllowed} title={!pdfAllowed ? 'Calculate with current inputs on real data first' : ''}>
-              Roof check PDF
-            </button>
-          </a>
+          <button type="button" disabled={!!docReason || !!busy} onClick={() => openDocument(api.reportUrl(aid))}>
+            Roof check PDF
+          </button>
         )}
         {results && (
           <button
-            disabled={!pdfAllowed}
-            title={!pdfAllowed ? 'Calculate with current inputs on real data first' : 'Phone-sized image to send to the customer'}
-            onClick={() => {
-              const t = window.prompt('Next step shown on the card. A date and time help, e.g. "Energy audit: Saturday 18 Oct, 9 am, about an hour".', 'Next step: your free energy audit')
-              if (t === null) return
-              window.open(`${api.cardUrl(aid)}?next_step=${encodeURIComponent(t.trim())}`, '_blank', 'noopener')
-            }}
+            type="button"
+            disabled={!!docReason || !!busy}
+            title="Phone-sized image to send to the customer"
+            onClick={() => openDocument(api.cardUrl(aid, (doc.card_next_step ?? '').trim()), true)}
           >
             Roof check card
           </button>
         )}
-        {results && !pdfAllowed && <span className="muted">Documents need a fresh calculation on real data.</span>}
+        {results && docReason && <span className="muted doc-reason">{docReason}</span>}
         {!results && !canCalculate && <span className="muted">Needs a map pin, a roof face and a panel.</span>}
       </div>
     </div>

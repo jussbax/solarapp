@@ -22,6 +22,13 @@ export const fmtDate = (s: string | null | undefined) => {
   return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString('en-PH', DATE)
 }
 
+/** "8 Oct" from an ISO date, for tiles and chart axes where the year is clear from the context. */
+export const fmtDateShort = (s: string | null | undefined) => {
+  if (!s) return ''
+  const d = s.length === 10 ? new Date(s + 'T00:00:00') : new Date(s)
+  return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString('en-PH', { day: 'numeric', month: 'short' })
+}
+
 /** "8 Oct 2026, 3:04 PM" from an ISO date-time string. */
 export const fmtDateTime = (s: string | null | undefined) => {
   if (!s) return ''

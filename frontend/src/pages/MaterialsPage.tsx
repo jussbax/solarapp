@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import NumberInput from '../components/NumberInput'
 import type { ImportReport, MaterialItem, MaterialSupplier, PricingStatus } from '../types'
+import { fmtDateTime, php2 } from '../fmt'
 
-const php = (v: number) => `₱${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const php = php2
 type ItemDraft = Omit<MaterialItem, 'updated_at'>
 
 function blankItem(): ItemDraft {
@@ -206,7 +207,7 @@ export default function MaterialsPage() {
         <h2>Materials list</h2>
         <div className="muted">
           {status ? `${status.item_count} items from ${status.supplier_count} suppliers` : '-'}
-          {status?.imported_from && ` · last import ${status.imported_from}${status.imported_at ? ` on ${new Date(status.imported_at).toLocaleString()}` : ''}`}. The app is the master:
+          {status?.imported_from && ` · last import ${status.imported_from}${status.imported_at ? ` on ${fmtDateTime(status.imported_at)}` : ''}`}. The app is the master:
           edits here are used for pricing. Re-importing a workbook updates items by code and keeps panel dimensions typed here.
         </div>
         <div className="row" style={{ marginTop: 10 }}>

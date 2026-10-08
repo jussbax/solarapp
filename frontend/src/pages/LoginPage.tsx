@@ -2,6 +2,26 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api'
 import { getPasskey, passkeyProblem, passkeySupported } from '../passkeys'
 
+type Method = 'key' | 'password'
+const METHOD_KEY = 'login-method'
+
+/** The method that last signed in on this device, so a laptop without a key opens on the password form. */
+function rememberedMethod(): Method | null {
+  try {
+    const v = localStorage.getItem(METHOD_KEY)
+    return v === 'key' || v === 'password' ? v : null
+  } catch {
+    return null
+  }
+}
+function rememberMethod(m: Method) {
+  try {
+    localStorage.setItem(METHOD_KEY, m)
+  } catch {
+    /* private window or storage blocked: the next visit just opens on the default */
+  }
+}
+
 export default function LoginPage({ onLogin }: { onLogin: (user: string) => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -10,7 +30,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: string) => void
   const [passkeys, setPasskeys] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
+  const [method, setMethod] = useState<Method>(() => rememberedMethod() ?? 'key')
 
   useEffect(() => {
     api
@@ -28,6 +48,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: string) => void
     setError(null)
     try {
       const r = await api.login(username, password, code)
+      rememberMethod('password')
       onLogin(r.username)
     } catch (err) {
       const msg = (err as Error).message
@@ -45,6 +66,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: string) => void
       const { challenge_id, options } = await api.passkeyLoginOptions()
       const credential = await getPasskey(options)
       const r = await api.passkeyLogin(challenge_id, credential)
+      rememberMethod('key')
       onLogin(r.username)
     } catch (err) {
       setError(err instanceof Error && 'status' in err ? err.message : passkeyProblem(err))
@@ -53,7 +75,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: string) => void
     }
   }
 
-  const passwordForm = !passkeys || showPassword
+  // no key registered (or no support here): the password form is the only way in
+  const passwordForm = !passkeys || method === 'password'
 
   return (
     <form className="card login" onSubmit={submit}>
@@ -63,24 +86,22 @@ export default function LoginPage({ onLogin }: { onLogin: (user: string) => void
         <span className="tag">Solar assessment</span>
       </div>
       <h2>Sign in</h2>
-      {passkeys && (
-        <div className={passwordForm ? "passkey-box" : "passkey-box alone"}>
+      {passkeys && !passwordForm && (
+        <div className="passkey-box alone">
           <button className="primary" type="button" disabled={busy} onClick={withKey} data-testid="passkey-login">
             Sign in with your security key
           </button>
           <div className="hint">Plug in the key or hold it to the phone, then touch it and enter its PIN.</div>
-          {!showPassword && (
-            <button className="toggle link" type="button" onClick={() => setShowPassword(true)}>
-              Use the password instead
-            </button>
-          )}
+          <button className="alt" type="button" disabled={busy} onClick={() => setMethod('password')} data-testid="use-password">
+            Use the password instead
+          </button>
         </div>
       )}
       {passwordForm && (
         <>
           <div className="field">
             <label>Username</label>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus={!passkeys} autoComplete="username" />
+            <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
           </div>
           <div className="field">
             <label>Password</label>
@@ -98,6 +119,11 @@ export default function LoginPage({ onLogin }: { onLogin: (user: string) => void
       {passwordForm && (
         <button className="primary" disabled={busy} type="submit">
           Sign in
+        </button>
+      )}
+      {passwordForm && passkeys && (
+        <button className="alt" type="button" disabled={busy} onClick={() => setMethod('key')} data-testid="use-passkey">
+          Sign in with a security key instead
         </button>
       )}
     </form>
