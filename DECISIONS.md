@@ -694,3 +694,46 @@ with the corrected deliverable set and the boundary, is
 Left for the owner's go-ahead (scope, not defects): the leads inbox and the
 stage split, the Results regrouping with the plan drawing and the Gantt
 chart, and the engineering build order in the plan.
+
+## The boundary, built: leads out of the project list
+
+- A website booking is a lead, not a project. Leads live in their own table
+  and on a Leads page with the funnel (estimates run, leads, visits booked,
+  converted); the project list shows engineering facts only (customer,
+  address, faces, kWp, battery, stage, last calculated). "Start assessment"
+  turns a lead into a project with the customer, the pin (the visitor's,
+  or the town's centre), the bill from the estimate snapshot and a
+  reference back to the lead; the proposal and the card still say what the
+  website estimate was.
+- The stage list is the engineering and job sequence only: assessed,
+  quoted, signed, sourcing, installing, commissioned, net metering,
+  closed. Lead and contacted belong to the lead's own status (new,
+  contacted, visit booked, converted, closed). Old records at those stages
+  read as assessed; a startup migration moves lead-stage records without
+  results into the inbox and keeps those with results as projects.
+- Retention anonymises inbox leads that never became a project after
+  twelve months and never touches a project. The nav is Projects, Leads,
+  Materials, Settings; the estimate page link and the website-only
+  profile fields sit under a Website heading in Settings; the phone top
+  bar is one row with a menu.
+- A future CRM module takes the Leads page over through the same API; a
+  future PM module takes the later stages and the actuals. Both link by
+  the project id.
+
+## Drawings: the plan and the Gantt chart
+
+- The layout engine now reports geometry, not only counts: each panel's
+  rectangle in metres from the face's bottom-left corner, placed exactly
+  as the fitter measures its rows (same inset, same gap, rows from the
+  eave up), with the no-panel strips, the shade markers on the edge they
+  shade from, the hip or triangle outline, and which panels the sized
+  system uses with their string number. Panels left out for vents are
+  not drawn; the caption says how many were left out.
+- The roof check and the proposal carry one plan drawing per face with
+  panels (used panels solid, spare positions dashed, captions in facts:
+  "4 of your panels here; room for 5 more"); the program of works opens
+  its schedule with a Gantt chart (tasks as bars, milestones as diamonds,
+  payments as hollow diamonds, today marked). The React components draw
+  the same content for the Design and outputs step.
+- The bill of materials exports as CSV and XLSX with the owner's edits,
+  under the same stale rule as every document.
