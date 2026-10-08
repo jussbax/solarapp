@@ -74,7 +74,7 @@ const META: Record<string, { label: string; unit?: string; help?: string }> = {
   'system_losses.soiling': { label: 'Soiling', unit: '% of energy kept', help: 'Dust and dirt on the panels between rains; verify locally (a rice-field roof collects more in the dry season).' },
   'system_losses.other': { label: 'Other', unit: '% of energy kept', help: 'Module mismatch, availability and anything else after the panels. The four multiply: the array is sized on energy at the meter and the customer documents print that figure.' },
   'sizing.days_of_autonomy': { label: 'Days of autonomy', unit: 'evenings', help: 'The evenings the battery must carry without sun; your choice. 1 = the night deficit of the worst typical day (the rule until now), 2 = twice that. The balance over a real year of weather then reports how often it still runs out.' },
-  'roles.ac_breaker_amps': { label: 'Default AC breaker', unit: 'A' },
+  'roles.ac_breaker_amps': { label: 'AC breaker rating', unit: 'A' },
   'program.depart_time': { label: 'Leave base at' },
   'program.lunch_start': { label: 'Lunch at' },
   'program.lunch_minutes': { label: 'Lunch', unit: 'minutes' },
@@ -116,6 +116,54 @@ const META: Record<string, { label: string; unit?: string; help?: string }> = {
   'route.stops': { label: 'Stops in driving order' },
   'route.km': { label: 'Km between stops' },
   'route.toll': { label: 'Toll between stops', unit: '₱' },
+  // BOM item roles: plain names; the key itself is shown in small print under the label
+  'roles.rail': { label: 'Mounting rail', help: 'Two rail lines per row.' },
+  'roles.l_foot': { label: 'L-foot (roof attachment)' },
+  'roles.end_clamp': { label: 'End clamp', help: 'Four per row.' },
+  'roles.mid_clamp': { label: 'Mid clamp', help: 'Two per gap between panels.' },
+  'roles.splice': { label: 'Rail splice', help: 'One per rail joint.' },
+  'roles.pv_cable_red': { label: 'PV cable, red, by size (mm²)' },
+  'roles.pv_cable_black': { label: 'PV cable, black, by size (mm²)' },
+  'roles.thhn': { label: 'THHN wire, by size (mm²)', help: 'AC circuits and grounding.' },
+  'roles.battery_cable_pair': { label: 'Battery cable lug pair, by size (mm²)' },
+  'roles.mc4_pair': { label: 'MC4 connector pair' },
+  'roles.dc_breaker': { label: 'DC breaker', help: 'One per string.' },
+  'roles.dc_spd': { label: 'DC surge protector', help: 'One per inverter.' },
+  'roles.battery_breaker_pattern': { label: 'Battery breaker: words in the item name', help: 'The generator picks the smallest breaker whose name matches and whose amps cover 1.25 × the inverter battery current.' },
+  'roles.battery_breaker_fallback': { label: 'Battery breaker: item when none matches' },
+  'roles.ats': { label: 'Transfer switch (ATS)' },
+  'roles.ats_amps': { label: 'ATS rating', unit: 'A' },
+  'roles.ac_breaker': { label: 'AC breaker', help: 'DU disconnect, grid-inverter, inverter-load, grid-load.' },
+  'roles.ac_breakers_per_inverter': { label: 'AC breakers per inverter' },
+  'roles.ac_spd': { label: 'AC surge protector' },
+  'roles.ac_spds_per_inverter': { label: 'AC surge protectors per inverter' },
+  'roles.enclosure': { label: 'Enclosure', help: 'DC box and AC box.' },
+  'roles.enclosures': { label: 'Enclosures per inverter' },
+  'roles.cable_tray': { label: 'Cable tray' },
+  'roles.cable_trays': { label: 'Cable trays per job' },
+  'roles.conduit': { label: 'Conduit' },
+  'roles.ground_rod': { label: 'Ground rod' },
+  'roles.ground_rods': { label: 'Ground rods per job' },
+  'roles.earth_lug': { label: 'Earth lug' },
+  'roles.earth_lugs': { label: 'Earth lugs per job' },
+  'roles.sealant': { label: 'Sealant' },
+  'roles.sealants': { label: 'Sealant tubes per job' },
+  'roles.max_panels_per_string': { label: 'Max panels per string' },
+  'roles.inverter_exclude_words': { label: 'Inverter names to skip (words)', help: 'Items whose name carries one of these are never picked as the inverter.' },
+  'roles.battery_exclude_words': { label: 'Battery names to skip (words)', help: 'Items whose name carries one of these are never picked as the battery.' },
+}
+/** Sections whose keys are catalogue roles: the key is shown in small print under the plain name. */
+const KEYED_SECTIONS = new Set(['roles'])
+const SECTION_NOTES: Record<string, string> = {
+  roles: 'Each role names the materials-list code the generator uses for that item; change a code to swap the item. The size tables map a wire size in mm² to its code. Counts and patterns are the rules beside them.',
+  categories: 'The markup tier and the wastage allowance for every item in a category, by the category name on the Materials page. A category that is not listed takes 30% markup and no wastage.',
+}
+
+/** A category rule as the server stores it (percentages as fractions). */
+interface CategoryRule {
+  name: string
+  markup_tier: number
+  wastage: number
 }
 
 function titleCase(k: string) {
@@ -124,6 +172,56 @@ function titleCase(k: string) {
 const isMatrix = (v: unknown): v is number[][] => Array.isArray(v) && v.length > 0 && v.every((r) => Array.isArray(r) && r.every((x) => typeof x === 'number'))
 const isPrimList = (v: unknown): v is (string | number)[] => Array.isArray(v) && v.every((x) => typeof x === 'string' || typeof x === 'number')
 const isPrimDict = (v: unknown): v is Record<string, string | number> => !!v && typeof v === 'object' && !Array.isArray(v) && Object.values(v as object).every((x) => typeof x === 'string' || typeof x === 'number')
+const isCategoryList = (v: unknown): v is CategoryRule[] => Array.isArray(v) && v.every((r) => r && typeof r === 'object' && typeof (r as CategoryRule).name === 'string' && typeof (r as CategoryRule).markup_tier === 'number')
+const pctIn = (v: number) => Math.round(v * 10000) / 100
+const fieldId = (section: string, key: string) => `cfg-${section}-${key}`.replace(/[^A-Za-z0-9_-]/g, '-')
+
+/** The categories as a small table (name, markup %, wastage %) instead of a JSON textarea. */
+function CategoriesEditor({ rows, onChange }: { rows: CategoryRule[]; onChange: (rows: CategoryRule[]) => void }) {
+  const set = (i: number, p: Partial<CategoryRule>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...p } : r)))
+  const num = (s: string) => (s === '' ? 0 : Number(s)) / 100
+  return (
+    <div>
+      <table className="categories" data-testid="categories-editor">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th className="num">Markup %</th>
+            <th className="num">Wastage %</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              <td className="cell-main" data-label="Category">
+                <input value={r.name} aria-label={`Category ${i + 1} name`} onChange={(e) => set(i, { name: e.target.value })} />
+              </td>
+              <td className="num" data-label="Markup %">
+                <input type="number" step="any" min={0} value={pctIn(r.markup_tier)} aria-label={`${r.name || 'Category'} markup %`} style={{ width: 110 }} onChange={(e) => set(i, { markup_tier: num(e.target.value) })} />
+              </td>
+              <td className="num" data-label="Wastage %">
+                <input type="number" step="any" min={0} value={pctIn(r.wastage ?? 0)} aria-label={`${r.name || 'Category'} wastage %`} style={{ width: 110 }} onChange={(e) => set(i, { wastage: num(e.target.value) })} />
+              </td>
+              <td className="cell-actions">
+                <button type="button" className="toggle link" onClick={() => onChange(rows.filter((_, j) => j !== i))}>
+                  remove
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ marginTop: 6 }}>
+        <button type="button" className="small" onClick={() => onChange([...rows, { name: '', markup_tier: 0.3, wastage: 0 }])}>
+          Add category
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const UNDO_SECONDS = 10
 
 export default function PricingSettings() {
   const [cfg, setCfg] = useState<PricingConfig | null>(null)
@@ -133,6 +231,8 @@ export default function PricingSettings() {
   const [error, setError] = useState<string | null>(null)
   const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  // after Reset to defaults the settings as they were stay here for ten seconds, so a slip can be undone
+  const [undo, setUndo] = useState<{ cfg: PricingConfig; saved: PricingConfig; left: number } | null>(null)
 
   useEffect(() => {
     api
@@ -143,6 +243,16 @@ export default function PricingSettings() {
       })
       .catch((e) => setError(e.message))
   }, [])
+
+  useEffect(() => {
+    if (!undo) return
+    if (undo.left <= 0) {
+      setUndo(null)
+      return
+    }
+    const t = window.setTimeout(() => setUndo((u) => (u ? { ...u, left: u.left - 1 } : u)), 1000)
+    return () => window.clearTimeout(t)
+  }, [undo])
 
   const dirtySections = useMemo(() => {
     if (!cfg || !saved) return []
@@ -184,6 +294,7 @@ export default function PricingSettings() {
       setCfg(r)
       setSaved(r)
       setJsonDrafts({})
+      setUndo(null)
       setMsg('Pricing settings saved. Calculate an assessment again to apply them.')
     } catch (e) {
       setError((e as Error).message)
@@ -192,12 +303,39 @@ export default function PricingSettings() {
     }
   }
   const reset = async () => {
-    if (!window.confirm('Reset all pricing settings to the built-in workbook defaults? Your edits in every section are lost.')) return
-    const r = await api.resetPricingConfig()
-    setCfg(r)
-    setSaved(r)
-    setJsonDrafts({})
-    setMsg('Reset to defaults.')
+    if (!window.confirm('Reset all pricing settings to the built-in workbook defaults? Your edits in every section are lost. You can undo for ten seconds afterwards.')) return
+    setError(null)
+    setBusy(true)
+    const before = { cfg, saved: saved ?? cfg }
+    try {
+      const r = await api.resetPricingConfig()
+      setCfg(r)
+      setSaved(r)
+      setJsonDrafts({})
+      setMsg('Reset to defaults.')
+      setUndo({ ...before, left: UNDO_SECONDS })
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const undoReset = async () => {
+    if (!undo) return
+    setError(null)
+    setBusy(true)
+    try {
+      const r = await api.savePricingConfig(undo.saved)
+      setSaved(r)
+      setCfg(undo.cfg) // unsaved edits from before the reset come back as unsaved edits
+      setJsonDrafts({})
+      setUndo(null)
+      setMsg('Reset undone: your settings are back.')
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
   }
   const discard = () => {
     if (saved) setCfg(saved)
@@ -207,11 +345,13 @@ export default function PricingSettings() {
   const renderValue = (section: string, key: string, v: unknown) => {
     const path = `${section}.${key}`
     const meta = META[path]
+    const id = fieldId(section, key)
     if (typeof v === 'number') {
       const pct = PCT_KEYS.has(key)
       return (
         <span className="inline">
           <input
+            id={id}
             type="number"
             step="any"
             value={pct ? Math.round(v * 10000) / 100 : v}
@@ -225,10 +365,10 @@ export default function PricingSettings() {
         </span>
       )
     }
-    if (typeof v === 'boolean') return <input type="checkbox" checked={v} onChange={(e) => setField(section, key, e.target.checked)} style={{ width: 'auto' }} />
+    if (typeof v === 'boolean') return <input id={id} type="checkbox" checked={v} onChange={(e) => setField(section, key, e.target.checked)} style={{ width: 'auto' }} />
     if (typeof v === 'string') {
-      if (TIME_KEYS.has(key)) return <input type="time" value={v} style={{ width: 150 }} onChange={(e) => setField(section, key, e.target.value)} />
-      return <input value={v} onChange={(e) => setField(section, key, e.target.value)} />
+      if (TIME_KEYS.has(key)) return <input id={id} type="time" value={v} style={{ width: 150 }} onChange={(e) => setField(section, key, e.target.value)} />
+      return <input id={id} value={v} onChange={(e) => setField(section, key, e.target.value)} className={KEYED_SECTIONS.has(section) ? 'code' : undefined} />
     }
     if (section === 'program' && key === 'payment') {
       return <PaymentPlanEditor plan={v as PaymentPlan} defaults={v as PaymentPlan} onChange={(p) => p && setField(section, key, p)} hideDefaultLink />
@@ -260,6 +400,7 @@ export default function PricingSettings() {
                         step="any"
                         value={x}
                         style={{ width: 72 }}
+                        aria-label={`${stops[i] ?? i + 1} to ${stops[j] ?? j + 1}`}
                         onChange={(e) => {
                           const next = v.map((r) => [...r])
                           next[i][j] = e.target.value === '' ? 0 : Number(e.target.value)
@@ -279,6 +420,7 @@ export default function PricingSettings() {
       const numeric = v.every((x) => typeof x === 'number')
       return (
         <input
+          id={id}
           value={jsonDrafts[path] ?? v.join(', ')}
           onChange={(e) => {
             setJsonDrafts({ ...jsonDrafts, [path]: e.target.value })
@@ -295,18 +437,21 @@ export default function PricingSettings() {
       )
     }
     if (isPrimDict(v)) {
+      const sizes = KEYED_SECTIONS.has(section)
       return (
         <table className="kv">
           <tbody>
             {Object.entries(v).map(([k, x]) => (
               <tr key={k}>
-                <th>{k}</th>
+                <th>{sizes && /^[\d.]+$/.test(k) ? `${k} mm²` : k}</th>
                 <td>
                   <input
                     type={typeof x === 'number' ? 'number' : 'text'}
                     step="any"
                     value={x}
                     style={{ width: 150 }}
+                    aria-label={`${meta?.label ?? titleCase(key)} ${k}`}
+                    className={sizes ? 'code' : undefined}
                     onChange={(e) => setField(section, key, { ...v, [k]: typeof x === 'number' ? (e.target.value === '' ? 0 : Number(e.target.value)) : e.target.value })}
                   />
                 </td>
@@ -319,6 +464,7 @@ export default function PricingSettings() {
     const text = jsonDrafts[path] ?? JSON.stringify(v, null, 1)
     return (
       <textarea
+        id={id}
         rows={Math.min(12, Math.max(2, text.split('\n').length))}
         value={text}
         style={{ fontFamily: 'monospace', fontSize: 12 }}
@@ -331,6 +477,20 @@ export default function PricingSettings() {
           }
         }}
       />
+    )
+  }
+
+  /** The key's label: a <label htmlFor> when the control is a single input, plain text for tables and editors. */
+  const renderKey = (section: string, key: string, v: unknown) => {
+    const meta = META[`${section}.${key}`]
+    const single = typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string' || isPrimList(v)
+    const text = meta?.label ?? titleCase(key)
+    return (
+      <>
+        {single ? <label htmlFor={fieldId(section, key)}>{text}</label> : text}
+        {KEYED_SECTIONS.has(section) && <span className="key">{key}</span>}
+        {meta?.help && <div className="hint">{meta.help}</div>}
+      </>
     )
   }
 
@@ -354,31 +514,33 @@ export default function PricingSettings() {
             </div>
             {open === sec && (
               <div style={{ marginTop: 8 }}>
+                {SECTION_NOTES[sec] && (
+                  <div className="muted" style={{ marginBottom: 6 }}>
+                    {SECTION_NOTES[sec]}
+                  </div>
+                )}
                 {isObj ? (
                   <table className="settings">
                     <tbody>
-                      {Object.entries(v as Record<string, unknown>).map(([k, val]) => {
-                        const meta = META[`${sec}.${k}`]
-                        return (
-                          <tr key={k}>
-                            <th className="settings-key">
-                              {meta?.label ?? titleCase(k)}
-                              {meta?.help && <div className="hint">{meta.help}</div>}
-                            </th>
-                            <td>{renderValue(sec, k, val)}</td>
-                          </tr>
-                        )
-                      })}
+                      {Object.entries(v as Record<string, unknown>).map(([k, val]) => (
+                        <tr key={k}>
+                          <th className="settings-key">{renderKey(sec, k, val)}</th>
+                          <td>{renderValue(sec, k, val)}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
+                ) : isCategoryList(v) ? (
+                  <CategoriesEditor rows={v} onChange={(rows) => setCfg({ ...cfg, [sec]: rows })} />
                 ) : (
                   <div>
                     {typeof v === 'string' ? (
-                      <input value={v} onChange={(e) => setCfg({ ...cfg, [sec]: e.target.value })} />
+                      <input value={v} onChange={(e) => setCfg({ ...cfg, [sec]: e.target.value })} aria-label={SECTION_LABELS[sec] ?? titleCase(sec)} />
                     ) : (
                       <textarea
                         rows={10}
                         style={{ fontFamily: 'monospace', fontSize: 12 }}
+                        aria-label={SECTION_LABELS[sec] ?? titleCase(sec)}
                         value={jsonDrafts[sec] ?? JSON.stringify(v, null, 1)}
                         onChange={(e) => {
                           setJsonDrafts({ ...jsonDrafts, [sec]: e.target.value })
@@ -405,9 +567,15 @@ export default function PricingSettings() {
         <button type="button" onClick={discard} disabled={!dirty}>
           Discard changes
         </button>
-        <button type="button" onClick={reset} style={{ marginLeft: 'auto' }}>
-          Reset to defaults
-        </button>
+        {undo ? (
+          <button type="button" onClick={undoReset} disabled={busy} style={{ marginLeft: 'auto' }} data-testid="undo-reset">
+            Undo reset ({undo.left} s)
+          </button>
+        ) : (
+          <button type="button" onClick={reset} disabled={busy} style={{ marginLeft: 'auto' }}>
+            Reset to defaults
+          </button>
+        )}
         {msg && <span className="muted" style={{ flexBasis: '100%' }}>{msg}</span>}
         {error && (
           <div className="banner bad" style={{ flexBasis: '100%', margin: 0 }}>

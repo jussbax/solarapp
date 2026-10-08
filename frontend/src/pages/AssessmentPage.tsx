@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { api, type ApiError } from '../api'
-import type { AssessmentDoc, AssessmentOut, DataStatus } from '../types'
+import type { AssessmentDoc, AssessmentOut, DataStatus, JobStage } from '../types'
 import MapPicker from '../components/MapPicker'
 import FacesEditor from '../components/FacesEditor'
 import PanelsEditor from '../components/PanelsEditor'
@@ -9,23 +9,40 @@ import ReadingsEditor from '../components/ReadingsEditor'
 import ResultsView from '../components/ResultsView'
 import NumberInput from '../components/NumberInput'
 import AuditEditor from '../components/AuditEditor'
-import AuditResults from '../components/AuditResults'
+import SystemDesign from '../components/SystemDesign'
+import DocumentsCard, { documentState } from '../components/DocumentsCard'
 import ErrorBoundary from '../components/ErrorBoundary'
+import Field from '../components/Field'
 import { PricingInputs, PricingResults } from '../components/PricingSection'
-import { ProgramInputs, ProgramResults } from '../components/ProgramSection'
+import { CashflowResults, ProgramInputs, ProgramResults } from '../components/ProgramSection'
 import { EconomicsInputs, EconomicsResults } from '../components/EconomicsSection'
-import { emptyEconomicsJob, emptyPricingJob, emptyProgramJob } from '../types'
+import { emptyDoc, emptyEconomicsJob, emptyPricingJob, emptyProgramJob, JOB_STAGES, NEW_DRAFT_ID } from '../types'
 import { clearDraft, readDraft, writeDraft, type Draft } from '../draft'
 import { fmtDateShort, fmtDateTime, php0 } from '../fmt'
+import { useNarrow } from '../components/responsive'
 
 type Step = 'site' | 'audit' | 'pricing' | 'results'
 const STEPS: { id: Step; label: string; short: string }[] = [
   { id: 'site', label: 'On site', short: 'Site' },
   { id: 'audit', label: 'Energy audit', short: 'Audit' },
   { id: 'pricing', label: 'Pricing and program', short: 'Pricing' },
-  { id: 'results', label: 'Results', short: 'Results' },
+  { id: 'results', label: 'Design and outputs', short: 'Outputs' },
 ]
 const CARD_STEP: Record<string, Step> = { 'card-site': 'site', 'card-faces': 'site', 'card-panels': 'site', 'card-readings': 'site', 'card-audit': 'audit' }
+
+/** The seven cards of Design and outputs, in order; the in-step index jumps to them. */
+type DesignCardId = 'design-roof' | 'design-system' | 'design-quantities' | 'design-program' | 'design-cashflow' | 'design-savings' | 'design-documents'
+const DESIGN_CARDS: { id: DesignCardId; label: string; short: string }[] = [
+  { id: 'design-roof', label: 'Roof and production', short: 'Roof' },
+  { id: 'design-system', label: 'System design', short: 'System' },
+  { id: 'design-quantities', label: 'Quantities', short: 'Quantities' },
+  { id: 'design-program', label: 'Program', short: 'Program' },
+  { id: 'design-cashflow', label: 'Cashflow', short: 'Cashflow' },
+  { id: 'design-savings', label: 'Savings for the customer', short: 'Savings' },
+  { id: 'design-documents', label: 'Documents', short: 'Documents' },
+]
+/** The cards that exist before the energy audit is calculated. */
+const FIRST_CARDS = new Set<DesignCardId>(['design-roof', 'design-documents'])
 
 /** What the owner reads when Save or Calculate cannot reach the server; the draft on the device keeps the edits. */
 const OFFLINE_EDITS_KEPT = 'No connection. Your edits are kept on this phone; Save again when you have signal.'
@@ -46,10 +63,16 @@ function stepFromHash(): Step {
   return (STEPS.some((s) => s.id === h) ? h : 'site') as Step
 }
 
+/** The inputs without the card's next-step line, which is printed and never computed. */
+const inputsOf = (d: AssessmentDoc) => JSON.stringify({ ...d, card_next_step: '' })
+
 export default function AssessmentPage({ status }: { status: DataStatus | null }) {
   const { id } = useParams()
-  const aid = Number(id)
+  // "/assessments/new" is an unsaved draft: no record exists until the first Save (or Calculate, which saves first)
+  const isNew = id === 'new'
+  const aid = isNew ? NEW_DRAFT_ID : Number(id)
   const navigate = useNavigate()
+  const narrow = useNarrow()
   const [a, setA] = useState<AssessmentOut | null>(null)
   const [doc, setDoc] = useState<AssessmentDoc | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -58,8 +81,10 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   const [toast, setToast] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [step, setStepState] = useState<Step>(stepFromHash)
+  const [activeCard, setActiveCard] = useState<DesignCardId>('design-roof')
   const draftTimer = useRef<number | null>(null)
   const docBusy = useRef(false)
+  const heldId = useRef<number | null>(null) // the record id the page already holds, so the URL switch after the first Save does not refetch
 
   const setStep = useCallback((s: Step) => {
     setStepState(s)
@@ -74,9 +99,21 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   }, [])
 
   useEffect(() => {
+    if (isNew) {
+      heldId.current = null
+      setA(null)
+      setDoc(emptyDoc())
+      setDirty(false)
+      setError(null)
+      setDraft(readDraft(NEW_DRAFT_ID)) // an abandoned new draft on this device can be restored or discarded
+      if (stepFromHash() === 'results') setStep('site')
+      return
+    }
+    if (heldId.current === aid) return
     api
       .getAssessment(aid)
       .then((r) => {
+        heldId.current = r.id
         setA(r)
         setDoc(r.doc)
         setDirty(false)
@@ -86,7 +123,12 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         if (!r.results && stepFromHash() === 'results') setStep('site')
       })
       .catch((e) => setError(e.message))
-  }, [aid, setStep])
+  }, [aid, isNew, setStep])
+
+  // the first Save of a new draft created the record: the URL switches to its id and the page carries on as a saved record
+  useEffect(() => {
+    if (isNew && a && a.id) navigate(`/assessments/${a.id}#${step}`, { replace: true })
+  }, [isNew, a, step, navigate])
 
   /** Until the server stores card_next_step, keep what was typed for this session so the card still prints it. */
   const withLocalFields = (server: AssessmentDoc, local: AssessmentDoc | null): AssessmentDoc =>
@@ -115,9 +157,9 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   }, [blocker])
 
   useEffect(() => {
-    if (!dirty || !doc || !a) return
+    if (!dirty || !doc) return
     if (draftTimer.current) window.clearTimeout(draftTimer.current)
-    draftTimer.current = window.setTimeout(() => writeDraft(aid, doc, a.updated_at), 600)
+    draftTimer.current = window.setTimeout(() => writeDraft(aid, doc, a?.updated_at ?? ''), 600)
     return () => {
       if (draftTimer.current) window.clearTimeout(draftTimer.current)
     }
@@ -129,6 +171,37 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
     return () => window.clearTimeout(t)
   }, [toast])
 
+  const results = a?.results ?? null
+
+  // the in-step index follows the scroll: the last card whose top has passed the sticky chrome is the current one
+  useEffect(() => {
+    if (step !== 'results' || !results) return
+    let raf = 0
+    const onScroll = () => {
+      if (raf) return
+      raf = window.requestAnimationFrame(() => {
+        raf = 0
+        let current: DesignCardId = 'design-roof'
+        for (const c of DESIGN_CARDS) {
+          const el = document.getElementById(c.id)
+          if (el && el.getBoundingClientRect().top <= 140) current = c.id
+        }
+        // at the foot of the page the last card cannot reach the top of the screen, so it is the current one
+        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) current = 'design-documents'
+        setActiveCard(current)
+      })
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (raf) window.cancelAnimationFrame(raf)
+    }
+  }, [step, results])
+
+  // only a change to the inputs makes the results stale; the card's next-step line is printed, never computed
+  const dirtyInputs = useMemo(() => dirty && (!a || inputsOf(doc!) !== inputsOf(a.doc)), [dirty, doc, a])
+
   if (error && !doc)
     return (
       <div className="card">
@@ -136,7 +209,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         <Link to="/">Back to the list</Link>
       </div>
     )
-  if (!doc || !a) return <div className="muted">Loading...</div>
+  if (!doc || (!isNew && !a)) return <div className="muted">Loading...</div>
 
   /** Shows an error in the bar; a validation error also opens the step and scrolls to the card it names. */
   const fail = (e: unknown) => {
@@ -161,7 +234,8 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
     setBusy('Saving...')
     setError(null)
     try {
-      const r = await api.updateAssessment(aid, doc)
+      const r = isNew ? await api.createAssessment(doc) : await api.updateAssessment(aid, doc)
+      heldId.current = r.id
       setA(r)
       setDoc(withLocalFields(r.doc, doc))
       setDirty(false)
@@ -179,7 +253,19 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
     setBusy('Calculating...')
     setError(null)
     try {
-      const r = await api.computeAssessment(aid, doc)
+      let target = aid
+      if (isNew) {
+        // Calculate saves first: a new draft becomes a record here, then the model runs on it
+        const created = await api.createAssessment(doc)
+        target = created.id
+        heldId.current = created.id
+        setA(created)
+        setDirty(false)
+        clearDraft(aid)
+        setDraft(null)
+      }
+      const r = await api.computeAssessment(target, doc)
+      heldId.current = r.id
       setA(r)
       setDoc(withLocalFields(r.doc, doc))
       setDirty(false)
@@ -195,7 +281,8 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   }
 
   const remove = async () => {
-    if (!window.confirm('Delete this assessment? This cannot be undone.')) return
+    if (isNew) return
+    if (!window.confirm('Delete this project? This cannot be undone.')) return
     setDirty(false)
     clearDraft(aid)
     await api.deleteAssessment(aid)
@@ -213,28 +300,25 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
     setDraft(null)
   }
 
-  const results = a.results
   const kResults = results?.k.sets ?? null
-  // One rule for every document (roof check PDF, card, proposal, program of works): the server answers 409 in the same cases.
-  const stale = a.results_stale || dirty
+  // One rule for every document (roof check PDF, card, proposal, program of works, BOM exports): the server answers 409 in the same cases.
+  const stale = (a?.results_stale ?? false) || dirtyInputs
   const synthetic = !!results?.dataset.synthetic
-  const docReason = !results
-    ? 'Calculate first.'
-    : stale
-      ? 'Documents need a fresh calculation. Press Calculate first.'
-      : synthetic
-        ? 'Documents are disabled while test weather data is in use.'
-        : null
-  const statusText = busy ?? (dirty ? 'Unsaved changes' : a.results_stale ? 'Needs recalculating' : results ? 'Up to date' : 'Not calculated yet')
-  const statusClass = busy ? 'busy' : dirty ? 'unsaved' : a.results_stale ? 'stale' : results ? 'ok' : ''
+  const exportReason = documentState({ customer: false, needs: 'pricing' }, results, stale, synthetic).reason
+  const statusText = busy ?? (isNew ? 'Not saved yet' : dirty ? 'Unsaved changes' : a!.results_stale ? 'Needs recalculating' : results ? 'Up to date' : 'Not calculated yet')
+  const statusClass = busy ? 'busy' : isNew || dirty ? 'unsaved' : a!.results_stale ? 'stale' : results ? 'ok' : ''
 
   /**
    * Opens a document without ever landing a tab on a raw error page: the file is fetched first, a 409 or an outage goes to the bar,
    * and only a real file is shown. An inline document (the card) gets a tab opened inside the click, so phone browsers do not block it;
-   * an attachment (the PDFs) is saved under the server's file name, as the plain link did.
+   * an attachment (the PDFs, the exports) is saved under the server's file name, as the plain link did.
    */
   const openDocument = async (url: string, inlineHint = false) => {
-    if (docReason || docBusy.current) return
+    if (docBusy.current) return
+    if (!results || stale) {
+      setError(stale ? 'Documents need a fresh calculation. Press Calculate first.' : 'Calculate first.')
+      return
+    }
     docBusy.current = true
     setError(null)
     const win = inlineHint ? window.open('', '_blank') : null
@@ -284,18 +368,22 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   const summaryPanels = sizing?.panels ?? results?.production.total_panels
   const summaryKwp = sizing?.kwp ?? results?.production.system_kwp
   const batteryKwh = sizing?.battery?.installed_kwh ?? 0
-  // after the first calculation the three downstream cards are all "needs the audit": one line says what comes next instead
+  const selectedPanel = results?.panels.find((p) => p.panel.id === results.selected_panel_id)?.panel
+  // after the first calculation the downstream cards are all "needs the audit": one line says what comes next instead
   const auditPending =
     !!results && !results.sizing && [results.pricing, results.economics, results.program].every((b) => b != null && !b.available)
+  const cardAvailable = (c: DesignCardId) => !auditPending || FIRST_CARDS.has(c)
+  const stageValue: JobStage = doc.program?.stage ?? 'assessed'
 
   const go = (cardId: string) => () => document.getElementById(cardId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const setStage = (stage: JobStage) => patch({ program: { ...(doc.program ?? emptyProgramJob()), stage } })
 
   return (
     <div>
       {draft && (
         <div className="banner info">
           Unsaved edits from {fmtDateTime(draft.saved_at)} are saved on this device
-          {draft.base_updated_at !== a.updated_at && ' (the assessment was saved elsewhere since, so they may be older)'}.{' '}
+          {a && draft.base_updated_at !== a.updated_at && ' (the project was saved elsewhere since, so they may be older)'}.{' '}
           <button type="button" className="small primary" onClick={restoreDraft} style={{ marginLeft: 6 }}>
             Restore them
           </button>{' '}
@@ -306,9 +394,22 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
       )}
 
       <div className="page-head">
-        <div>
-          <h1 className="page-title">{doc.customer_name || 'New assessment'}</h1>
-          <div className="muted">{doc.address || 'No address yet'}</div>
+        <div className="page-head-main">
+          <div className="page-head-row">
+            <h1 className="page-title">{doc.customer_name || (isNew ? 'New project' : 'Unnamed project')}</h1>
+            {/* the job's own stage, saved with the record; lead and contacted live on the Leads page */}
+            <select className="stage-pill" aria-label="Job stage" title="Job stage" value={stageValue} onChange={(e) => setStage(e.target.value as JobStage)} data-testid="stage-pill">
+              {JOB_STAGES.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="muted">
+            {doc.address || 'No address yet'}
+            {isNew && ' · not saved yet: Save creates the record'}
+          </div>
         </div>
       </div>
 
@@ -319,11 +420,12 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             <button key={s.id} type="button" className={`tab ${step === s.id ? 'on' : ''}`} onClick={() => setStep(s.id)} disabled={disabled} title={disabled ? 'Calculate first' : ''}>
               <span className="tab-long">{s.label}</span>
               <span className="tab-short">{s.short}</span>
-              {s.id === 'results' && results && a.results_stale && <span className="dot warn" title="Needs recalculating" />}
+              {s.id === 'results' && results && a?.results_stale && <span className="dot warn" title="Needs recalculating" />}
             </button>
           )
         })}
       </nav>
+      {!results && <div className="tabs-note muted">Design and outputs open after the first calculation.</div>}
 
       {step === 'site' && (
         <>
@@ -339,49 +441,32 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
           <div className="card" id="card-site">
             <h2>Site</h2>
             <div className="row">
-              <div>
-                <label>Customer name</label>
-                <input value={doc.customer_name} onChange={(e) => patch({ customer_name: e.target.value })} />
-              </div>
-              <div>
-                <label>Address</label>
-                <input value={doc.address} onChange={(e) => patch({ address: e.target.value })} />
-              </div>
+              <Field label="Customer name">{(fid) => <input id={fid} value={doc.customer_name} onChange={(e) => patch({ customer_name: e.target.value })} />}</Field>
+              <Field label="Address">{(fid) => <input id={fid} value={doc.address} onChange={(e) => patch({ address: e.target.value })} />}</Field>
             </div>
-            <div className="field">
-              <label>Notes (internal)</label>
-              <textarea rows={2} value={doc.notes} onChange={(e) => patch({ notes: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Next step printed on the card</label>
-              <input
-                value={doc.card_next_step ?? ''}
-                onChange={(e) => patch({ card_next_step: e.target.value })}
-                placeholder="Next step: your free energy audit"
-                maxLength={120}
-              />
-              <div className="hint">Shown on the roof check card the customer gets. A date and time help, e.g. "Energy audit: Saturday 18 Oct, 9 am, about an hour".</div>
-            </div>
+            <Field label="Notes (internal)" className="field">
+              {(fid) => <textarea id={fid} rows={2} value={doc.notes} onChange={(e) => patch({ notes: e.target.value })} />}
+            </Field>
             <MapPicker lat={doc.lat} lon={doc.lon} onChange={(lat, lon) => patch({ lat, lon })} />
-            <div className="card-foot">
-              <button type="button" className="danger" onClick={remove} disabled={!!busy}>
-                Delete assessment
-              </button>
-            </div>
+            {!isNew && (
+              <div className="card-foot">
+                <button type="button" className="danger" onClick={remove} disabled={!!busy}>
+                  Delete project
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="card" id="card-faces">
             <h2>Roof faces</h2>
             <FacesEditor faces={doc.faces} warnings={dirty ? null : results?.warnings} onChange={(faces) => patch({ faces })} />
             <div className="row" style={{ marginTop: 10 }}>
-              <div className="narrow" style={{ width: 160 }}>
-                <label>Edge setback (m)</label>
-                <NumberInput value={doc.setback_m} onChange={(v) => patch({ setback_m: v ?? 0 })} min={0} step={0.1} />
-              </div>
-              <div className="narrow" style={{ width: 160 }}>
-                <label>Gap between panels (m)</label>
-                <NumberInput value={doc.gap_m} onChange={(v) => patch({ gap_m: v ?? 0 })} min={0} step={0.01} />
-              </div>
+              <Field label="Edge setback (m)" className="narrow" style={{ width: 160 }}>
+                {(fid) => <NumberInput id={fid} value={doc.setback_m} onChange={(v) => patch({ setback_m: v ?? 0 })} min={0} step={0.1} />}
+              </Field>
+              <Field label="Gap between panels (m)" className="narrow" style={{ width: 160 }}>
+                {(fid) => <NumberInput id={fid} value={doc.gap_m} onChange={(v) => patch({ gap_m: v ?? 0 })} min={0} step={0.01} />}
+              </Field>
             </div>
           </div>
 
@@ -399,14 +484,12 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
           <div className="card" id="card-readings">
             <h2>Roof readings</h2>
             <div className="row" style={{ marginBottom: 10 }}>
-              <div className="narrow" style={{ width: 160 }}>
-                <label>Test panel rating (W)</label>
-                <NumberInput value={doc.test_panel_rating_w} onChange={(v) => patch({ test_panel_rating_w: v ?? 50 })} min={1} />
-              </div>
-              <div className="narrow" style={{ width: 200 }}>
-                <label>Calibration factor</label>
-                <NumberInput value={doc.test_panel_calibration} onChange={(v) => patch({ test_panel_calibration: v ?? 1 })} min={0.5} max={1.5} step={0.01} />
-              </div>
+              <Field label="Test panel rating (W)" className="narrow" style={{ width: 160 }}>
+                {(fid) => <NumberInput id={fid} value={doc.test_panel_rating_w} onChange={(v) => patch({ test_panel_rating_w: v ?? 50 })} min={1} />}
+              </Field>
+              <Field label="Calibration factor" className="narrow" style={{ width: 200 }}>
+                {(fid) => <NumberInput id={fid} value={doc.test_panel_calibration} onChange={(v) => patch({ test_panel_calibration: v ?? 1 })} min={0.5} max={1.5} step={0.01} />}
+              </Field>
             </div>
             <ReadingsEditor
               sets={doc.reading_sets}
@@ -461,10 +544,10 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             </div>
           )}
           <div className={stale ? 'stale' : ''}>
-            <div className="card summary">
+            <div className="card summary" id="design-glance">
               <h2>At a glance</h2>
               <div className="kpis">
-                <button type="button" className="kpi kpi-link" onClick={go('results-production')}>
+                <button type="button" className="kpi kpi-link" onClick={go('design-roof')}>
                   <div className="label">{sizing ? 'Recommended system' : 'Roof can hold'}</div>
                   <div className="value">
                     {summaryPanels} panels · {summaryKwp?.toFixed(2)} kWp
@@ -472,7 +555,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                   <div className="sub">{batteryKwh > 0 ? `${batteryKwh.toFixed(0)} kWh battery` : sizing ? 'no battery' : 'full roof'}</div>
                 </button>
                 {pricing?.available && pricing.totals && (
-                  <button type="button" className="kpi kpi-link" onClick={go('pricing')}>
+                  <button type="button" className="kpi kpi-link" onClick={go('design-quantities')}>
                     <div className="label">Contract price</div>
                     <div className="value">{php0(pricing.totals.contract_rounded)}</div>
                     <div className="sub">VAT included</div>
@@ -480,14 +563,14 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 )}
                 {eco?.available && (
                   <>
-                    <button type="button" className="kpi kpi-link" onClick={go('economics')}>
+                    <button type="button" className="kpi kpi-link" onClick={go('design-savings')}>
                       <div className="label">Monthly bill</div>
                       <div className="value">
                         {php0(eco.bill_before_monthly)} → {php0(eco.bill_after_monthly)}
                       </div>
                       <div className="sub">about {php0(eco.savings_monthly)} less a month</div>
                     </button>
-                    <button type="button" className="kpi kpi-link" onClick={go('economics')}>
+                    <button type="button" className="kpi kpi-link" onClick={go('design-savings')}>
                       <div className="label">Pays for itself in</div>
                       <div className="value">{eco.payback_years != null ? `${eco.payback_years.toFixed(1)} years` : `more than ${eco.assumptions?.analysis_years ?? 25} years`}</div>
                       <div className="sub">{php0(eco.year1?.savings)} saved in year one</div>
@@ -495,7 +578,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                   </>
                 )}
                 {results.program?.available && (
-                  <button type="button" className="kpi kpi-link" onClick={go('program')}>
+                  <button type="button" className="kpi kpi-link" onClick={go('design-program')}>
                     <div className="label">Installation</div>
                     <div className="value">{results.program.install_start ? fmtDateShort(results.program.install_start) : '-'}</div>
                     <div className="sub">{results.program.install?.days} {results.program.install?.days === 1 ? 'day' : 'days'} on site</div>
@@ -504,27 +587,26 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
               </div>
             </div>
 
-            <div className="card" id="results-production">
+            {/* the in-step index: sticky sub-tabs on the desk, a jump list on the phone */}
+            <nav className={`subtabs ${narrow ? 'jump-list' : ''}`} aria-label="Design and outputs">
+              {DESIGN_CARDS.map((c) => (
+                <button key={c.id} type="button" className={`subtab ${activeCard === c.id ? 'on' : ''}`} disabled={!cardAvailable(c.id)} onClick={go(c.id)} aria-current={activeCard === c.id ? 'location' : undefined}>
+                  <span className="sub-long">{c.label}</span>
+                  <span className="sub-short">{c.short}</span>
+                </button>
+              ))}
+            </nav>
+            {auditPending && <div className="subtabs-note muted">System design, quantities, the program, cashflow and savings follow the energy audit.</div>}
+
+            <div className="card design-card" id="design-roof">
               <h2>Roof and production</h2>
               <ErrorBoundary title="The production results" onRecalculate={compute}>
-                <ResultsView doc={a.doc} results={results} />
+                <ResultsView doc={a!.doc} results={results} />
               </ErrorBoundary>
             </div>
-            {results.audit && (
-              <div className="card" id="sizing">
-                <h2>Energy audit and system sizing</h2>
-                <ErrorBoundary title="The sizing results" onRecalculate={compute}>
-                  <AuditResults
-                    audit={results.audit}
-                    sizing={results.sizing}
-                    panelName={results.panels.find((p) => p.panel.id === results.selected_panel_id)?.panel.name || ''}
-                    panelWp={results.panels.find((p) => p.panel.id === results.selected_panel_id)?.panel.watt_peak || 0}
-                  />
-                </ErrorBoundary>
-              </div>
-            )}
-            {auditPending && (
-              <div className="card next-step" id="pricing">
+
+            {auditPending ? (
+              <div className="card next-step" id="design-system">
                 Next:{' '}
                 <a
                   href="#audit"
@@ -535,40 +617,74 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 >
                   Energy audit
                 </a>
-                , then Calculate. <span className="muted">Pricing, savings and the program of works follow the sizing.</span>
+                , then Calculate. <span className="muted">System design, quantities, the program of works, cashflow and savings follow the sizing.</span>
               </div>
+            ) : (
+              <>
+                <div className="card design-card" id="design-system">
+                  <h2>System design</h2>
+                  <ErrorBoundary title="The system design" onRecalculate={compute}>
+                    <SystemDesign results={results} panelName={selectedPanel?.name || ''} panelWp={selectedPanel?.watt_peak || 0} />
+                  </ErrorBoundary>
+                </div>
+                <div className="card design-card" id="design-quantities">
+                  <h2>Quantities</h2>
+                  <ErrorBoundary title="The quantities" onRecalculate={compute}>
+                    {results.pricing ? (
+                      <PricingResults
+                        pricing={results.pricing}
+                        job={doc.pricing ?? emptyPricingJob()}
+                        onJobChange={(pricing) => patch({ pricing })}
+                        exportUrls={{ csv: api.bomCsvUrl(aid), xlsx: api.bomXlsxUrl(aid) }}
+                        docReason={exportReason}
+                        openDocument={openDocument}
+                      />
+                    ) : (
+                      <div className="muted">Quantities follow the sizing. Press Calculate.</div>
+                    )}
+                  </ErrorBoundary>
+                </div>
+                <div className="card design-card" id="design-program">
+                  <h2>Program of works</h2>
+                  <ErrorBoundary title="The program of works" onRecalculate={compute}>
+                    {results.program ? <ProgramResults program={results.program} /> : <div className="muted">The program follows the pricing. Press Calculate.</div>}
+                  </ErrorBoundary>
+                </div>
+                <div className="card design-card" id="design-cashflow">
+                  <h2>Cashflow</h2>
+                  <ErrorBoundary title="The cashflow" onRecalculate={compute}>
+                    {results.program ? <CashflowResults program={results.program} /> : <div className="muted">The cashflow follows the pricing. Press Calculate.</div>}
+                  </ErrorBoundary>
+                </div>
+                <div className="card design-card" id="design-savings">
+                  <h2>Savings for the customer</h2>
+                  <ErrorBoundary title="The savings" onRecalculate={compute}>
+                    {results.economics ? <EconomicsResults eco={results.economics} /> : <div className="muted">The savings follow the pricing. Press Calculate.</div>}
+                  </ErrorBoundary>
+                </div>
+              </>
             )}
-            {!auditPending && results.pricing && (
-              <div className="card" id="pricing">
-                <h2>Pricing and bill of materials (BOM)</h2>
-                <ErrorBoundary title="The pricing" onRecalculate={compute}>
-                  <PricingResults
-                    pricing={results.pricing}
-                    job={doc.pricing ?? emptyPricingJob()}
-                    onJobChange={(pricing) => patch({ pricing })}
-                    quotationUrl={api.quotationUrl(aid)}
-                    docReason={docReason}
-                    openDocument={openDocument}
-                  />
-                </ErrorBoundary>
-              </div>
-            )}
-            {!auditPending && results.economics && (
-              <div className="card" id="economics">
-                <h2>Savings for the customer</h2>
-                <ErrorBoundary title="The savings" onRecalculate={compute}>
-                  <EconomicsResults eco={results.economics} />
-                </ErrorBoundary>
-              </div>
-            )}
-            {!auditPending && results.program && (
-              <div className="card" id="program">
-                <h2>Program of works and cashflow</h2>
-                <ErrorBoundary title="The program of works" onRecalculate={compute}>
-                  <ProgramResults program={results.program} programUrl={api.programUrl(aid)} docReason={docReason} openDocument={openDocument} />
-                </ErrorBoundary>
-              </div>
-            )}
+
+            <div className="card design-card" id="design-documents">
+              <h2>Documents</h2>
+              <DocumentsCard
+                results={results}
+                stale={stale}
+                synthetic={synthetic}
+                busy={!!busy}
+                nextStep={doc.card_next_step ?? ''}
+                onNextStepChange={(card_next_step) => patch({ card_next_step })}
+                urls={{
+                  report: api.reportUrl(aid),
+                  card: api.cardUrl(aid, (doc.card_next_step ?? '').trim()),
+                  proposal: api.quotationUrl(aid),
+                  program: api.programUrl(aid),
+                  bomCsv: api.bomCsvUrl(aid),
+                  bomXlsx: api.bomXlsxUrl(aid),
+                }}
+                openDocument={openDocument}
+              />
+            </div>
           </div>
         </>
       )}
@@ -591,23 +707,8 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         >
           Calculate
         </button>
-        {results && (
-          <button type="button" disabled={!!docReason || !!busy} onClick={() => openDocument(api.reportUrl(aid))}>
-            Roof check PDF
-          </button>
-        )}
-        {results && (
-          <button
-            type="button"
-            disabled={!!docReason || !!busy}
-            title="Phone-sized image to send to the customer"
-            onClick={() => openDocument(api.cardUrl(aid, (doc.card_next_step ?? '').trim()), true)}
-          >
-            Roof check card
-          </button>
-        )}
-        {results && docReason && <span className="muted doc-reason">{docReason}</span>}
-        {!results && !canCalculate && <span className="muted">Needs a map pin, a roof face and a panel.</span>}
+        {!results && !canCalculate && <span className="muted bar-note">Needs a map pin, a roof face and a panel.</span>}
+        {status && !status.pvgis.available && <span className="muted bar-note">Weather data is not downloaded yet; see Settings.</span>}
       </div>
     </div>
   )

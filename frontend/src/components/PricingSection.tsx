@@ -3,19 +3,17 @@ import { api } from '../api'
 import type { MaterialItem, PricingBlock, PricingJob } from '../types'
 import MaterialPicker from './MaterialPicker'
 import NumberInput from './NumberInput'
+import Field from './Field'
 import { php0, php2 } from '../fmt'
 
 const php = php2
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
 const qty = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1))
+/** Warnings that stop the job even without the `hard` flag: no item to price. */
+const RED_CODES = new Set(['missing_item', 'no_inverter', 'no_battery', 'ats', 'ac_breaker'])
 
 function Num({ label, value, onChange, hint, step, min }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number }) {
-  return (
-    <div>
-      <label>{label}</label>
-      <NumberInput value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />
-    </div>
-  )
+  return <Field label={label}>{(id) => <NumberInput id={id} value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />}</Field>
 }
 
 export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pricing: PricingBlock | null; onChange: (j: PricingJob) => void }) {
@@ -29,30 +27,32 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
         Blank fields use the pricing settings. Extra km comes from the map pin (straight line × road factor, less the route's reference site).
       </div>
       <div className="input-grid">
-        <div className="wide">
-          <label>Inverter</label>
-          <select value={job.inverter_code ?? ''} onChange={(e) => set({ inverter_code: e.target.value || null })}>
-            <option value="">Default inverter{ch?.inverter_code ? ` (${ch.inverter_units && ch.inverter_units > 1 ? `${ch.inverter_units} x ` : ''}${ch.inverter_code})` : ''}</option>
-            {(ch?.inverter_options ?? []).map((o) => (
-              <option key={o.code} value={o.code}>
-                {o.code} {o.name} · {o.rating_kw} kW · {php0(o.landed)}
-              </option>
-            ))}
-            {job.inverter_code && !(ch?.inverter_options ?? []).some((o) => o.code === job.inverter_code) && <option value={job.inverter_code}>{job.inverter_code}</option>}
-          </select>
-        </div>
-        <div className="wide">
-          <label>Battery</label>
-          <select value={job.battery_code ?? ''} onChange={(e) => set({ battery_code: e.target.value || null })}>
-            <option value="">Cheapest combination that fits{ch?.battery_code ? ` (${ch.battery_units} x ${ch.battery_code})` : ''}</option>
-            {(ch?.battery_options ?? []).map((o) => (
-              <option key={o.code} value={o.code}>
-                {o.units} x {o.code} {o.name} = {o.total_kwh.toFixed(1)} kWh · {php0(o.landed)}
-              </option>
-            ))}
-            {job.battery_code && !(ch?.battery_options ?? []).some((o) => o.code === job.battery_code) && <option value={job.battery_code}>{job.battery_code}</option>}
-          </select>
-        </div>
+        <Field label="Inverter" className="wide">
+          {(id) => (
+            <select id={id} value={job.inverter_code ?? ''} onChange={(e) => set({ inverter_code: e.target.value || null })}>
+              <option value="">Default inverter{ch?.inverter_code ? ` (${ch.inverter_units && ch.inverter_units > 1 ? `${ch.inverter_units} x ` : ''}${ch.inverter_code})` : ''}</option>
+              {(ch?.inverter_options ?? []).map((o) => (
+                <option key={o.code} value={o.code}>
+                  {o.code} {o.name} · {o.rating_kw} kW · {php0(o.landed)}
+                </option>
+              ))}
+              {job.inverter_code && !(ch?.inverter_options ?? []).some((o) => o.code === job.inverter_code) && <option value={job.inverter_code}>{job.inverter_code}</option>}
+            </select>
+          )}
+        </Field>
+        <Field label="Battery" className="wide">
+          {(id) => (
+            <select id={id} value={job.battery_code ?? ''} onChange={(e) => set({ battery_code: e.target.value || null })}>
+              <option value="">Cheapest combination that fits{ch?.battery_code ? ` (${ch.battery_units} x ${ch.battery_code})` : ''}</option>
+              {(ch?.battery_options ?? []).map((o) => (
+                <option key={o.code} value={o.code}>
+                  {o.units} x {o.code} {o.name} = {o.total_kwh.toFixed(1)} kWh · {php0(o.landed)}
+                </option>
+              ))}
+              {job.battery_code && !(ch?.battery_options ?? []).some((o) => o.code === job.battery_code) && <option value={job.battery_code}>{job.battery_code}</option>}
+            </select>
+          )}
+        </Field>
       </div>
       <div className="input-grid">
         <Num label="Max panels per string" value={job.max_panels_per_string} onChange={(v) => set({ max_panels_per_string: v })} hint="10" min={1} step={1} />
@@ -77,19 +77,22 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
   )
 }
 
+/** Quantities: the price and its sections, the customer BOQ lines, the editable bill of materials with its two exports,
+ * and the internal build-up. The proposal PDF lives in the Documents card. */
 export function PricingResults({
   pricing,
   job,
   onJobChange,
-  quotationUrl,
+  exportUrls,
   docReason,
   openDocument,
 }: {
   pricing: PricingBlock
   job: PricingJob
   onJobChange: (j: PricingJob) => void
-  quotationUrl: string
-  /** Why no document can be produced right now (stale results, test data), or null when they can. */
+  /** The BOM export routes; the server applies the one stale rule to them as to every document. */
+  exportUrls: { csv: string; xlsx: string }
+  /** Why no document (the exports included) can be produced right now, or null when they can. */
   docReason: string | null
   openDocument: (url: string) => void
 }) {
@@ -133,7 +136,7 @@ export function PricingResults({
   return (
     <div>
       {(pricing.warnings ?? []).map((w, i) => (
-        <div key={w.code + i} className={`banner ${['missing_item', 'no_inverter', 'no_battery', 'ats', 'ac_breaker'].includes(w.code) ? 'bad' : 'warn'}`}>
+        <div key={w.code + i} className={`banner ${w.hard || RED_CODES.has(w.code) ? 'bad' : 'warn'}`} data-hard={w.hard ? '1' : undefined}>
           {w.message}
         </div>
       ))}
@@ -165,13 +168,6 @@ export function PricingResults({
           <div className="value">{php0(sec('tax')?.amount)}</div>
           <div className="sub">12% of the three amounts above</div>
         </div>
-      </div>
-      <div className="actions" style={{ position: 'static', border: 0, padding: '4px 0' }}>
-        <button type="button" disabled={!!docReason} onClick={() => openDocument(quotationUrl)}>
-          Proposal PDF
-        </button>
-        <button type="button" onClick={() => setShowInternal((v) => !v)}>{showInternal ? 'Hide' : 'Show'} internal build-up</button>
-        {docReason && <span className="muted doc-reason">{docReason}</span>}
       </div>
 
       <details style={{ marginBottom: 10 }}>
@@ -226,12 +222,22 @@ export function PricingResults({
           <>
             {' '}
             Strings: {pricing.choices.strings} x {pricing.choices.panels_per_string} panels ({pricing.choices.string_voltage_v.toFixed(0)} V, {pricing.choices.string_current_a.toFixed(1)} A, {pricing.choices.pv_gauge} mm² at {pct(pricing.choices.pv_drop)} drop). AC {pricing.choices.ac_current_a.toFixed(0)} A on{' '}
-            {pricing.choices.ac_gauge} mm² THHN at {pct(pricing.choices.ac_drop)} drop.
+            {pricing.choices.ac_gauge} mm² THHN at {pct(pricing.choices.ac_drop)} drop. The System design card has the full picture.
           </>
         )}
       </div>
+      <div className="actions bom-actions" style={{ position: 'static', border: 0, padding: '4px 0 8px' }}>
+        <button type="button" disabled={!!docReason} onClick={() => openDocument(exportUrls.csv)} data-testid="export-csv">
+          Export CSV
+        </button>
+        <button type="button" disabled={!!docReason} onClick={() => openDocument(exportUrls.xlsx)} data-testid="export-xlsx">
+          Export XLSX
+        </button>
+        <button type="button" onClick={() => setShowInternal((v) => !v)}>{showInternal ? 'Hide' : 'Show'} internal build-up</button>
+        <span className="muted doc-reason">{docReason ?? 'The exports carry the list below with your edits, for supplier orders.'}</span>
+      </div>
       <div className="table-wrap">
-        <table>
+        <table className="bom">
           <thead>
             <tr>
               <th>Code</th>
@@ -255,43 +261,45 @@ export function PricingResults({
               const e = editFor(l.code)
               return (
                 <tr key={l.code} style={!l.found ? { background: '#fdecec' } : undefined}>
-                  <td>{l.code}</td>
-                  <td>
+                  <td className="cell-code code">{l.code}</td>
+                  <td className="cell-main">
                     {l.name || <span className="badge bad">not in list</span>} <span className="muted">{l.category}</span>
                   </td>
-                  <td>{l.supplier}</td>
-                  <td className="num" style={{ width: 90 }}>
+                  <td className="cell-supplier" data-label="Supplier">{l.supplier}</td>
+                  <td className="num cell-qty" style={{ width: 90 }}>
                     <NumberInput value={l.qty} onChange={(v) => setQty(l.code, v)} min={0} style={e ? { borderColor: '#d98e04' } : undefined} />
+                    <span className="unit-inline muted">{l.unit}</span>
                   </td>
-                  <td>{l.unit}</td>
+                  <td className="cell-unit">{l.unit}</td>
                   {showInternal && (
                     <>
-                      <td className="num">{php(l.landed_unit)}</td>
-                      <td className="num">{php(l.landed)}</td>
-                      <td className="num">
+                      <td className="num cell-internal" data-label="Landed/unit">{php(l.landed_unit)}</td>
+                      <td className="num cell-internal" data-label="Landed">{php(l.landed)}</td>
+                      <td className="num cell-internal" data-label="Selling">
                         {php(l.selling)} <span className="muted">{pct(l.markup_tier)}</span>
                       </td>
                     </>
                   )}
-                  <td className="muted">{l.note}</td>
-                  <td>
-                    <button type="button" className="toggle link" onClick={() => remove(l.code)}>
-                      remove
+                  <td className="muted cell-note">{l.note}</td>
+                  <td className="cell-remove">
+                    <button type="button" className="toggle link remove-icon" onClick={() => remove(l.code)} aria-label={`Remove ${l.code}`} title="Remove this line">
+                      <span className="remove-x" aria-hidden="true">×</span>
+                      <span className="remove-word">remove</span>
                     </button>
                   </td>
                 </tr>
               )
             })}
             {removedCodes.map((c) => (
-              <tr key={'rm' + c} style={{ opacity: 0.6 }}>
-                <td>{c}</td>
-                <td colSpan={showInternal ? 8 : 5} className="muted">
+              <tr key={'rm' + c} className="row-removed" style={{ opacity: 0.6 }}>
+                <td className="cell-code code">{c}</td>
+                <td colSpan={showInternal ? 8 : 5} className="muted cell-main">
                   removed{' '}
                   <button type="button" className="toggle link" onClick={() => setQty(c, null)}>
                     restore
                   </button>
                 </td>
-                <td></td>
+                <td className="cell-remove"></td>
               </tr>
             ))}
           </tbody>

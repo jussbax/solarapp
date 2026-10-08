@@ -1054,3 +1054,29 @@ export interface PricedLine {
 export interface SizingBlock {
   system_yield_kwh_per_kwp?: number
 }
+
+// ---- Design and outputs batch: hard warnings, the BOQ's electrical meta the System design card reads, the draft id.
+
+export interface Warning {
+  /** Set by the BOQ and the sizing on findings that must be fixed before the job can go ahead (an inverter that cannot
+   * export on a net-metering job, a certificate not on file, autonomy not met); the cards show them as red banners. */
+  hard?: boolean
+}
+
+/** The rest of pricing.choices (boq.py writes these beside strings, gauges and drops); read it as
+ * `pricing.choices as PricingChoices`. */
+export interface PricingChoicesExtra {
+  inverter_grid_interactive?: boolean | null
+  inverter_certifications?: string
+  inverter_battery_max_a?: number | null
+  battery_continuous_a?: number | null
+  kind?: SystemKind
+  battery_current_a?: number
+  battery_breaker_min_a?: number
+  inverter_options?: { code: string; name: string; rating_kw: number; supplier: string; landed: number; grid_interactive?: boolean | null; certifications?: string }[]
+  battery_options?: { code: string; name: string; rating_kwh: number; units: number; total_kwh: number; supplier: string; landed: number; continuous_a?: number | null }[]
+}
+export type PricingChoices = NonNullable<PricingBlock['choices']> & PricingChoicesExtra
+
+/** The id under which an unsaved new project keeps its draft on the device (the record has no id until the first Save). */
+export const NEW_DRAFT_ID = 0

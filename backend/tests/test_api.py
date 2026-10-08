@@ -725,3 +725,22 @@ def test_public_process_believes_the_tunnel_header_only_from_a_private_peer(tmp_
         # the test client is not an address at all, so a stranger's header is dropped and the peer itself is forwarded
         assert pub.get("/api/quick/status", headers={"cf-connecting-ip": "1.2.3.4"}).status_code == 200
         assert seen["xff"] == "testclient"
+
+
+def test_new_project_is_not_a_record_until_the_first_save(client):
+    """New project opens an unsaved draft in the browser; the record exists only once the draft is posted (the first Save),
+    so a mis-tap on New project leaves no "Unnamed" row. The server's contract: nothing lists until POST, and the POST
+    carries the whole draft, name and stage included."""
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    before = client.get("/api/assessments").json()
+    assert not any(a["customer_name"] == "Draft Only" for a in before)
+    r = client.post("/api/assessments", json={**DOC, "customer_name": "Draft Only", "program": {"stage": "quoted"}})
+    assert r.status_code == 201, r.text
+    created = r.json()
+    assert created["doc"]["customer_name"] == "Draft Only" and created["doc"]["program"]["stage"] == "quoted"
+    assert created["results"] is None and created["results_stale"] is False
+    after = client.get("/api/assessments").json()
+    assert len(after) == len(before) + 1
+    row = next(a for a in after if a["id"] == created["id"])
+    assert row["customer_name"] == "Draft Only" and row["stage"] == "quoted" and row["has_results"] is False
+    assert client.delete(f"/api/assessments/{created['id']}").status_code == 204

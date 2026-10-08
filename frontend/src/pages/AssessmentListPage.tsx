@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { emptyDoc, JOB_STAGES, type AssessmentSummary, type JobStage } from '../types'
+import { JOB_STAGES, type AssessmentSummary, type JobStage } from '../types'
 import { fmtDateTime, plural } from '../fmt'
 
 /** The project list: one record per site, engineering facts only. Website bookings live on the Leads page until Start assessment. */
@@ -16,14 +16,8 @@ export default function AssessmentListPage() {
     api.listAssessments().then(setItems).catch((e) => setError(e.message))
   }, [])
 
-  const create = async () => {
-    try {
-      const a = await api.createAssessment(emptyDoc())
-      navigate(`/assessments/${a.id}`)
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
+  /** New project opens an unsaved draft; the record is created on its first Save, so a mis-tap leaves no "Unnamed" row. */
+  const create = () => navigate('/assessments/new')
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {}

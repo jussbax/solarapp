@@ -314,3 +314,95 @@ input[type='file'] { max-width: 100%; min-height: 0; font-size: 14px; }
   .lead-row.focus { margin: 0; padding: 12px 0; border-radius: 0; }
   .lead-actions > button, .lead-actions > a { flex: 1 1 45%; }
 }
+
+/* design and outputs: the stage pill in the page head, the in-step index, the seven cards, the trimmed phone bar */
+.page-head-main { min-width: 0; flex: 1 1 auto; }
+.page-head-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.stage-pill { width: auto; min-height: 0; padding: 4px 26px 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--ink); border: 1px solid var(--line); cursor: pointer; appearance: none; -webkit-appearance: none;
+  background: #e8ecec url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%232D2D2D' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center; }
+.stage-pill:hover { border-color: var(--gold); }
+.stage-pill:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.tabs-note { margin: -2px 0 8px; }
+.bar-note { flex: 1 1 100%; }
+.subtabs { display: flex; gap: 6px; flex-wrap: wrap; position: sticky; top: 50px; z-index: 1040; background: var(--bg); padding: 6px 0 8px; margin-bottom: 8px; }
+.subtab { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-weight: 600; font-size: 13px; color: var(--text); white-space: nowrap; }
+.subtab.on { background: var(--gold-bg); border-color: var(--gold); color: var(--ink); }
+.subtab:disabled { opacity: 0.45; }
+.subtab .sub-short { display: none; }
+.subtabs-note { margin: -4px 0 10px; }
+.design-card { scroll-margin-top: 104px; }
+.card.summary { scroll-margin-top: 60px; }
+.stale-banner { position: static; top: auto; } /* the bar has Calculate; a second sticky banner only ate the screen */
+.kpis.kpi-pair { grid-template-columns: 1fr 1fr; }
+.plans { display: grid; gap: 14px 20px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); margin-bottom: 8px; }
+.plan { min-width: 0; }
+.plan-title { margin-bottom: 4px; }
+.plan figure, .plan svg { max-width: 100%; }
+.month-table.months-as-rows th { font-size: 11px; }
+.month-table tr.bold td, .month-table td.bold { font-weight: 600; }
+table.protection td { vertical-align: top; }
+.doc-list { list-style: none; margin: 0; padding: 0; }
+.doc-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.doc-row:last-child { border-bottom: 0; }
+.doc-row.off .doc-name { color: var(--muted); }
+.doc-main { flex: 1 1 auto; min-width: 0; }
+.doc-name { font-weight: 600; color: var(--ink); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.doc-action { flex: 0 0 auto; }
+.doc-action button { min-width: 110px; }
+.doc-field { margin-top: 8px; max-width: 520px; }
+.doc-row .doc-reason { color: var(--warn); }
+table.bom .unit-inline, table.bom .remove-x { display: none; }
+.settings-key .key { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.settings-key label { display: inline; font-size: inherit; color: inherit; margin: 0; cursor: pointer; }
+input.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+table.categories td { padding: 4px 6px; }
+@media (max-width: 640px) {
+  .stage-pill { min-height: 36px; font-size: 14px; }
+  /* the index is a jump list, not a third sticky band */
+  .subtabs { position: static; padding: 0 0 8px; }
+  .subtab { min-height: 44px; font-size: 14px; }
+  .subtab .sub-long { display: none; }
+  .subtab .sub-short { display: inline; }
+  .design-card { scroll-margin-top: 62px; }
+  .month-table.months-as-rows { font-size: 13px; }
+  .month-table.months-as-rows th, .month-table.months-as-rows td { padding: 5px 4px; }
+  /* the bar: chip, Save and Calculate on one row */
+  .actions { padding: 8px 0; gap: 6px; }
+  .actions .chip { flex: 1 1 auto; min-height: 36px; font-size: 12px; padding: 4px 8px; }
+  .actions > button { flex: 0 1 auto; }
+  .kpis.kpi-pair { gap: 8px; }
+  .kpi-pair .kpi { padding: 8px 10px; }
+  .kpi-pair .kpi .value { font-size: 17px; }
+  .plans { grid-template-columns: 1fr; }
+  .doc-row { flex-wrap: wrap; }
+  .doc-action { flex: 1 1 100%; }
+  .doc-action button { width: 100%; }
+  /* the bill of materials as cards: code · name / supplier · qty unit, remove as an icon */
+  table.bom, table.bom tbody { display: block; }
+  table.bom thead, table.bom tfoot { display: none; }
+  table.bom tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "code name remove" "supplier qty qty" "note note note"; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); align-items: center; }
+  table.bom td { display: block; border: 0; padding: 0; min-width: 0; width: auto !important; text-align: left; }
+  table.bom td.cell-code { grid-area: code; font-size: 13px; }
+  table.bom td.cell-main { grid-area: name; }
+  table.bom td.cell-supplier { grid-area: supplier; font-size: 13px; color: var(--muted); }
+  table.bom td.cell-supplier[data-label]::before { display: none; }
+  table.bom td.cell-qty { grid-area: qty; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+  table.bom td.cell-qty input { width: 96px; }
+  table.bom .unit-inline { display: inline; }
+  table.bom td.cell-unit { display: none; }
+  table.bom td.cell-note { grid-area: note; font-size: 12.5px; }
+  table.bom td.cell-note:empty { display: none; }
+  table.bom td.cell-internal { grid-column: 1 / -1; }
+  table.bom td.cell-remove { grid-area: remove; }
+  table.bom .remove-icon { min-width: 40px; min-height: 40px; padding: 0; font-size: 22px; line-height: 1; }
+  table.bom .remove-x { display: inline; }
+  table.bom .remove-word { display: none; }
+  table.bom tr.row-removed { grid-template-areas: "code name remove"; }
+  /* payment terms and categories: one card per row */
+  table.payments, table.payments tbody, table.categories, table.categories tbody { display: block; }
+  table.payments thead, table.categories thead { display: none; }
+  table.payments tr, table.categories tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; padding: 10px 0; border-bottom: 2px solid var(--line); }
+  table.payments td, table.categories td { display: block; border: 0; padding: 0; width: auto !important; }
+  table.payments td.cell-main, table.payments td.cell-actions, table.categories td.cell-main, table.categories td.cell-actions { grid-column: 1 / -1; }
+  table.payments td input, table.payments td select, table.categories td input { width: 100% !important; }
+}
