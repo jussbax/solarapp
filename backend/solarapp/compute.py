@@ -94,6 +94,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
     for f in doc.faces:
         if selected["faces"][f.id]["gross"] == 0:
             warnings.append({**_warn("face_no_fit", f"{f.name}: no panel fits this face ({f.length_m:g} m along the eave × {f.width_m:g} m up the slope, setback {doc.setback_m:g} m). Check the size or reduce the setback."), "face_id": f.id})
+    geometry_block = build_geometry(doc, selected, cuts_by_face, shade_block)  # the plan drawing of each face (contract C3)
 
     # k factor
     set_results: list[kfactor.ReadingSetResult] = []
@@ -159,6 +160,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
             warnings.append(_warn("shade_loss", f"{fs.name}: shade takes about {fs.shade_loss_pct:.0f}% of the direct sun over the year."))
 
     audit_block, sizing_block = compute_audit_and_sizing(doc, measured, selected, selected_panel.watt_peak)
+    mark_sized_panels(doc, geometry_block, sizing_block, pricing)
 
     def set_to_dict(r: kfactor.ReadingSetResult, s) -> dict:
         d = asdict(r)
@@ -180,6 +182,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         "months": MONTHS,
         "dataset": {**cell.to_dict(), "synthetic": pvgis.synthetic, "source": pvgis.info().get("source")},
         "panels": panel_results,
+        "geometry": geometry_block,
         "selected_panel_id": selected_panel.id,
         "best_panel": {
             "id": doc.panels[best_idx].id, "name": doc.panels[best_idx].name, "watt_peak": doc.panels[best_idx].watt_peak,
@@ -277,3 +280,38 @@ def compute_audit_and_sizing(doc: AssessmentDoc, production, selected_panel_resu
         offgrid=OffGridRules(s.offgrid_pv_margin),
     )
     return audit_block, sizing
+
+
+def build_geometry(doc: AssessmentDoc, selected: dict, cuts_by_face: dict[str, layout.FaceCuts], shade_block: dict[str, dict]) -> list[dict]:
+    """The plan of every face for the selected panel (contract C3): the fitted rows placed in the bands the fitter
+    measured, the wall strips and the trees or buildings the shade model knows. Panels are not yet marked as used;
+    that waits for the sizing (mark_sized_panels)."""
+    panel = selected["panel"]
+    out: list[dict] = []
+    for f in doc.faces:
+        lr = selected["faces"][f.id]
+        best = lr.get("best") or {}
+        sh = shade_block.get(f.id) or {}
+        out.append(layout.face_geometry(
+            face_id=f.id, name=f.name, shape=f.shape, eave_m=f.length_m, slope_m=f.width_m, ridge_m=f.ridge_m, azimuth_deg=f.azimuth_deg, tilt_deg=f.tilt_deg,
+            panel_length_m=panel["length_m"], panel_width_m=panel["width_m"], setback_per_dimension_m=doc.setback_m, gap_m=doc.gap_m,
+            cuts=cuts_by_face.get(f.id) or layout.FaceCuts(),
+            orientation=best.get("orientation") or "portrait", rows=list(best.get("rows") or []), count=int(lr.get("count") or 0),
+            gross=int(lr.get("gross") or 0), left_out=int(lr.get("left_out") or 0),
+            walls=sh.get("walls") or [], obstacles=sh.get("obstacles") or [],
+        ))
+    return out
+
+
+def mark_sized_panels(doc: AssessmentDoc, geometry: list[dict], sizing: Optional[dict], pricing: Optional[PricingContext]) -> None:
+    """Flag the panels the sized system uses, faces in order and rows from the eave up (the BOQ fills its rows the same
+    way), and number their strings by the BOQ's rule when the pricing settings are at hand. Without a sizing every
+    panel stays unmarked: the roof check shows what the roof can hold."""
+    if not sizing:
+        return
+    n = int(sizing.get("panels") or 0)
+    per_string = None
+    if pricing is not None and n > 0:
+        pj = doc.pricing
+        _strings, per_string = layout.string_rule(n, pj.max_panels_per_string or pricing.config.roles.max_panels_per_string, pj.strings_override)
+    layout.mark_used(geometry, n, per_string)

@@ -25,6 +25,7 @@ from xml.sax.saxutils import escape  # noqa: E402
 from ..profile import warranty_lines  # noqa: E402
 from ..schemas import AssessmentDoc  # noqa: E402
 from . import brand  # noqa: E402
+from .drawings import plan_blocks  # noqa: E402
 
 KIND_LABEL = {"off_grid": "Off-grid solar with battery (no electric bill)", "net_metering": "Solar with net metering, no battery", "combination": "Hybrid solar with battery and net metering"}
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -342,6 +343,13 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     cols.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     story.append(cols)
     story.append(Spacer(1, 4))
+
+    # ---- the roof: the panels of the proposed system as they will sit, under the system information
+    plans = plan_blocks(results.get("geometry") or [], 184, cell, small, columns=2, highlight_used=True, max_height_mm=38, gutter_mm=4)
+    if plans:
+        story.append(KeepTogether([section("YOUR ROOF, AS THE PANELS WILL SIT"), Spacer(1, 2), plans[0]]))
+        story += plans[1:]
+        story.append(Spacer(1, 4))
 
     # ---- reminders and the payment schedule
     reminders = [

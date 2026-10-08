@@ -202,4 +202,7 @@ export const api = {
     return (await res.json()) as ImportReport
   },
   importSeed: (keepConfig: boolean) => request<ImportReport>(`/api/pricing/import-seed?keep_config=${keepConfig}`, { method: 'POST' }),
+  /** Bill of materials export (the generated list with the owner's edits); fetch through fetchDocument so a stale record shows its message. */
+  bomCsvUrl: (id: number) => `/api/assessments/${id}/bom.csv`,
+  bomXlsxUrl: (id: number) => `/api/assessments/${id}/bom.xlsx`,
 }

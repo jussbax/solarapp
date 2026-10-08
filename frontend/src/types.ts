@@ -845,3 +845,81 @@ export function newReadingSet(faceId: string | null): ReadingSet {
   }
 }
 
+// ---- engineering drawings: the plan of a face (results.geometry, contract C3) and the Gantt chart of the program
+
+/** One panel on a face, metres from the face's bottom-left corner (eave at the bottom, slope upwards). */
+export interface PanelRect {
+  x: number
+  y: number
+  w: number
+  h: number
+  /** Row from the eave, 1 upwards. */
+  row: number
+  /** Panel number on the face, 1 upwards from the eave row, left to right. */
+  n: number
+  /** Present once the system is sized: whether the sized system uses this panel (faces in order, rows from the eave up). */
+  used?: boolean
+  /** String number, 1 upwards, when the BOQ's panels-per-string rule gives it; only on used panels. */
+  string?: number
+}
+
+/** A wall strip (a rectangle along one edge where no panels go) or a tree or building (a marker on the edge it shades from). */
+export interface GeometryObstacle {
+  kind: 'wall' | 'shade'
+  edge: WallEdge
+  x: number
+  y: number
+  w: number
+  h: number
+  label: string
+  height_m?: number
+  depth_m?: number
+  cls?: 'clear' | 'small' | 'main' | ''
+}
+
+export interface FaceGeometry {
+  face_id: string
+  name: string
+  shape: FaceShape
+  eave_m: number
+  slope_m: number
+  ridge_m: number
+  azimuth_deg: number
+  tilt_deg: number
+  /** The direction the face looks toward, in words ("south-southwest"). */
+  compass: string
+  orientation: string
+  setback_m: number
+  gap_m: number
+  panel_length_m: number
+  panel_width_m: number
+  /** The face: 4 points (rectangle or hip trapezoid) or 3 (triangle), counter-clockwise from the bottom-left corner. */
+  outline: [number, number][]
+  /** The face after the setback; empty when the setback leaves nothing. */
+  usable: [number, number][]
+  panels: PanelRect[]
+  count: number
+  gross: number
+  left_out: number
+  /** Panels of the sized system on this face; null before the system is sized. */
+  used: number | null
+  cuts: { eave: number; ridge: number; left: number; right: number }
+  obstacles: GeometryObstacle[]
+}
+
+/** results.geometry: one entry per face, in the document's face order. Read it as (results as ResultsWithGeometry).geometry
+ * until the Results interface carries the field. */
+export interface ResultsWithGeometry extends Results {
+  geometry?: FaceGeometry[]
+}
+
+/** What the Gantt chart needs from a program event (ProgramEvent fits as it is). */
+export interface GanttEvent {
+  key?: string
+  label: string
+  date: string
+  end: string | null
+  kind: 'milestone' | 'task' | 'payment_in'
+  amount?: number
+}
+
