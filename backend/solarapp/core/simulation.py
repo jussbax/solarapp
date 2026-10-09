@@ -44,7 +44,7 @@ class ThermalModel:
 
     def describe(self) -> str:
         if self.kind == "site_rise" and self.rise_c_per_kw is not None:
-            return f"site-measured rise of {self.rise_c_per_kw:.1f} C per kW/m2 above ambient"
+            return f"site-measured rise of {self.rise_c_per_kw:.1f} °C per kW/m² above ambient"
         return f"PVGIS Faiman model (u0={self.u0}, u1={self.u1})"
 
 

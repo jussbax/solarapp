@@ -28,6 +28,7 @@ ELECTRICAL_HEADERS: dict[str, tuple[str, ...]] = {
     "mppt_max_a": ("mpptmaxa", "maxcurrentpermppt", "mpptcurrent", "currentpermppt"),
     "ac_input_a": ("acinputa", "acinputcurrent", "maxacinput", "maxacinputcurrent"),
     "battery_max_a": ("batterymaxa", "maxbatterycurrent", "batterycurrent", "batterychargecurrent"),
+    "has_transfer_switch": ("transferswitch", "builtintransferswitch", "builtinats", "internalats", "hasats", "owntransferswitch"),
     "continuous_a": ("continuousa", "continuouscurrent", "continuousdischarge", "continuousdischargecurrent"),
     "voc_v": ("voc", "vocv", "opencircuitvoltage"),
     "vmp_v": ("vmp", "vmpv", "vmpp"),
@@ -78,7 +79,7 @@ def electrical_values(row: tuple, cols: dict[str, int], category: str, name: str
         v = row[idx] if idx < len(row) else None
         if v is None or v == "":
             continue
-        if field_name == "grid_interactive":
+        if field_name in ("grid_interactive", "has_transfer_switch"):
             b = _bool(v)
             if b is not None:
                 out[field_name] = b
@@ -312,9 +313,13 @@ def resolve_roles(cfg: PricingConfig, items: dict[str, Item], warnings: list[str
             code = find(rf"^{gauge}mm2 - 1M w/ LUG PAIR$")
             if code:
                 r.battery_cable_pair[gauge] = code
-    for role in ("rail", "l_foot", "end_clamp", "mid_clamp", "splice", "mc4_pair", "dc_breaker", "dc_spd", "battery_breaker_fallback", "ats", "ac_breaker", "ac_spd", "enclosure", "cable_tray", "conduit", "ground_rod", "earth_lug", "sealant"):
+    for role in ("rail", "l_foot", "end_clamp", "mid_clamp", "splice", "mc4_pair", "dc_breaker", "dc_spd", "battery_breaker_fallback", "ats", "ac_breaker", "ac_spd", "enclosure", "cable_tray", "conduit", "ground_rod", "earth_lug", "sealant",
+                 "ac_disconnect", "array_bonding_wire"):
         if getattr(r, role) not in items:
             warnings.append(f"Role {role}: default code {getattr(r, role)} is not in the DB; set it on the materials page.")
+    for role in ("placard", "monitoring", "l_foot_fastener"):
+        if not getattr(r, role):
+            warnings.append(f"Role {role}: no item yet; the BOM carries the line without a price until one is set on the materials page.")
     # the grid default: the first grid-interactive hybrid in the catalogue (code order), else blank = the cheapest that fits
     excluded = [w.lower() for w in r.inverter_exclude_words]
     grid_ok = sorted(

@@ -556,6 +556,8 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     certs = inverter_certificate(pricing)
     if certs:
         sysinfo.append(["Inverter certificate", escape(certs)])
+    elif sizing.get("kind") != "off_grid":
+        sysinfo.append(["Inverter certificate", "to be confirmed with the maker before the net metering application"])
     if battery_kwh > 0 and sizing.get("kind") != "net_metering":
         sysinfo.append(["Battery", battery_row(doc, sizing, battery_kwh)])   # the unit the customer pays for, and what it carries
         backup = battery_backup_line(sizing)

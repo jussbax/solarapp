@@ -97,10 +97,15 @@ def test_inverter_surge_and_pv_constraints():
     r = size_system(load, per_kwp, 40, 550, "net_metering", peak_load_kw=5.0, largest_motor_kw=2.0, largest_motor_multiplier=3.0)
     # PV of ~10.4 kWp needs 8 kW at ratio 1.3; peak 5 kW; surge (5 + 4)/2 = 4.5
     assert r["inverter"]["binding"] == "PV array" and r["inverter"]["size_kw"] >= 8.0
-    r2 = size_system(evening_load(5.0), per_kwp, 40, 550, "net_metering", peak_load_kw=9.0, largest_motor_kw=3.0, largest_motor_multiplier=3.0)
-    assert r2["inverter"]["binding"] == "peak load" and r2["inverter"]["size_kw"] == 10.0
-    r3 = size_system(evening_load(5.0), per_kwp, 40, 550, "net_metering", peak_load_kw=4.0, largest_motor_kw=6.0, largest_motor_multiplier=3.0, inverter=InverterRules(surge_factor=2.0))
+    r2 = size_system(evening_load(5.0), per_kwp, 40, 550, "combination", peak_load_kw=9.0, largest_motor_kw=3.0, largest_motor_multiplier=3.0)
+    assert r2["inverter"]["binding"] == "peak load" and r2["inverter"]["size_kw"] == 10.0 and r2["inverter"]["rule"] == "peak"
+    r3 = size_system(evening_load(5.0), per_kwp, 40, 550, "combination", peak_load_kw=4.0, largest_motor_kw=6.0, largest_motor_multiplier=3.0, inverter=InverterRules(surge_factor=2.0))
     assert r3["inverter"]["binding"] == "motor surge" and r3["inverter"]["size_kw"] == 8.0
+    # round 3 (E-01): net metering without a battery has no backup mode, so the grid carries the peak and the inverter only the array
+    nm = size_system(evening_load(5.0), per_kwp, 40, 550, "net_metering", peak_load_kw=9.0, largest_motor_kw=3.0, largest_motor_multiplier=3.0)
+    assert nm["inverter"]["rule"] == "array" and nm["inverter"]["binding"] == "PV array" and nm["inverter"]["required_kw"] == pytest.approx(nm["kwp"] / 1.3)
+    assert nm["inverter"]["size_kw"] == 6.0 and nm["inverter"]["units"] == 1 and nm["inverter"]["peak_load_kw"] == 9.0   # the peak is reported for the pass-through check
+    assert nm["battery"]["sized_nominal_kwh"] == nm["battery"]["installed_kwh"] == 0 and nm["battery"]["sized_usable_kwh"] == 0
 
 
 def test_simulation_exposes_hourly_profile(manila_tmy):

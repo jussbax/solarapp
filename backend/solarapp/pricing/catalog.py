@@ -39,6 +39,7 @@ class Item:
     mppt_max_a: Optional[float] = None
     ac_input_a: Optional[float] = None
     battery_max_a: Optional[float] = None
+    has_transfer_switch: Optional[bool] = None    # inverters: carries its own transfer switch (no external ATS); None = unknown
     continuous_a: Optional[float] = None
     voc_v: Optional[float] = None
     vmp_v: Optional[float] = None
@@ -56,10 +57,14 @@ class Item:
         m = re.findall(r"(\d+(?:\.\d+)?)\s*A\b", self.name)
         return max(float(x) for x in m) if m else None
 
+    def amps_listed(self) -> list[float]:
+        """Every rating the name lists ("AC BREAKER 2P 32A/63A" lists 32 and 63): the sizes the item comes in."""
+        return sorted({float(x) for x in re.findall(r"(\d+(?:\.\d+)?)\s*A\b", self.name)})
+
 
 ELECTRICAL_FIELDS = (
     "grid_interactive", "certifications", "max_pv_voltage_v", "mppt_min_v", "mppt_max_v", "mppt_count", "mppt_max_a",
-    "ac_input_a", "battery_max_a", "continuous_a", "voc_v", "vmp_v", "isc_a", "imp_a", "temp_coeff_voc_pct", "temp_coeff_isc_pct",
+    "ac_input_a", "battery_max_a", "has_transfer_switch", "continuous_a", "voc_v", "vmp_v", "isc_a", "imp_a", "temp_coeff_voc_pct", "temp_coeff_isc_pct",
 )
 
 
@@ -115,6 +120,10 @@ def electrical_from_remarks(category: str, name: str, spec: str, remarks: str) -
         out["mppt_count"] = int(n_mppt) if n_mppt else None
         out["mppt_max_a"] = _num(r"(\d+(?:\.\d+)?)\s*A\s*each", text) or _num(r"MPPT\s*(\d+(?:\.\d+)?)\s*A\b", text) or _num(r"\d+\s*x\s*(\d+(?:\.\d+)?)\s*A\s*PV", text)
         out["max_pv_voltage_v"] = _num(r"(\d{3,4})\s*Voc", text)
+        if re.search(r"(no|without)\s+(built-?in\s+|internal\s+)?(ats|transfer)", text, re.I):
+            out["has_transfer_switch"] = False
+        elif re.search(r"(built-?in|internal|integrated|own)\s+(ats|transfer)", text, re.I):
+            out["has_transfer_switch"] = True
     elif category == "Battery":
         out["continuous_a"] = _num(r"continuous(?: current)?\s*(\d+(?:\.\d+)?)\s*A\b", text)
     return {k: v for k, v in out.items() if v is not None}

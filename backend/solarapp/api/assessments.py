@@ -212,6 +212,17 @@ def _fresh_results(a: Assessment) -> dict:
     return a.results
 
 
+def _customer_results(a: Assessment) -> dict:
+    """The customer documents (proposal, roof check, card) add the round-3 design rule to the stale rule: a failed
+    circuit coordination (pricing.design_blocked, from the hard warnings) refuses them with the reason, so a wrong
+    design never prints as if it were right."""
+    results = _fresh_results(a)
+    blocked = (results.get("pricing") or {}).get("design_blocked") or []
+    if blocked:
+        raise HTTPException(status_code=409, detail=f"design_blocked: the design has a hard warning ({', '.join(blocked)}). Fix it under System design, then Calculate again.")
+    return results
+
+
 @router.get("/{assessment_id}/report.pdf")
 def customer_report(
     assessment_id: int,
@@ -219,7 +230,7 @@ def customer_report(
     settings: Settings = Depends(get_settings),
 ) -> Response:
     a = _get(session, assessment_id)
-    results = _fresh_results(a)
+    results = _customer_results(a)
     if (results.get("dataset") or {}).get("synthetic"):
         raise HTTPException(status_code=409, detail="Customer documents are disabled while test weather data is in use.")
     company = company_settings(session, settings)
@@ -234,7 +245,7 @@ def customer_quotation(
     settings: Settings = Depends(get_settings),
 ) -> Response:
     a = _get(session, assessment_id)
-    results = _fresh_results(a)
+    results = _customer_results(a)
     if (results.get("dataset") or {}).get("synthetic"):
         raise HTTPException(status_code=409, detail="Customer documents are disabled while test weather data is in use.")
     if not (results.get("pricing") or {}).get("available"):
@@ -270,7 +281,7 @@ def client_card(
     """Phone-sized image of the roof check result for the customer. The next step comes from the query
     string when given, else from the record's saved card_next_step."""
     a = _get(session, assessment_id)
-    results = _fresh_results(a)
+    results = _customer_results(a)
     if (results.get("dataset") or {}).get("synthetic"):
         raise HTTPException(status_code=409, detail="The card is disabled while test weather data is in use.")
     company = company_settings(session, settings)
@@ -280,46 +291,115 @@ def client_card(
     return Response(png, media_type="image/png", headers=_download_name("roof-check", a, "png", inline=True))
 
 
-# ---- bill of materials export: the generated list with the owner's edits, as the pricing results hold it
+# ---- bill of materials export: the generated list with the owner's edits, as the pricing results hold it.
+# Round 3 (E-14): a header block (customer, project, date, system), the spec or model per line, the lines grouped
+# by category in the customer sections' order, and the pack rounding noted where the item is sold by the roll or box.
 
-BOM_COLUMNS = ["code", "item", "supplier", "qty", "unit", "role", "note"]
+BOM_COLUMNS = ["category", "code", "item", "spec / model", "supplier", "qty", "unit", "packs", "role", "note"]
+BOM_CATEGORY_ORDER = ["Solar Panel", "Inverter", "Battery", "All-in-one System", "Mounting", "Wires and Terminations", "Protective Devices",
+                      "Enclosures and Raceways", "Grounding", "Accessories", "Consumables"]
+BOM_KIND_LABEL = {"net_metering": "net metering, no battery", "combination": "net metering with a battery", "off_grid": "no export, battery with the grid as backup"}
+_PACK_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:m|meter)\b", re.I)
 
 
-def _bom_rows(a: Assessment) -> list[list]:
-    """One row per BOM line (code, item, supplier, qty, unit, role, note); the one stale rule applies, and a record
-    without priced results is refused the same way the proposal is."""
+def _pack_note(qty: float, unit: str, sold_as: str, name: str) -> str:
+    """"2 × 150 m box" when the item is sold by a pack whose size the list states (sold-as text or the name), else blank."""
+    if (unit or "").lower() != "m":
+        return ""
+    text = f"{sold_as or ''} {name or ''}"
+    m = _PACK_RE.search(sold_as or "") or _PACK_RE.search(name or "")
+    if not m or "box" not in text.lower() and "roll" not in text.lower():
+        return ""
+    size = float(m.group(1))
+    if size <= 0:
+        return ""
+    import math
+    packs = int(math.ceil(qty / size - 1e-9))
+    kind = "box" if "box" in text.lower() else "roll"
+    return f"{packs} × {size:g} m {kind}"
+
+
+def _bom_header(a: Assessment, results: dict) -> list[list]:
+    """The block above the lines: who, which project, when, what system (as the pricing results hold it)."""
+    pricing = results.get("pricing") or {}
+    sizing = results.get("sizing") or {}
+    tot = pricing.get("totals") or {}
+    lines = pricing.get("lines") or []
+    panel = next((l for l in lines if l.get("role") == "panel"), None)
+    inverter = next((l for l in lines if l.get("role") == "inverter"), None)
+    battery = next((l for l in lines if l.get("role") == "battery"), None)
+    system = f"{float(tot.get('kwp') or 0):.2f} kWp, {BOM_KIND_LABEL.get(str(sizing.get('kind') or ''), 'solar PV system')}"
+    if panel:
+        system += f"; {int(float(panel.get('qty') or 0))} × {panel.get('name') or panel.get('code')}"
+    if inverter:
+        system += f"; inverter {int(float(inverter.get('qty') or 0))} × {inverter.get('name') or inverter.get('code')}"
+    if battery:
+        system += f"; battery {int(float(battery.get('qty') or 0))} × {battery.get('name') or battery.get('code')}"
+    computed = str(results.get("computed_at") or "")[:10]
+    return [
+        ["Bill of materials"],
+        ["Customer", a.customer_name or ""],
+        ["Project", f"#{a.id} P-{a.created_at.year}-{a.id:04d}", a.address or ""],
+        ["Date", computed or utcnow().date().isoformat(), "calculated; the quantities are the generated list with the owner's edits"],
+        ["System", system],
+        ["Packs", "the packs column rounds a length up to the roll or box the item is sold by; wastage is priced, not added to the quantity"],
+        [],
+    ]
+
+
+def _bom_rows(a: Assessment, session: Session) -> tuple[list[list], list[list]]:
+    """The header block and one row per BOM line (category, code, item, spec, supplier, qty, unit, packs, role, note),
+    grouped by category; the one stale rule applies, and a record without priced results is refused the same way the
+    proposal is. A role without an item (NO-ITEM-...) stays on the list with its quantity and the note that says so."""
     results = _fresh_results(a)
     pricing = results.get("pricing") or {}
     if not pricing.get("available"):
         raise HTTPException(status_code=409, detail="Calculate first. Pricing needs the panel linked to the materials list.")
+    catalog = load_catalog(session, include_inactive=True)
+    order = {c: i for i, c in enumerate(BOM_CATEGORY_ORDER)}
     rows: list[list] = []
     for l in pricing.get("lines") or []:
         qty = float(l.get("qty") or 0)
+        code = str(l.get("code") or "")
+        item = catalog.get(code)
+        found = l.get("found", True)
+        category = l.get("category") or (item.category if item else "") or ("(no item yet)" if code.startswith("NO-ITEM-") else "(not in the list)")
+        name = l.get("name") if found else ("no item in the materials list for this role" if code.startswith("NO-ITEM-") else "not in the materials list")
         rows.append([
-            l.get("code") or "", l.get("name") or ("" if l.get("found", True) else "not in the materials list"), l.get("supplier") or "",
-            int(qty) if qty.is_integer() else round(qty, 2), l.get("unit") or "", l.get("role") or "", l.get("note") or "",
+            category, code, name or "", (item.spec if item else "") or "", l.get("supplier") or "",
+            int(qty) if qty.is_integer() else round(qty, 2), l.get("unit") or "", _pack_note(qty, l.get("unit") or "", item.sold_as if item else "", item.name if item else ""),
+            l.get("role") or "", l.get("note") or "",
         ])
-    return rows
+    rows.sort(key=lambda r: order.get(r[0], len(order)))
+    return _bom_header(a, results), rows
 
 
 @router.get("/{assessment_id}/bom.csv")
 def bom_csv(assessment_id: int, session: Session = Depends(get_session)) -> Response:
-    """The bill of materials as CSV (UTF-8 with a byte-order mark, so spreadsheets open it as typed)."""
+    """The bill of materials as CSV (UTF-8 with a byte-order mark, so spreadsheets open it as typed): the header
+    block, then the column header, then the lines grouped by category (a category row before each group)."""
     import csv
     import io
 
     a = _get(session, assessment_id)
-    rows = _bom_rows(a)
+    header, rows = _bom_rows(a, session)
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\r\n")
+    w.writerows(header)
     w.writerow(BOM_COLUMNS)
-    w.writerows(rows)
+    last = None
+    for r in rows:
+        if r[0] != last:
+            w.writerow([f"— {r[0]} —"])
+            last = r[0]
+        w.writerow(r)
     return Response(buf.getvalue().encode("utf-8-sig"), media_type="text/csv; charset=utf-8", headers=_download_name("bom", a, "csv"))
 
 
 @router.get("/{assessment_id}/bom.xlsx")
 def bom_xlsx(assessment_id: int, session: Session = Depends(get_session)) -> Response:
-    """The bill of materials as a workbook: one sheet, a bold header, the columns sized to read."""
+    """The bill of materials as a workbook: one sheet, the header block, a bold column header, a shaded row per
+    category group, the columns sized to read."""
     import io
 
     from openpyxl import Workbook
@@ -327,22 +407,35 @@ def bom_xlsx(assessment_id: int, session: Session = Depends(get_session)) -> Res
     from openpyxl.utils import get_column_letter
 
     a = _get(session, assessment_id)
-    rows = _bom_rows(a)
+    header, rows = _bom_rows(a, session)
     wb = Workbook()
     ws = wb.active
     ws.title = "BOM"
+    for h in header:
+        ws.append(h)
+    ws["A1"].font = Font(bold=True, size=13)
+    for r in range(2, len(header)):
+        ws.cell(row=r, column=1).font = Font(bold=True)
     ws.append(BOM_COLUMNS)
-    for c in ws[1]:
+    head_row = ws.max_row
+    for c in ws[head_row]:
         c.font = Font(bold=True)
         c.fill = PatternFill("solid", fgColor="FAF4E1")
+    last = None
     for r in rows:
+        if r[0] != last:
+            ws.append([r[0]])
+            ws.cell(row=ws.max_row, column=1).font = Font(bold=True)
+            for c in ws[ws.max_row]:
+                c.fill = PatternFill("solid", fgColor="F2EFE6")
+            last = r[0]
         ws.append(r)
-    for i, width in enumerate([16, 44, 18, 8, 8, 16, 48], start=1):
+    for i, width in enumerate([22, 20, 44, 30, 16, 8, 7, 16, 18, 60], start=1):
         ws.column_dimensions[get_column_letter(i)].width = width
-    for row in ws.iter_rows(min_row=2, min_col=4, max_col=4):
+    for row in ws.iter_rows(min_row=head_row + 1, min_col=6, max_col=6):
         for c in row:
             c.alignment = Alignment(horizontal="right")
-    ws.freeze_panes = "A2"
+    ws.freeze_panes = f"A{head_row + 1}"
     buf = io.BytesIO()
     wb.save(buf)
     return Response(buf.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=_download_name("bom", a, "xlsx"))

@@ -420,6 +420,7 @@ class MaterialItemIn(BaseModel):
     mppt_max_a: Optional[float] = Field(default=None, gt=0)
     ac_input_a: Optional[float] = Field(default=None, gt=0)
     battery_max_a: Optional[float] = Field(default=None, gt=0)
+    has_transfer_switch: Optional[bool] = None
     continuous_a: Optional[float] = Field(default=None, gt=0)
     voc_v: Optional[float] = Field(default=None, gt=0)
     vmp_v: Optional[float] = Field(default=None, gt=0)
@@ -457,6 +458,7 @@ class MaterialItemPatch(BaseModel):
     mppt_max_a: Optional[float] = Field(default=None, gt=0)
     ac_input_a: Optional[float] = Field(default=None, gt=0)
     battery_max_a: Optional[float] = Field(default=None, gt=0)
+    has_transfer_switch: Optional[bool] = None
     continuous_a: Optional[float] = Field(default=None, gt=0)
     voc_v: Optional[float] = Field(default=None, gt=0)
     vmp_v: Optional[float] = Field(default=None, gt=0)
