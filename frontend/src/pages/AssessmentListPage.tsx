@@ -28,7 +28,7 @@ export default function AssessmentListPage() {
     if (!showBookings) return
     api
       .bookings()
-      .then((rows) => setBookings(rows.filter((b) => OPEN.includes(b.status) && !b.anonymised)))
+      .then((rows) => setBookings(rows.filter((b) => OPEN.includes(b.status) && !b.anonymised))) // the server already narrows; this keeps the list honest if it ever widens
       .catch((e) => setError(e.message))
   }, [showBookings])
   useEffect(() => {

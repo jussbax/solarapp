@@ -239,7 +239,7 @@ export const api = {
   importSeed: (keepConfig: boolean) => request<ImportReport>(`/api/pricing/import-seed?keep_config=${keepConfig}`, { method: 'POST' }),
   // website bookings are the CRM's data (the inbox, statuses, notes and funnel live behind /api/leads for it);
   // the engineering app only lists them and starts a project from one
-  bookings: () => request<Lead[]>('/api/leads'),
+  bookings: () => request<Lead[]>('/api/leads/open'),
   /** Start a project from a booking: the customer reference, the pin or town and the bill are copied; the booking stays with the website's records. */
   convertLead: (id: number) => request<{ project_id: number; lead: Lead }>(`/api/leads/${id}/convert`, { method: 'POST' }),
   /** Bill of materials export (the generated list with the owner's edits); fetch through fetchDocument so a stale record shows its message. */
