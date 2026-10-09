@@ -18,22 +18,24 @@ create the owner's account. From then on passwords live in the database
 authenticator set up the old way (the `twofactor.json` file) and any
 security keys registered before accounts existed carry over to the owner.
 
-Give an engineer access under Settings › People: username, name, role,
-Add. A temporary password is shown once; pass it on in person or by a call,
+Give an engineer access under Settings › People › Add a person: type their
+name (the username suggests itself), pick the role, press Add, then Copy
+the temporary password it shows and pass it on in person or by a call,
 never in the same message as the address. It opens nothing: at the first
-sign-in the person must choose their own password (twelve characters or
-more, not containing their username). The same card resets a password or
-an authenticator, changes a role, and deactivates a person, which ends
-their sessions at once.
+sign-in the person chooses their own password (twelve characters or more,
+not containing their username). The "⋯" menu on a person's card renames
+them, makes them an owner or an engineer, resets their password, turns
+their two-step verification off, or removes their access, which ends
+their sessions at once; a removed person can be restored.
 
 ## Two-factor login: the authenticator app
 
 Each person turns it on for themselves under Settings › Your account:
-enter the password under "Confirm it's you", press "Set up the
-authenticator app", scan the QR code with Google Authenticator, Microsoft
-Authenticator, Aegis or 1Password (or type the key shown), enter the
-6-digit code, and write down the eight backup codes shown once. From then
-on the login asks for the code after the password. Codes work offline, so
+flip the "Two-step verification" switch, confirm with the password, scan
+the QR code with Google Authenticator, Microsoft Authenticator, Aegis or
+1Password (or type the key shown), enter the 6-digit code, and copy or
+download the eight backup codes shown once. From then on the login asks
+for the code after the password. Codes work offline, so
 the login works on a roof with no signal; each backup code opens the door
 once if the phone is lost.
 
@@ -50,10 +52,9 @@ browser only releases a signature for the exact hostname the key was
 registered on, so a look-alike site gets nothing. Keys belong to the person
 who added them.
 
-1. Open Settings › Your account, enter the password (and a fresh code)
-   under "Confirm it's you", name the key and press "Add a security key".
-   The browser asks for the key's PIN (a new key asks you to set one) and
-   a touch.
+1. Open Settings › Your account › Security keys › Add a key…, name the key
+   and confirm with the password (and a fresh code). The browser asks for
+   the key's PIN (a new key asks you to set one) and a touch.
 2. Register a second key and keep it somewhere safe, or keep the backup
    codes: a lost key is removed from the same list, and the password with
    the code still works.
@@ -70,17 +71,19 @@ it; a wrong answer counts as a failed login.
 
 ## If a phone or laptop is lost
 
-1. Open Settings › Your account on another device and press "Sign out
-   everywhere". Every session of yours ends at once, including the one on
-   the lost device; sign in again afterwards.
-2. Check the list of security keys and remove any you do not recognize.
-   Signing out does not remove keys.
-3. Change your password there too if the lost device could have had it
-   saved; that also ends every other session.
+1. Open Settings › Your account on another device and press Devices ›
+   "Sign out everywhere". Every session of yours ends at once, including
+   the one on the lost device; sign in again afterwards.
+2. Check the list of security keys and remove any you do not recognize
+   (Remove asks for your password and a fresh code). Signing out does not
+   remove keys.
+3. Change your password there too (Password › Change…) if the lost device
+   could have had it saved; that also ends every other session.
 4. Lost the phone with the authenticator and the backup codes? The owner
-   presses "Reset authenticator" for you under People: the authenticator
-   and every key of yours are removed, your sessions end, and you sign in
-   with the password alone and set them up again. The owner's own
+   opens your card under People and chooses "Turn off two-step
+   verification": the authenticator and every key of yours are removed,
+   your sessions end, and you sign in with the password alone and set them
+   up again. The owner's own
    recovery, when no owner can sign in, is on the server:
    `docker compose exec solarapp python -m solarapp.users reset-authenticator <username>`
    (or `reset-password`, `list`, `create ... --role owner`).

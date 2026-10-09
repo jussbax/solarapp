@@ -48,3 +48,5 @@ that pipeline, and it is a separate build).
 - Round 1 and 2 (UX, marketing and copy, security, engineering): findings and their
   status in `docs/plan-engineering-app.md`, section 6.
 - Round 3 (all five roles, finance new): `docs/audits/round-3/`.
+- Round 4 (UX only, from the owner's screenshots: the pattern on every form,
+  Settings as a menu, people and account as dialogs): `docs/audits/round-4/`.
