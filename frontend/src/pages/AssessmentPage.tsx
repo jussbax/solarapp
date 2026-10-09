@@ -733,6 +733,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                   card: api.cardUrl(aid, (doc.card_next_step ?? '').trim()),
                   proposal: api.quotationUrl(aid),
                   program: api.programUrl(aid),
+                  plans: api.plansUrl(aid),
                   bomCsv: api.bomCsvUrl(aid),
                   bomXlsx: api.bomXlsxUrl(aid),
                 }}

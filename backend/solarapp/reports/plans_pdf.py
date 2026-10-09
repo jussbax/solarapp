@@ -427,7 +427,6 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     fpf = roles.get("fasteners_per_l_foot")
     gnd_rod, bonding, lugs = _line(by_role, "ground_rod"), _line(by_role, "array_bonding"), _line(by_role, "earth_lug")
     thhn_l = _line(by_role, "thhn")
-    placard = _line(by_role, "placard")
     notes = [
         f"<b>1. Setback and spacing.</b> Panels are kept {inset:g} m from every edge of a face (a setback of {_g(doc.setback_m)} m per dimension on this project) and "
         + (f"{_g(doc.gap_m)} m apart along a row." if float(doc.gap_m or 0) > 0 else "touching along a row, the mid-clamps between them.")
@@ -446,7 +445,7 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         f"{escape(str(choices.get('ac_gauge') or BLANK))} mm² THHN of the AC circuits. The equipment and electrode grounding conductor sizes: {TO_COMPLETE}.",
         f"<b>6. Conductors and protection.</b> Breakers and conductors as the circuit schedule sheet lists them, from the wiring rules on file (THHN ampacity table, {', '.join(f'{k} mm² {v:g} A' for k, v in thhn_amp.items())}; "
         f"verify the table edition). Derating, conduit fill and the short-circuit note: {TO_COMPLETE}.",
-        f"<b>7. Labels and placards.</b> {_item_text(placard) if placard else 'PV system labels and placards at the service, the disconnect, the inverter and the DC box: no item in the materials list yet'}; "
+        f"<b>7. Labels and placards.</b> PV system labels and placards at the service, the disconnect, the inverter and the DC box are miscellaneous supplies, not a BOM line; "
         f"what the LGU and the DU ask for: {TO_COMPLETE}.",
         f"<b>8. Code references.</b> No clause is cited by the office system; the articles that apply to the array, the storage battery and the mounting: {TO_COMPLETE}.",
     ]
@@ -503,7 +502,7 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         side_col.append(Paragraph("Obstacles and shade, as surveyed", h2))
         if markers or walls:
             ob_rows = [(chr(65 + i), escape(str(o.get("label") or ""))) for i, o in enumerate(markers)] + [("Hatched", escape(str(o.get("label") or ""))) for o in walls]
-            side_col.append(kv(ob_rows, (16 * mm, 94 * mm)))
+            side_col.append(kv(ob_rows, (20 * mm, 90 * mm)))
         else:
             side_col.append(Paragraph("None recorded on this face.", small))
         side_col.append(Paragraph("Legend", h2))

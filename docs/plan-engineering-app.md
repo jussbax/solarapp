@@ -7,10 +7,11 @@ what was decided and why once each batch lands.
 ## 1. What the app is
 
 One record per site, called a project. It holds the site, the roof, the
-readings, the energy audit, the design, the quantities, the program of works,
-the cashflow projection and the documents those produce. It is not a CRM and
-not a project-management tool: leads, follow-ups and sales stages belong to a
-CRM module; crews, purchases, progress and actuals belong to a PM module.
+readings, the energy audit, the design, the quantities, the program of works
+and the documents those produce. It is not a CRM, not a project-management
+tool and not a finance tool: leads, follow-ups and sales stages belong to a
+CRM module; crews, purchases, progress and actuals belong to a PM module; the
+cashflow projection and the installment structure belong to a finance module.
 Both will link to the engineering project by its id.
 
 ## 2. The engineering deliverables, corrected

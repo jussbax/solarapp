@@ -61,7 +61,7 @@ export default function DocumentsCard({
     { key: 'card', name: 'Roof check card', what: 'Phone-sized image to send to the customer after the visit.', customer: true, needs: 'results', url: urls.card, inline: true, action: 'Open' },
     { key: 'proposal', name: 'Proposal PDF', what: 'For the customer: the system, the price, savings, payment terms and the milestone schedule.', customer: true, needs: 'pricing', url: urls.proposal, action: 'Download' },
     { key: 'plans', name: 'Plans for the PEE, PDF', what: 'Internal: the A3 drawing set for the Professional Electrical Engineer to sign and seal: cover and general notes, the array layout of each face at scale, the equipment and circuit schedule, and what still waits on the datasheets.', customer: false, needs: 'pricing', url: plansUrl, action: 'Download' },
-    { key: 'program', name: 'Program of works PDF', what: 'Internal: the Gantt chart, the hour-by-hour plan, the pickup list and the cashflow.', customer: false, needs: 'program', url: urls.program, action: 'Download' },
+    { key: 'program', name: 'Program of works PDF', what: 'Internal: the Gantt chart, the hour-by-hour plan and the pickup list.', customer: false, needs: 'program', url: urls.program, action: 'Download' },
     { key: 'bom-csv', name: 'Bill of materials, CSV', what: 'Internal: the BOM with your edits, for supplier orders.', customer: false, needs: 'pricing', url: urls.bomCsv, action: 'Export' },
     { key: 'bom-xlsx', name: 'Bill of materials, XLSX', what: 'Internal: the same list as a workbook.', customer: false, needs: 'pricing', url: urls.bomXlsx, action: 'Export' },
   ]

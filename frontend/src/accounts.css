@@ -3,7 +3,7 @@
    Tokens come from styles.css. Sections: dialog · menu · toast · copy box · password checks · people · account · phone. */
 
 /* ---------- dialog ---------- */
-.dlg-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(17, 17, 17, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.dlg-backdrop { position: fixed; inset: 0; z-index: 1300; background: rgba(17, 17, 17, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .dlg { background: var(--card); color: var(--text); border-radius: 12px; width: 100%; max-width: 460px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28); outline: none; }
 .dlg.wide { max-width: 560px; }
 .dlg-head { padding: 18px 20px 0; }
