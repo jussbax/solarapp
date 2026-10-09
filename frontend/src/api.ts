@@ -196,6 +196,8 @@ export const api = {
   /** "Reopen design": the proposal issued for the record is no longer the standing one; the status falls back to the facts and Calculate re-prices freely. */
   reopenDesign: (id: number) => request<AssessmentOut>(`/api/assessments/${id}/reopen`, { method: 'POST' }),
   programUrl: (id: number) => `/api/assessments/${id}/program.pdf`,
+  /** The plans for the PEE (A3 drawing set); refused like the proposal on stale or design-blocked results. */
+  plansUrl: (id: number) => `/api/assessments/${id}/plans.pdf`,
   cardUrl: (id: number, nextStep = '') => `/api/assessments/${id}/card.png${nextStep ? `?next_step=${encodeURIComponent(nextStep)}` : ''}`,
   /** Fetch a generated document, so a 409 (stale results) or an outage becomes a message in the bar and never a raw JSON page. */
   fetchDocument: async (url: string): Promise<FetchedDocument> => {

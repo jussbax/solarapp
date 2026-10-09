@@ -1452,3 +1452,74 @@ background and the section remove in data entry" and, of the stage pill,
   "…" 25 → 0, duplicated headings 1 → 0, off-grid lines 4 → 0. The scanner
   still lists a "?" or an override tag as a cell's first button; measured
   on the controls alone the lines are on one edge.
+
+## Round 4, plans: the layout legible, and the plans for the PEE
+
+The owner, 9 October 2026: "for the roof layout, I think it is too small to
+be seen properly. And I don't see where I can get the plans that will be
+handed to the PEE for signing." Then: "The plans should be in A3 not A4."
+
+- The plan drawing on the Design and outputs step takes the card's width
+  (up to 900 px on the desk, the full 344 px on the phone), one face to a
+  row, with the whole drawing capped at 600 px tall: a face taller than
+  wide keeps a scale that reads instead of shrinking to a thumbnail. It
+  now carries dimension lines in metres (the eave and the slope as the
+  outer figures, a hip's ridge above, and the strips that hold no panels
+  as a near chain: the setback on each edge, or a wall strip as hatched),
+  the string number under each used panel (S1, S2 … as the current rule
+  numbers them) and a north arrow. "View larger" opens the same drawing in
+  the one Dialog at the largest size that fits the screen, captioned with
+  the face, where it looks, the tilt, the panels used of possible and the
+  kWp. The dialog kit sizes itself for questions (460 px, under the page's
+  sticky bars); the drawing sets its box to the viewport and lifts the
+  backdrop above the step tabs and the action bar from inside, and undoes
+  it on close. Worth a one-line kit change later: the backdrop's z-index
+  should sit above the sticky bars for every dialog on the project page.
+- North on a plan whose eave is at the bottom: the drawing's "up" is the
+  direction the ridge lies in (azimuth + 180), so north sits 180 − azimuth
+  degrees clockwise from up (a south face has north up, an east face has
+  north to the right). The same rule in the PDF and the React drawing.
+- "Plans for the PEE" is a new internal document (Documents card, needs
+  pricing; GET /api/assessments/{id}/plans.pdf), refused on stale or
+  design-blocked results the way the proposal is and without pricing (no
+  BOM, no circuits), but not on test weather (internal, like the program
+  of works). A3 landscape (420 × 297 mm) on every sheet, drawn with
+  ReportLab from the geometry, the BOM and the settings the results hold:
+  a title block on every page (company name and contact line; the project:
+  customer, address, number; the sheet name and "Sheet n of N"; the issue
+  date and the revision; the sheet size; the signature block for the
+  Professional Electrical Engineer with the name and PRC number from the
+  company profile, blank lines when the profile has none, and blank lines
+  for the PTR, TIN, signature and date, which the app never holds). Sheet 1
+  is the cover and general notes; one sheet per roof face that holds
+  panels carries the array layout at the largest standard scale that fits
+  (1:20, 1:25, 1:30, 1:40, 1:50 …), stated on the sheet and in the title
+  block, with the dimension lines, the setback strips, the panel size and
+  spacing, the panel numbers and string labels, the obstacles as surveyed,
+  the north arrow and a legend; then the equipment and circuit schedule
+  (inverter, battery, panels with the data on file; the DC side; the AC
+  side per the round-3 circuits; the battery circuit; grounding and
+  bonding; the BOQ's voltage drops against the limits); then a last sheet
+  that says what is not yet in the set and why, with the energy audit's
+  schedule of loads as a table, labelled as the audit's figures, when the
+  audit has appliances.
+- Nothing invented: every number is from the results, the BOM lines, the
+  materials list or the pricing settings, and a figure the app does not
+  hold prints as a blank line (`BLANK`). No clause numbers; no standard is
+  named unless the materials list records it (the inverter's certificate).
+  Where the signing engineer adds the clause the line reads "per the
+  applicable code, to be completed by the signing engineer" (derating,
+  conduit fill, the short-circuit note, the grounding conductor sizes, the
+  wind zone, the placards the LGU and the DU ask for). The revision prints
+  as "Rev. 0" beside the calculation's date and time, because the app keeps
+  no revision history: a set regenerated after a change carries a new
+  calculation stamp, and the PEE marks revisions by hand.
+- The single-line diagram and the string table (Voc at the coldest cell,
+  Vmp at the hottest, Isc per MPPT) stay out of the set until the panel
+  and inverter datasheets are on the Materials page; the last sheet names
+  which fields are still blank. The string current and voltage on the
+  schedule are the wiring rules' figures (the Vmp per panel setting) and
+  say so.
+- The plan drawing's keyword options (`dimensions`, `scale_denominator`,
+  `string_labels`, `north_arrow`, `font_pt`, `legend`) are off by default,
+  so the roof check and the proposal print exactly what they printed.

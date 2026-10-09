@@ -51,13 +51,16 @@ export default function DocumentsCard({
   busy: boolean
   nextStep: string
   onNextStepChange: (v: string) => void
-  urls: { report: string; card: string; proposal: string; program: string; bomCsv: string; bomXlsx: string }
+  /** `plans` may be left out: the plans URL then follows the program's (the same route family, api.plansUrl). */
+  urls: { report: string; card: string; proposal: string; program: string; bomCsv: string; bomXlsx: string; plans?: string }
   openDocument: (url: string, inlineHint?: boolean) => void
 }) {
+  const plansUrl = urls.plans ?? urls.program.replace(/\/program\.pdf(\?.*)?$/, '/plans.pdf')
   const rows: DocRow[] = [
     { key: 'report', name: 'Roof check PDF', what: 'For the customer: what the roof can hold and what it would make, with the plan of each face.', customer: true, needs: 'results', url: urls.report, action: 'Download' },
     { key: 'card', name: 'Roof check card', what: 'Phone-sized image to send to the customer after the visit.', customer: true, needs: 'results', url: urls.card, inline: true, action: 'Open' },
     { key: 'proposal', name: 'Proposal PDF', what: 'For the customer: the system, the price, savings, payment terms and the milestone schedule.', customer: true, needs: 'pricing', url: urls.proposal, action: 'Download' },
+    { key: 'plans', name: 'Plans for the PEE, PDF', what: 'Internal: the A3 drawing set for the Professional Electrical Engineer to sign and seal: cover and general notes, the array layout of each face at scale, the equipment and circuit schedule, and what still waits on the datasheets.', customer: false, needs: 'pricing', url: plansUrl, action: 'Download' },
     { key: 'program', name: 'Program of works PDF', what: 'Internal: the Gantt chart, the hour-by-hour plan, the pickup list and the cashflow.', customer: false, needs: 'program', url: urls.program, action: 'Download' },
     { key: 'bom-csv', name: 'Bill of materials, CSV', what: 'Internal: the BOM with your edits, for supplier orders.', customer: false, needs: 'pricing', url: urls.bomCsv, action: 'Export' },
     { key: 'bom-xlsx', name: 'Bill of materials, XLSX', what: 'Internal: the same list as a workbook.', customer: false, needs: 'pricing', url: urls.bomXlsx, action: 'Export' },
