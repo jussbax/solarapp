@@ -122,24 +122,60 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export type StepUp = { password: string; code: string }
+/** Who is signed in. Before sign-in only `passkeys` is filled (whether any key exists, so the login page can offer the button). */
+export type Me = {
+  username: string | null
+  signed_in: boolean
+  display_name?: string
+  role?: 'owner' | 'engineer'
+  must_change_password?: boolean
+  two_factor?: boolean
+  backup_codes_left?: number
+  passkeys?: boolean
+}
+export type Person = {
+  id: number
+  username: string
+  display_name: string
+  role: 'owner' | 'engineer'
+  active: boolean
+  must_change_password: boolean
+  two_factor: boolean
+  passkeys: number
+  created_at: string | null
+  last_login_at: string | null
+}
 export type Passkey = { id: number; name: string; transports: string[]; backed_up: boolean; created_at: string | null; last_used_at: string | null }
 export type FetchedDocument = { blob: Blob; filename: string; inline: boolean }
 
 export const api = {
-  me: () => request<{ username: string | null; signed_in: boolean; two_factor?: boolean; passkeys?: boolean }>('/api/auth/me'),
-  login: (username: string, password: string, code = '') =>
-    request<{ username: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password, code }) }),
+  me: () => request<Me>('/api/auth/me'),
+  login: (username: string, password: string, code = '') => request<Me>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password, code }) }),
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   passkeyLoginOptions: () => request<{ challenge_id: string; options: Record<string, unknown> }>('/api/auth/passkey/options', { method: 'POST' }),
   passkeyLogin: (challenge_id: string, credential: Record<string, unknown>) =>
-    request<{ username: string }>('/api/auth/passkey/login', { method: 'POST', body: JSON.stringify({ challenge_id, credential }) }),
+    request<Me>('/api/auth/passkey/login', { method: 'POST', body: JSON.stringify({ challenge_id, credential }) }),
   signOutEverywhere: () => request<{ ok: boolean }>('/api/auth/signout-everywhere', { method: 'POST' }),
+  // the person's own password and authenticator app; each asks for the current password (and a code) again
+  changePassword: (current_password: string, code: string, new_password: string) =>
+    request<Me>('/api/auth/password', { method: 'POST', body: JSON.stringify({ current_password, code, new_password }) }),
+  totpBegin: (confirm: StepUp) => request<{ secret: string; uri: string; qr: string }>('/api/auth/totp/begin', { method: 'POST', body: JSON.stringify(confirm) }),
+  totpConfirm: (code: string) => request<{ ok: boolean; backup_codes: string[] }>('/api/auth/totp/confirm', { method: 'POST', body: JSON.stringify({ code }) }),
+  totpDisable: (confirm: StepUp) => request<{ ok: boolean }>('/api/auth/totp/disable', { method: 'POST', body: JSON.stringify(confirm) }),
+  // people (owner only)
+  users: () => request<Person[]>('/api/users'),
+  createUser: (username: string, display_name: string, role: Person['role']) =>
+    request<Person & { temporary_password: string }>('/api/users', { method: 'POST', body: JSON.stringify({ username, display_name, role }) }),
+  patchUser: (id: number, patch: Partial<Pick<Person, 'display_name' | 'role' | 'active'>>) =>
+    request<Person>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  resetUserPassword: (id: number) => request<Person & { temporary_password: string }>(`/api/users/${id}/reset-password`, { method: 'POST' }),
+  resetUserAuthenticator: (id: number) => request<Person>(`/api/users/${id}/reset-authenticator`, { method: 'POST' }),
   passkeys: () => request<Passkey[]>('/api/auth/passkeys'),
   // managing keys asks for the password (and the code) again, so a stolen cookie alone cannot add or remove one
   passkeyRegisterOptions: (confirm: StepUp) =>
     request<{ challenge_id: string; options: Record<string, unknown> }>('/api/auth/passkeys/options', { method: 'POST', body: JSON.stringify(confirm) }),
-  passkeyRegister: (confirm: StepUp, challenge_id: string, name: string, credential: Record<string, unknown>) =>
-    request<Passkey>('/api/auth/passkeys', { method: 'POST', body: JSON.stringify({ ...confirm, challenge_id, name, credential }) }),
+  passkeyRegister: (challenge_id: string, name: string, credential: Record<string, unknown>) =>
+    request<Passkey>('/api/auth/passkeys', { method: 'POST', body: JSON.stringify({ challenge_id, name, credential }) }),
   passkeyDelete: (id: number, confirm: StepUp) => request<void>(`/api/auth/passkeys/${id}/remove`, { method: 'POST', body: JSON.stringify(confirm) }),
   dataStatus: () => request<DataStatus>('/api/data/status'),
   settings: () => request<AppSettings>('/api/settings'),

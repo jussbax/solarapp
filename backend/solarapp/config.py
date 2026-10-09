@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     static_dir: Optional[Path] = None  # built frontend (dist); served at /
     session_hours: int = 24 * 7
     cookie_secure: bool = True         # SOLARAPP_COOKIE_SECURE=false only for plain-http testing on the office network
-    totp_secret: str = ""             # optional: the authenticator secret, if you prefer it in .env over data/twofactor.json
     # The back office's own hostname; with public_host set, any other hostname is treated as public (fail closed)
     office_host: str = ""
     # Website origins allowed to call the public estimate API (comma separated), e.g. https://pldevinc.com,https://www.pldevinc.com

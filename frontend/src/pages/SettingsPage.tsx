@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { api } from '../api'
+import { api, type Me } from '../api'
 import PricingSettings from '../components/PricingSettings'
-import SignInSecurity from '../components/SignInSecurity'
+import AccountCard from '../components/AccountCard'
+import PeopleCard from '../components/PeopleCard'
 import { PROFILE_FIELDS, type AppSettings, type DataStatus } from '../types'
 import { fmtDateTime } from '../fmt'
 
@@ -11,7 +12,8 @@ const WARRANTY_KEYS = new Set(['warranty_workmanship_years', 'warranty_panels_pr
 // website only: the booking form, the thank-you page and the trust lines (mirrors backend profile.WEBSITE_KEYS)
 const WEBSITE_KEYS = ['messenger', 'facebook', 'brands', 'callback_promise']
 
-export default function SettingsPage({ status, onRefresh }: { status: DataStatus | null; onRefresh: () => void }) {
+export default function SettingsPage({ user, onUser, status, onRefresh }: { user: Me; onUser: (me: Me) => void; status: DataStatus | null; onRefresh: () => void }) {
+  const owner = user.role === 'owner'
   const [s, setS] = useState<AppSettings | null>(null)
   const [saved, setSaved] = useState<AppSettings | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -47,9 +49,9 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
       <div className="field" key={key}>
         <label>{label}</label>
         {long ? (
-          <textarea rows={2} value={s[key] ?? ''} onChange={(e) => setS({ ...s, [key]: e.target.value })} />
+          <textarea rows={2} value={s[key] ?? ''} onChange={(e) => setS({ ...s, [key]: e.target.value })} disabled={!owner} />
         ) : (
-          <input value={s[key] ?? ''} onChange={(e) => setS({ ...s, [key]: e.target.value })} placeholder={hint} />
+          <input value={s[key] ?? ''} onChange={(e) => setS({ ...s, [key]: e.target.value })} placeholder={hint} disabled={!owner} />
         )}
         {hint && !long && <div className="hint">{hint}</div>}
       </div>
@@ -62,6 +64,7 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
         <h2>Company profile</h2>
         <div className="muted" style={{ marginBottom: 10 }}>
           Shown on the public estimate page, the proposal, the roof check and the card. Blank fields are left off.
+          {!owner && ' Only the owner changes these.'}
         </div>
         {s && (
           <>
@@ -81,21 +84,31 @@ export default function SettingsPage({ status, onRefresh }: { status: DataStatus
             </div>
             <div className="grid">{fields(WEBSITE_KEYS)}</div>
             {field('privacy_note', 'Privacy line under the booking form', undefined, true)}
-            <div className="actions" style={{ position: 'static', border: 0, padding: '6px 0 0' }}>
-              <button className="primary" type="submit" disabled={busy || !dirty}>
-                Save profile
-              </button>
-              {msg && <span className="muted">{msg}</span>}
-              {dirty && !msg && <span className="chip unsaved">Unsaved changes</span>}
-            </div>
+            {owner && (
+              <div className="actions" style={{ position: 'static', border: 0, padding: '6px 0 0' }}>
+                <button className="primary" type="submit" disabled={busy || !dirty}>
+                  Save profile
+                </button>
+                {msg && <span className="muted">{msg}</span>}
+                {dirty && !msg && <span className="chip unsaved">Unsaved changes</span>}
+              </div>
+            )}
           </>
         )}
       </form>
-      <SignInSecurity />
-      <div className="card">
-        <h2>Pricing settings</h2>
-        <PricingSettings />
-      </div>
+      <AccountCard user={user} onUser={onUser} />
+      {owner && <PeopleCard me={user} />}
+      {owner ? (
+        <div className="card">
+          <h2>Pricing settings</h2>
+          <PricingSettings />
+        </div>
+      ) : (
+        <div className="card">
+          <h2>Pricing settings</h2>
+          <div className="muted">Markups, labor rates, freight and the program-of-works rules are the owner's to change. The BOQ and the quotation use them as set.</div>
+        </div>
+      )}
       <div className="card">
         <h2>Weather dataset</h2>
         {status ? (

@@ -4,25 +4,42 @@ The app side is in the code (see DECISIONS.md, "Security"). This page is the
 owner's side: settings on Cloudflare, the server, backups and the Data
 Privacy Act routine. Do them in this order.
 
-## Two-factor login for the back office (do this first)
+## Accounts: who can sign in (do this first)
 
-The back office asks for a code from an authenticator app (Google
-Authenticator, Authy, Microsoft Authenticator) after the password. Codes
-work offline, so the login works on a roof with no signal. Set it up once:
+Everyone who opens the back office has their own username and password.
+Two roles: the **owner** manages people, the company profile, pricing
+settings and the materials list; an **engineer** works on leads, projects
+and every engineering output. The server enforces the split, not only the
+screens.
 
-```
-docker compose exec solarapp python -m solarapp.twofactor setup
-```
+The username and password in `.env` are used once, at the first start, to
+create the owner's account. From then on passwords live in the database
+(as argon2 hashes), and the `.env` password may be cleared. An
+authenticator set up the old way (the `twofactor.json` file) and any
+security keys registered before accounts existed carry over to the owner.
 
-Scan the QR code it prints (it is also saved as `data/twofactor-qr.png`;
-delete that file after scanning) and write down the eight backup codes
-somewhere safe, away from the phone. Each backup code opens the door once
-if the phone is lost. `status` shows how many are left; `setup` again
-replaces the secret and the codes; `disable` switches it off. The secret
-lives in `data/twofactor.json`, never in `.env`.
+Give an engineer access under Settings › People: username, name, role,
+Add. A temporary password is shown once; pass it on in person or by a call,
+never in the same message as the address. It opens nothing: at the first
+sign-in the person must choose their own password (twelve characters or
+more, not containing their username). The same card resets a password or
+an authenticator, changes a role, and deactivates a person, which ends
+their sessions at once.
 
-With this in place, Cloudflare Access (below) is an optional extra layer,
-not the only lock.
+## Two-factor login: the authenticator app
+
+Each person turns it on for themselves under Settings › Your account:
+enter the password under "Confirm it's you", press "Set up the
+authenticator app", scan the QR code with Google Authenticator, Microsoft
+Authenticator, Aegis or 1Password (or type the key shown), enter the
+6-digit code, and write down the eight backup codes shown once. From then
+on the login asks for the code after the password. Codes work offline, so
+the login works on a roof with no signal; each backup code opens the door
+once if the phone is lost.
+
+The owner should turn it on first, and ask every engineer to do the same
+before they work from outside the office. With this in place, Cloudflare
+Access (below) is an optional extra layer, not the only lock.
 
 ## Security keys and passkeys
 
@@ -30,11 +47,13 @@ A hardware key (YubiKey or similar) or a passkey on your phone signs you in
 with one touch: no password, no code. The key proves possession and its PIN
 or fingerprint proves it is you, so it counts as both factors, and the
 browser only releases a signature for the exact hostname the key was
-registered on, so a look-alike site gets nothing.
+registered on, so a look-alike site gets nothing. Keys belong to the person
+who added them.
 
-1. Sign in with the password and the code, open Settings › Sign-in
-   security, name the key and press "Add a security key". The browser asks
-   for the key's PIN (a new key asks you to set one) and a touch.
+1. Open Settings › Your account, enter the password (and a fresh code)
+   under "Confirm it's you", name the key and press "Add a security key".
+   The browser asks for the key's PIN (a new key asks you to set one) and
+   a touch.
 2. Register a second key and keep it somewhere safe, or keep the backup
    codes: a lost key is removed from the same list, and the password with
    the code still works.
@@ -43,22 +62,30 @@ registered on, so a look-alike site gets nothing.
    address on the office network.
 
 Wrong or unknown keys count toward the same login throttle, and every
-sign-in names its method (`method=password` or `method=passkey`) in the
-audit log. Adding or removing a key asks for the password (and a fresh
-code) again, so a stolen session cookie alone cannot plant a key or
-remove yours; a wrong answer counts as a failed login.
+sign-in names its person and method (`method=password` or
+`method=passkey`) in the audit log. Adding or removing a key, turning the
+authenticator on or off and changing the password all ask for the password
+(and a fresh code) again, so a stolen session cookie alone cannot do any of
+it; a wrong answer counts as a failed login.
 
 ## If a phone or laptop is lost
 
-1. Open Settings › Sign-in security on another device and press "Sign out
-   everywhere". Every session ends at once, including the one on the lost
-   device; sign in again afterwards.
-2. Check the list of security keys and remove any you do not recognise.
-   Signing out does not remove keys, and neither does a password change.
-3. Change the password in `.env` and restart if the lost device could have
-   had it saved.
-4. Read the audit log: an unexpected `passkey added` line is a takeover
-   signal.
+1. Open Settings › Your account on another device and press "Sign out
+   everywhere". Every session of yours ends at once, including the one on
+   the lost device; sign in again afterwards.
+2. Check the list of security keys and remove any you do not recognize.
+   Signing out does not remove keys.
+3. Change your password there too if the lost device could have had it
+   saved; that also ends every other session.
+4. Lost the phone with the authenticator and the backup codes? The owner
+   presses "Reset authenticator" for you under People: the authenticator
+   and every key of yours are removed, your sessions end, and you sign in
+   with the password alone and set them up again. The owner's own
+   recovery, when no owner can sign in, is on the server:
+   `docker compose exec solarapp python -m solarapp.users reset-authenticator <username>`
+   (or `reset-password`, `list`, `create ... --role owner`).
+5. Read the audit log: an unexpected `passkey added`, `user created` or
+   `password reset` line is a takeover signal.
 
 ## Cloudflare (both hostnames)
 

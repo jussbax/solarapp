@@ -155,11 +155,33 @@ class MaterialItem(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
 
 
+class User(SQLModel, table=True):
+    """A person who may sign in: the owner (manages people, settings and materials) or an engineer (projects and
+    documents). Passwords are stored as argon2id hashes; the authenticator and the security keys are per person."""
+    __tablename__ = "users"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str = Field(index=True, unique=True)   # lower case, no spaces
+    display_name: str = ""
+    role: str = "engineer"                            # owner | engineer
+    password_hash: str = ""
+    must_change_password: bool = False                # a temporary password from the owner: change it before working
+    active: bool = True
+    session_generation: str = ""                      # rotated on a password change, a sign-out everywhere or a deactivation
+    totp_secret: str = ""                             # blank = authenticator off
+    totp_pending_secret: str = ""                     # set-up started in the browser, not yet confirmed with a code
+    totp_backup: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))   # hashed one-time codes
+    totp_last_step: int = 0                           # replay guard: the last 30 s step accepted
+    created_at: datetime = Field(default_factory=utcnow)
+    last_login_at: Optional[datetime] = None
+
+
 class Passkey(SQLModel, table=True):
-    """A registered security key or phone passkey (WebAuthn credential) that signs the owner in on its own."""
+    """A registered security key or phone passkey (WebAuthn credential) that signs its person in on its own."""
     __tablename__ = "passkeys"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: Optional[int] = Field(default=None, index=True)   # the person it belongs to; keys from before accounts existed go to the first owner
     name: str = ""
     credential_id: bytes = Field(sa_column=Column(LargeBinary, nullable=False, unique=True))
     public_key: bytes = Field(sa_column=Column(LargeBinary, nullable=False))

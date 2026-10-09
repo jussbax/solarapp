@@ -306,7 +306,7 @@ def test_results_carry_the_meter_figures_faces_and_the_hourly_year(client):
     assert not any(w["code"] in ("inverter_not_grid_interactive", "inverter_certificate_unknown") for w in pr["warnings"])
     # the proposal: the meter figure and the one honest battery line (the eco-hybrid's certificate is not recorded yet)
     from tests.conftest import real_weather
-    real_weather(aid)
+    real_weather(aid, client)
     pdf = client.get(f"/api/assessments/{aid}/quotation.pdf")
     assert pdf.status_code == 200
     text_ = _pdf_text(pdf.content)
@@ -338,7 +338,7 @@ def test_off_grid_results_and_proposal_say_how_often_the_battery_runs_out(client
     else:
         assert "does not run out" in line
     from tests.conftest import real_weather
-    real_weather(aid)
+    real_weather(aid, client)
     text_ = " ".join(_pdf_text(client.get(f"/api/assessments/{aid}/quotation.pdf").content).split())
     assert "Designed to carry 1 evening without sun; the grid steps in only when" in text_ and "Inverter certificate" not in text_
 

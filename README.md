@@ -122,12 +122,13 @@ the token or to a signed-in user.
    and delete the old tunnel in the dashboard. You may then also delete the
    `ports:` block on the `solarapp` service in `docker-compose.yml`: the
    host no longer needs to publish anything.
-5. Switch on two-factor login for the back office:
-   `docker compose exec solarapp python -m solarapp.twofactor setup`, scan
-   the QR code with an authenticator app and keep the backup codes. The
-   login page then asks for the code after the password. Then add your
-   hardware key or phone passkey in Settings › Sign-in security: it signs
-   you in with one touch. Cloudflare Access in front of
+5. Sign in as the owner (the username and password from `.env`; they are
+   used once, to create the owner's account) and open Settings › Your
+   account: set up the authenticator app (scan the QR code, keep the eight
+   backup codes) and add your hardware key or phone passkey, which signs
+   you in with one touch. Give an engineer their own account under
+   Settings › People: the temporary password is shown once and they
+   choose their own at the first sign-in. Cloudflare Access in front of
    `solar.pldevinc.com` is optional on top (see `docs/security.md`).
 
 Then follow `docs/security.md` for the Cloudflare rules (rate limits, WAF,
@@ -277,7 +278,8 @@ the tunnels and the sign-in changes needs the extra ones marked "first time".
 3. Bring `.env` up to date against `.env.example` (first time: the
    variables under "Website estimate" and "Website and tunnels" are new).
    Required now: `SOLARAPP_INTERNAL_TOKEN` (`openssl rand -hex 24`), a real
-   `SOLARAPP_APP_PASSWORD` (the app refuses `change-me`),
+   `SOLARAPP_APP_PASSWORD` (the app refuses `change-me`; it only creates
+   the first owner's account and may be cleared afterwards),
    `SOLARAPP_PUBLIC_ORIGINS`, `SOLARAPP_PUBLIC_URL`, `SOLARAPP_WEBSITE_URL`,
    `SOLARAPP_OFFICE_HOST`, `SOLARAPP_COOKIE_SECURE=true`, the two tunnel
    tokens and `COMPOSE_PROFILES=tunnels`. `SOLARAPP_SECRET_KEY` may stay
@@ -312,15 +314,23 @@ After the first update, in the browser:
 - Settings: fill the company profile (contact details, the PEE, warranties,
   where to pay, the callback promise); they print on every document and on
   the website.
-- Sign in: `docker compose exec solarapp python -m solarapp.twofactor setup`,
-  scan the QR code, keep the backup codes; then add your security key under
-  Settings › Sign-in security.
+- Sign in with the `.env` username and password: that creates the owner's
+  account, and an authenticator set up the old way (the `twofactor.json`
+  file) and any security keys already registered carry over to it. From
+  then on the password lives in the database, not in `.env`: change it
+  under Settings › Your account, where the authenticator app and the keys
+  are set up too. Add your engineer under Settings › People.
 - Check `https://solar.pldevinc.com` (login), `https://pldevinc.com` (site),
   run the estimate and a test booking, and see it land under Leads.
 
 Backups: `data/solarapp.db` holds everything the app knows; `data/` as a
-whole adds the weather dataset (re-downloadable) and the secrets
-(`secret.key`, `session.key`, `twofactor.json`), which are worth keeping.
+whole adds the weather dataset (re-downloadable) and the secret key
+(`secret.key`), which is worth keeping. Locked out (every owner lost their
+phone and backup codes, or forgot the password)? On the server:
+`docker compose exec solarapp python -m solarapp.users reset-authenticator <username>`
+or `... reset-password <username>` (`list` shows everyone, `create` makes a
+new owner); the command needs shell access to the server, which is the
+point.
 
 ## Without Docker (plain Ubuntu)
 

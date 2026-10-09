@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from '../api'
+import { api, type Me } from '../api'
 import NumberInput from '../components/NumberInput'
 import type { ImportReport, MaterialItem, MaterialSupplier, PricingStatus } from '../types'
 import { fmtDateTime, php2 } from '../fmt'
@@ -178,7 +178,8 @@ function ItemForm({ it, set, codeEditable }: { it: ItemDraft; set: (p: Partial<I
   )
 }
 
-export default function MaterialsPage() {
+export default function MaterialsPage({ user }: { user: Me }) {
+  const owner = user.role === 'owner'
   const [status, setStatus] = useState<PricingStatus | null>(null)
   const [cats, setCats] = useState<{ name: string; count: number }[]>([])
   const [suppliers, setSuppliers] = useState<MaterialSupplier[]>([])
@@ -331,11 +332,13 @@ export default function MaterialsPage() {
           <div className="narrow inline" style={{ paddingBottom: 8 }}>
             <input type="checkbox" checked={inactive} onChange={(e) => setInactive(e.target.checked)} style={{ width: 'auto' }} /> Show inactive
           </div>
-          <div className="narrow inline" style={{ paddingBottom: 4 }}>
-            <button type="button" className="primary" onClick={() => setCreating(blankItem())}>
-              New item
-            </button>
-          </div>
+          {owner && (
+            <div className="narrow inline" style={{ paddingBottom: 4 }}>
+              <button type="button" className="primary" onClick={() => setCreating(blankItem())}>
+                New item
+              </button>
+            </div>
+          )}
         </div>
         {error && (
           <div className="banner bad" style={{ marginTop: 8 }}>
@@ -428,12 +431,16 @@ export default function MaterialsPage() {
                     </td>
                     <td data-label="Electrical">{electricalSummary(it)}</td>
                     <td style={{ whiteSpace: 'nowrap' }} className="cell-actions">
-                      <button type="button" className="toggle link" onClick={() => setEditing(it)}>
-                        Edit
-                      </button>
-                      <button type="button" className="toggle link" onClick={() => toggleActive(it)}>
-                        {it.active ? 'Deactivate' : 'Activate'}
-                      </button>
+                      {owner && (
+                        <>
+                          <button type="button" className="toggle link" onClick={() => setEditing(it)}>
+                            Edit
+                          </button>
+                          <button type="button" className="toggle link" onClick={() => toggleActive(it)}>
+                            {it.active ? 'Deactivate' : 'Activate'}
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ),
@@ -450,6 +457,13 @@ export default function MaterialsPage() {
         )}
       </div>
 
+      {!owner && (
+        <div className="card">
+          <h2>Changing the list</h2>
+          <div className="muted">Prices, new items and the workbook import are the owner's to change. Tell the owner what you found cheaper or out of stock.</div>
+        </div>
+      )}
+      {owner && (
       <div className="card">
         <h2>Import workbook</h2>
         <div className="muted">
@@ -495,6 +509,7 @@ export default function MaterialsPage() {
           </div>
         )}
       </div>
+      )}
     </>
   )
 }

@@ -406,3 +406,4 @@ table.categories td { padding: 4px 6px; }
   table.payments td.cell-main, table.payments td.cell-actions, table.categories td.cell-main, table.categories td.cell-actions { grid-column: 1 / -1; }
   table.payments td input, table.payments td select, table.categories td input { width: 100% !important; }
 }
+.topbar .right .who { font-weight: 500; color: rgba(255,255,255,0.85); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

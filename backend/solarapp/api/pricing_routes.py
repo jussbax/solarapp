@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlmodel import Session, func, select
 
-from ..auth import require_user
+from ..auth import require_owner, require_user
 from ..db import get_session
 from ..models import MaterialItem, MaterialSupplier, utcnow
 from ..pricing.config import PricingConfig
@@ -36,7 +36,7 @@ def get_config(session: Session = Depends(get_session)) -> PricingConfig:
     return load_config(session)
 
 
-@router.put("/config", response_model=PricingConfig)
+@router.put("/config", response_model=PricingConfig, dependencies=[Depends(require_owner)])
 def put_config(cfg: PricingConfig, session: Session = Depends(get_session)) -> PricingConfig:
     old = load_config(session)
     cfg.imported_from, cfg.imported_at = old.imported_from, old.imported_at
@@ -44,7 +44,7 @@ def put_config(cfg: PricingConfig, session: Session = Depends(get_session)) -> P
     return cfg
 
 
-@router.post("/config/reset", response_model=PricingConfig)
+@router.post("/config/reset", response_model=PricingConfig, dependencies=[Depends(require_owner)])
 def reset_config(session: Session = Depends(get_session)) -> PricingConfig:
     old = load_config(session)
     cfg = PricingConfig(imported_from=old.imported_from, imported_at=old.imported_at)
@@ -52,7 +52,7 @@ def reset_config(session: Session = Depends(get_session)) -> PricingConfig:
     return cfg
 
 
-@router.post("/import")
+@router.post("/import", dependencies=[Depends(require_owner)])
 async def import_upload(
     file: UploadFile = File(...),
     keep_config: bool = Query(False, description="update items and suppliers only; keep the app's pricing settings"),
@@ -84,7 +84,7 @@ async def import_upload(
     return report
 
 
-@router.post("/import-seed")
+@router.post("/import-seed", dependencies=[Depends(require_owner)])
 def import_seed(keep_config: bool = Query(False), session: Session = Depends(get_session)) -> dict:
     if not SEED_PATH.exists():
         raise HTTPException(status_code=404, detail="No bundled workbook in this build.")
@@ -133,7 +133,7 @@ def get_item(code: str, session: Session = Depends(get_session)) -> MaterialItem
     return row
 
 
-@router.post("/items", response_model=MaterialItem, status_code=201)
+@router.post("/items", response_model=MaterialItem, status_code=201, dependencies=[Depends(require_owner)])
 def create_item(body: MaterialItemIn, session: Session = Depends(get_session)) -> MaterialItem:
     if session.get(MaterialItem, body.code) is not None:
         raise HTTPException(status_code=409, detail="An item with this code exists already")
@@ -144,7 +144,7 @@ def create_item(body: MaterialItemIn, session: Session = Depends(get_session)) -
     return row
 
 
-@router.put("/items/{code}", response_model=MaterialItem)
+@router.put("/items/{code}", response_model=MaterialItem, dependencies=[Depends(require_owner)])
 def update_item(code: str, body: MaterialItemPatch, session: Session = Depends(get_session)) -> MaterialItem:
     row = session.get(MaterialItem, code)
     if row is None:
@@ -158,7 +158,7 @@ def update_item(code: str, body: MaterialItemPatch, session: Session = Depends(g
     return row
 
 
-@router.delete("/items/{code}", status_code=204)
+@router.delete("/items/{code}", status_code=204, dependencies=[Depends(require_owner)])
 def delete_item(code: str, session: Session = Depends(get_session)):
     row = session.get(MaterialItem, code)
     if row is None:

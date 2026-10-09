@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { api } from '../api'
+import { api, type Me } from '../api'
 import { getPasskey, passkeyProblem, passkeySupported } from '../passkeys'
 
 type Method = 'key' | 'password'
@@ -22,7 +22,7 @@ function rememberMethod(m: Method) {
   }
 }
 
-export default function LoginPage({ onLogin }: { onLogin: (user: string) => void }) {
+export default function LoginPage({ onLogin }: { onLogin: (me: Me) => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
@@ -49,7 +49,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: string) => void
     try {
       const r = await api.login(username, password, code)
       rememberMethod('password')
-      onLogin(r.username)
+      onLogin(r)
     } catch (err) {
       const msg = (err as Error).message
       setError(msg)
@@ -67,7 +67,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: string) => void
       const credential = await getPasskey(options)
       const r = await api.passkeyLogin(challenge_id, credential)
       rememberMethod('key')
-      onLogin(r.username)
+      onLogin(r)
     } catch (err) {
       setError(err instanceof Error && 'status' in err ? err.message : passkeyProblem(err))
     } finally {
@@ -83,7 +83,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: string) => void
       <div className="logo">
         <img src="/brand/logo-mark.png" alt="PL Development" />
         <span className="name">PL Development</span>
-        <span className="tag">Solar assessment</span>
+        <span className="tag">Solar engineering</span>
       </div>
       <h2>Sign in</h2>
       {passkeys && !passwordForm && (

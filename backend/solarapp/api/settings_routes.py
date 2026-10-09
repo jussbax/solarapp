@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
-from ..auth import require_user
+from ..auth import require_owner, require_user
 from ..config import Settings, get_settings
 from ..db import get_session
 from ..models import AppSetting
@@ -27,7 +27,7 @@ def read_settings(session: Session = Depends(get_session), settings: Settings = 
     return SettingsOut(**company_settings(session, settings))
 
 
-@router.put("", response_model=SettingsOut)
+@router.put("", response_model=SettingsOut, dependencies=[Depends(require_owner)])
 def write_settings(body: SettingsIn, session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> SettingsOut:
     for key, value in body.model_dump(exclude_none=True).items():
         if key not in PROFILE_KEYS or not isinstance(value, str):

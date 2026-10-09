@@ -825,3 +825,44 @@ chart, and the engineering build order in the plan.
   end before the plan adds a day. The task floors stay; the six-panel
   hybrid is a one-day job that finishes about an hour and a half late,
   which the program says in a warning.
+
+## Accounts: the owner and the engineers
+
+- Everyone who opens the back office has their own account. Two roles:
+  the owner (people, the company profile, pricing settings, the materials
+  list and its import) and the engineer (leads, projects and every
+  engineering output). The server enforces it, not just the screens:
+  settings PUT, pricing config and the materials writes answer 403 to an
+  engineer, and the People endpoints only exist for owners. The company
+  always keeps at least one active owner.
+- Passwords are argon2id hashes in the database. The `.env` username and
+  password are read once, to create the first owner, and may be cleared
+  afterwards; a blank password with no accounts leaves the server up and
+  the login closed, with the recovery command in the log. The authenticator
+  set up with the old `twofactor.json` file and the keys registered before
+  accounts existed carry over to that owner, so an update changes nothing
+  for the person already signed in.
+- A new person gets a temporary password shown once to the owner, and the
+  app opens nothing until they choose their own (twelve characters or
+  more, not containing their username, five distinct characters). The
+  owner is told to pass it on by voice or in person, not in the same
+  message as the address.
+- The authenticator app and the security keys are per person and set up
+  in the browser under Your account: a QR code and the typed key, one
+  code to confirm, eight backup codes shown once. The old server command
+  is gone, and the secret never leaves the database. Adding a key spends
+  one authenticator code: the registration challenge is bound to the
+  person and stands in for the step-up on the second call, since it was
+  issued only after one, is single-use and expires in five minutes.
+  (The first build asked for the code twice, which a one-time code cannot
+  survive: the walkthrough with the authenticator on caught it.)
+- The session cookie names the person and carries an HMAC of their id,
+  their session generation and the tail of their password hash under the
+  secret key. A password change, a role change, a deactivation, a reset by
+  the owner and "sign out everywhere" each rotate the generation, so they
+  end every session of that one person and nobody else's. Signing in with
+  a key as a deactivated person is refused.
+- Recovery stays on the server: `python -m solarapp.users` lists, creates,
+  resets a password or an authenticator, deactivates, reactivates and
+  changes roles, for the day every owner is locked out. It needs shell
+  access to the server, which is the point.

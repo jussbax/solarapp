@@ -259,11 +259,10 @@ def test_migration_moves_lead_stage_assessments_to_the_inbox(tmp_path_factory, c
 # ---- retention
 
 def test_retention_anonymises_stale_leads_and_never_projects(client):
-    from solarapp.db import get_engine
     from solarapp.models import Assessment, Lead, QuickEstimateLog
     from solarapp.retention import ANONYMISED_NOTE, run
     old = datetime.now(timezone.utc) - timedelta(days=400)
-    with Session(get_engine()) as s:
+    with Session(client.app.state.engine) as s:
         stale = Lead(name="Old Lead", contact="0917 1 2 3", town="Pila", province="Laguna", address="Somewhere 12", lat=14.12345, lon=121.12345, preferred_time="Evening",
                      source={"utm_source": "fb"}, estimate={"panels": 5, "price": 150000, "monthly_kwh": 300}, notes="From the website estimate.", status="closed", closed_reason="No reply",
                      created_at=old, updated_at=old)

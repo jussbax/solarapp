@@ -335,7 +335,30 @@ class StepUpIn(BaseModel):
     code: str = Field(default="", max_length=16)
 
 
-class PasskeyRegisterIn(StepUpIn):
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(max_length=200)
+    code: str = Field(default="", max_length=16)
+    new_password: str = Field(max_length=200)
+
+
+class TotpCodeIn(BaseModel):
+    code: str = Field(max_length=16)
+
+
+class UserCreateIn(BaseModel):
+    username: str = Field(max_length=40)
+    display_name: str = Field(default="", max_length=80)
+    role: str = Field(default="engineer", max_length=16)
+
+
+class UserPatchIn(BaseModel):
+    display_name: Optional[str] = Field(default=None, max_length=80)
+    role: Optional[str] = Field(default=None, max_length=16)
+    active: Optional[bool] = None
+
+
+class PasskeyRegisterIn(BaseModel):
+    """The challenge from /passkeys/options stands in for the password: it was issued only after a step-up."""
     challenge_id: str = Field(max_length=64)
     name: str = Field(default="", max_length=60)
     credential: dict[str, Any]   # the browser's PublicKeyCredential as JSON

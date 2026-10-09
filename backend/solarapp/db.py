@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from fastapi import Request
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine
@@ -26,7 +27,30 @@ def init_engine(db_path: Path) -> Engine:
         cur.close()
 
     SQLModel.metadata.create_all(_engine)
+    ensure_columns(_engine, "passkeys", models.Passkey)
     return _engine
+
+
+def ensure_columns(engine: Engine, table: str, model) -> list[str]:
+    """SQLite keeps a table as it was created; columns added to the model since are added here at startup
+    so an existing database keeps working. Returns the columns added."""
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        present = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})")).all()}
+        if not present:
+            return []
+        added: list[str] = []
+        for col in model.__table__.columns:
+            if col.name in present:
+                continue
+            kind = col.type.__class__.__name__.upper()
+            sql_type = "INTEGER" if kind in ("INTEGER", "BOOLEAN") else "REAL" if kind == "FLOAT" else "VARCHAR"
+            default = " DEFAULT ''" if sql_type == "VARCHAR" and not col.nullable else ""
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col.name} {sql_type}{default}"))
+            added.append(col.name)
+        conn.commit()
+    return added
 
 
 def get_engine() -> Engine:
@@ -34,6 +58,8 @@ def get_engine() -> Engine:
     return _engine
 
 
-def get_session() -> Iterator[Session]:
-    with Session(get_engine()) as session:
+def get_session(request: Request) -> Iterator[Session]:
+    """A session on the app's own engine (bound at start-up), so two apps in one process never share one."""
+    engine = getattr(request.app.state, "engine", None) or get_engine()
+    with Session(engine) as session:
         yield session

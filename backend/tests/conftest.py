@@ -10,14 +10,15 @@ def manila_tmy():
     return synthetic_tmy(*MANILA)
 
 
-def real_weather(aid: int) -> None:
+def real_weather(aid: int, client=None) -> None:
     """Customer PDFs are refused on the synthetic test weather; mark a computed record's results as real to reach the builders."""
     from sqlmodel import Session
 
     from solarapp.db import get_engine
     from solarapp.models import Assessment
 
-    with Session(get_engine()) as s:
+    engine = client.app.state.engine if client is not None else get_engine()
+    with Session(engine) as s:
         a = s.get(Assessment, aid)
         a.results = {**a.results, "dataset": {**(a.results.get("dataset") or {}), "synthetic": False}}
         s.add(a)

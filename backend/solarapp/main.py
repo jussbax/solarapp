@@ -13,7 +13,8 @@ from fastapi.staticfiles import StaticFiles
 
 from sqlmodel import Session
 
-from .api import appliances, assessments, auth_routes, data_routes, leads, pricing_routes, quick_routes, settings_routes
+from .api import appliances, assessments, auth_routes, data_routes, leads, pricing_routes, quick_routes, settings_routes, users
+from .auth import bootstrap_owner
 from .config import Settings, get_settings
 from .core.dataset import NasaReference, PvgisDataset
 from .db import init_engine
@@ -34,9 +35,10 @@ MAX_UPLOAD_BODY = 11 * 1024 * 1024  # the materials workbook import (10 MB cap i
 
 
 def prepare_secrets(settings: Settings) -> Settings:
-    """Refuse the example password; replace a missing or example secret key with one generated once on the data volume."""
-    if settings.app_password in ("", DEFAULT_PASSWORD):
-        raise RuntimeError("Set SOLARAPP_APP_PASSWORD in .env before starting the app.")
+    """Refuse the example password; replace a missing or example secret key with one generated once on the data volume.
+    A blank password is allowed: it only ever creates the first owner, and may be cleared from .env once they exist."""
+    if settings.app_password == DEFAULT_PASSWORD:
+        raise RuntimeError("Set SOLARAPP_APP_PASSWORD in .env before starting the app (it becomes the first owner's password).")
     if settings.secret_key in ("", DEFAULT_SECRET) or len(settings.secret_key) < 32:
         key_file = settings.data_dir / "secret.key"
         if not key_file.is_file():
@@ -55,9 +57,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         engine = init_engine(settings.database_path)
+        app.state.engine = engine
         with Session(engine) as session:
             ensure_seeded(session)
             leads.migrate_lead_assessments(session)  # lead-stage assessments saved before the inbox existed move there (idempotent)
+            bootstrap_owner(session, settings)        # the first owner from .env, once; the old authenticator file and keys move to them
         app.state.pvgis = PvgisDataset(settings.data_dir)
         app.state.nasa = NasaReference(settings.data_dir)
         yield
@@ -126,6 +130,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await call_next(request)
 
     app.include_router(auth_routes.router)
+    app.include_router(users.router)
     app.include_router(assessments.router)
     app.include_router(leads.router)
     app.include_router(settings_routes.router)

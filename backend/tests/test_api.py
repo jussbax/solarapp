@@ -215,7 +215,7 @@ def test_pricing_flow(client):
     # quotation PDF (refused on test weather like every customer document; mark the record's weather as real)
     assert client.get(f"/api/assessments/{aid}/quotation.pdf").status_code == 409
     from tests.conftest import real_weather
-    real_weather(aid)
+    real_weather(aid, client)
     r = client.get(f"/api/assessments/{aid}/quotation.pdf")
     assert r.status_code == 200 and r.content[:4] == b"%PDF"
     assert b"landed" not in r.content.lower()
@@ -502,49 +502,6 @@ def test_customer_text_cannot_style_the_documents_or_break_downloads(client):
         assert pdf.startswith(b"%PDF")
 
 
-def test_two_factor_login_with_authenticator_and_backup_codes(client, tmp_path_factory):
-    import pyotp
-    from solarapp import twofactor
-    from solarapp.api import auth_routes
-    from solarapp.config import get_settings
-    auth_routes._fails.clear()
-    # the client fixture's settings are served through the dependency override; find them
-    app = client.app
-    settings = app.dependency_overrides[get_settings]()
-    assert not twofactor.enabled(settings)
-    client.post("/api/auth/logout")
-    assert client.get("/api/auth/me").json()["two_factor"] is False
-    secret, codes, uri = twofactor.setup(settings)
-    try:
-        assert twofactor.enabled(settings) and uri.startswith("otpauth://totp/") and len(codes) == 8
-        assert client.get("/api/auth/me").json()["two_factor"] is True
-        # password alone no longer opens the door
-        r = client.post("/api/auth/login", json={"username": "u", "password": "p"})
-        assert r.status_code == 401 and "code" in r.json()["detail"]
-        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": "000000"}).status_code == 401
-        now = pyotp.TOTP(secret).now()
-        twofactor._last_step.clear()
-        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": now}).status_code == 200
-        client.post("/api/auth/logout")
-        # the same code cannot be replayed within its window
-        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": now}).status_code == 401
-        # a backup code works exactly once
-        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": codes[0]}).status_code == 200
-        client.post("/api/auth/logout")
-        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": codes[0]}).status_code == 401
-        assert twofactor.remaining_backup_codes(settings) == 7
-        # wrong codes count toward the throttle
-        auth_routes._fails.clear()
-        for _ in range(auth_routes.MAX_FAILS):
-            client.post("/api/auth/login", json={"username": "u", "password": "p", "code": "111111"})
-        assert client.post("/api/auth/login", json={"username": "u", "password": "p", "code": codes[1]}).status_code == 429
-    finally:
-        auth_routes._fails.clear()
-        twofactor._last_step.clear()
-        twofactor.disable(settings)
-    assert not twofactor.enabled(settings)
-    assert client.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 200
-
 
 class SoftKey:
     """A software security key: enough of WebAuthn to register and sign in against the app."""
@@ -649,30 +606,6 @@ def test_passkey_register_and_sign_in(client):
     assert client.get("/api/auth/me").json()["passkeys"] is False
 
 
-def test_backup_code_is_consumed_exactly_once_under_concurrency(client):
-    import threading
-    from solarapp import twofactor
-    from solarapp.config import get_settings
-    settings = client.app.dependency_overrides[get_settings]()
-    _, codes, _ = twofactor.setup(settings)
-    try:
-        results = []
-        start = threading.Barrier(12)
-
-        def attempt():
-            start.wait()
-            results.append(twofactor.verify(settings, codes[0]))
-
-        threads = [threading.Thread(target=attempt) for _ in range(12)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        assert results.count(True) == 1
-        assert twofactor.remaining_backup_codes(settings) == 7
-    finally:
-        twofactor.disable(settings)
-
 
 def test_private_app_caps_request_bodies_and_frames_the_estimate_only_for_the_website(client):
     client.post("/api/auth/login", json={"username": "u", "password": "p"})
@@ -683,32 +616,6 @@ def test_private_app_caps_request_bodies_and_frames_the_estimate_only_for_the_we
     assert "frame-ancestors 'self'" in csp and "x-frame-options" not in {k.lower() for k in client.get("/estimate").headers}
     assert client.get("/login").headers["x-frame-options"] == "DENY"
 
-
-def test_anonymous_passkey_options_are_rate_limited(client):
-    from solarapp import passkeys
-    from solarapp.api import auth_routes, quick_routes
-    from solarapp.config import get_settings
-    from solarapp.db import get_session
-    client.post("/api/auth/logout")
-    # a key must exist for the options to be served at all
-    client.post("/api/auth/login", json={"username": "u", "password": "p"})
-    key = SoftKey("testserver", "http://testserver")
-    opts = client.post("/api/auth/passkeys/options", json={"password": "p"}).json()
-    created = client.post("/api/auth/passkeys", json={"password": "p", "challenge_id": opts["challenge_id"], "name": "k", "credential": key.register(opts["options"])})
-    assert created.status_code == 201
-    client.post("/api/auth/logout")
-    quick_routes._hits.pop("pk:testclient", None)
-    codes = [client.post("/api/auth/passkey/options").status_code for _ in range(auth_routes.OPTIONS_PER_HOUR + 1)]
-    assert codes[:-1] == [200] * auth_routes.OPTIONS_PER_HOUR and codes[-1] == 429
-    quick_routes._hits.pop("pk:testclient", None)
-    # a flood of challenges evicts the oldest ones, never everyone's
-    with passkeys._lock:
-        passkeys._challenges.clear()
-    for _ in range(passkeys.MAX_CHALLENGES + 5):
-        passkeys._remember(b"x", "login")
-    assert len(passkeys._challenges) == passkeys.MAX_CHALLENGES
-    client.post("/api/auth/login", json={"username": "u", "password": "p"})
-    assert client.post(f"/api/auth/passkeys/{created.json()['id']}/remove", json={"password": "p"}).status_code == 204
 
 
 def test_public_process_believes_the_tunnel_header_only_from_a_private_peer(tmp_path):

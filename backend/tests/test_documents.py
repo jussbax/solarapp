@@ -130,7 +130,7 @@ def test_card_next_step_is_saved_on_the_record(client, monkeypatch):
     doc["card_next_step"] = "Next step: your free energy audit on 20 Oct"
     assert client.post(f"/api/assessments/{aid}/compute", json=doc).json()["doc"]["card_next_step"] == doc["card_next_step"]
     # test weather data keeps the card off; mark the stored results as real to reach the builder
-    with Session(get_engine()) as s:
+    with Session(client.app.state.engine) as s:
         a = s.get(Assessment, aid)
         a.results = {**a.results, "dataset": {**a.results["dataset"], "synthetic": False}}
         s.add(a)
@@ -207,7 +207,7 @@ def test_proposal_prints_the_bom_battery_plain_item_names_and_the_website_estima
     assert not any("no data yet" in a for a in res["program"]["assumptions"])
     # the PDF itself (customer documents need real weather)
     from tests.conftest import real_weather
-    real_weather(aid)
+    real_weather(aid, client)
     text = _pdf_text(client.get(f"/api/assessments/{aid}/quotation.pdf").content)
     assert text.count("Valid until") == 1
     assert "WHAT YOU GET" in text and "Your website estimate on 28 Sep 2026" in text
