@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
+import { roundTo } from './shared'
 
-/** Number input that tolerates partial typing and empty values. Right-aligned, tabular figures (styles.css). */
+/** Number input that tolerates partial typing and empty values. Right-aligned, tabular figures (styles.css).
+ * With `decimals` the shown value is rounded as a person would say it (0.893854748603352 reads 0.89) while the stored
+ * value keeps its precision until the owner retypes it; `step` then defaults to one unit of the last decimal. */
 export default function NumberInput({
   value,
   onChange,
@@ -14,6 +17,7 @@ export default function NumberInput({
   ariaLabel,
   disabled,
   className,
+  decimals,
 }: {
   value: number | null
   onChange: (v: number | null) => void
@@ -29,17 +33,23 @@ export default function NumberInput({
   ariaLabel?: string
   disabled?: boolean
   className?: string
+  /** Decimals shown for the quantity kind (money 0, hours 2, percent 1, ...); undefined shows the value as stored. */
+  decimals?: number
 }) {
-  const [text, setText] = useState(value == null ? '' : String(value))
+  const fmt = (v: number | null) => (v == null ? '' : decimals == null ? String(v) : String(roundTo(v, decimals)))
+  const [text, setText] = useState(fmt(value))
   useEffect(() => {
-    setText(value == null ? '' : String(value))
+    // follow the value from outside, but never fight the typist: a typed "0.891" equals the stored 0.891
+    const typed = parseFloat(text)
+    if (value == null ? text !== '' : !(Number.isFinite(typed) && typed === value)) setText(fmt(value))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
   return (
     <input
       id={id}
       type="number"
-      inputMode="decimal"
-      step={step ?? 'any'}
+      inputMode={decimals === 0 ? 'numeric' : 'decimal'}
+      step={step ?? (decimals == null ? 'any' : decimals === 0 ? 1 : 10 ** -decimals)}
       min={min}
       max={max}
       placeholder={placeholder}
@@ -59,7 +69,7 @@ export default function NumberInput({
       }}
       onBlur={() => {
         // a cleared field shows the value in force again (the default a project input fell back to, or the kept value)
-        if (text === '' && (value != null || !allowEmpty)) setText(value == null ? '' : String(value))
+        if (text === '' && (value != null || !allowEmpty)) setText(fmt(value))
       }}
     />
   )

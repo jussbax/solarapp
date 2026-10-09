@@ -68,7 +68,7 @@ export default function ResultsView({ doc, results }: { doc: AssessmentDoc; resu
             {selected.panel.id !== best.id && (
               <>
                 <br />
-                most kWp: {best.name || 'panel'} x {best.count} = {n2(best.system_kwp)} kWp
+                Most kWp: {best.name || 'panel'} x {best.count} = {n2(best.system_kwp)} kWp
               </>
             )}
           </div>
@@ -162,11 +162,11 @@ export default function ResultsView({ doc, results }: { doc: AssessmentDoc; resu
         <table className="kv wide">
           <tbody>
             <tr>
-              <th>k (owner's formula, average of rows)</th>
+              <th>Owner's k (average of rows)</th>
               <td>{n3(k.k_raw)}</td>
             </tr>
             <tr>
-              <th>k_site (heat and low-light removed)</th>
+              <th>Site k (heat and low-light removed)</th>
               <td>{n3(k.k_site)}</td>
             </tr>
             <tr>

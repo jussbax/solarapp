@@ -44,10 +44,8 @@ export function Gantt({ events, today, width = 900 }: GanttProps) {
   const narrow = width < MIN_WIDTH
   const W = narrow ? MIN_WIDTH : width
   const labelW = narrow ? Math.min(250, Math.round(W * 0.34)) : Math.min(320, Math.round(W * 0.4))
-  const rowH = 26
   const axisH = 32
   const legendH = 28
-  const H = axisH + rowH * evs.length + legendH
   const starts = evs.map((e) => dayIndex(e.date))
   const ends = evs.map((e, i) => (e.end ? Math.max(dayIndex(e.end), starts[i]) : starts[i]))
   let d0 = Math.min(...starts)
@@ -63,7 +61,24 @@ export function Gantt({ events, today, width = 900 }: GanttProps) {
   for (let k = 0; k <= days; k += 7) weeks.push(d0 + k)
   const every = px * 7 >= 48 ? 1 : 2
   const maxChars = Math.max(12, Math.floor((labelW - 8) / 6.6))
-  const trim = (t: string) => (t.length > maxChars ? t.slice(0, maxChars - 1).trimEnd() + '…' : t)
+  // a label that does not fit wraps onto a second line (never cut with an ellipsis); its row grows to hold both
+  const wrap = (text: string): string[] => {
+    if (text.length <= maxChars) return [text]
+    const words = text.split(' ')
+    const first: string[] = []
+    while (words.length && (first.join(' ') + ' ' + words[0]).trim().length <= maxChars) first.push(words.shift()!)
+    if (first.length === 0) first.push(words.shift()!)
+    return [first.join(' '), words.join(' ')].filter(Boolean)
+  }
+  const labels = evs.map((e) => wrap(e.label + (e.amount ? ` ${php0(e.amount)}` : '')))
+  const rowHs = labels.map((l) => (l.length > 1 ? 38 : 26))
+  const rowTops: number[] = []
+  let yAcc = axisH
+  for (const h of rowHs) {
+    rowTops.push(yAcc)
+    yAcc += h
+  }
+  const H = yAcc + legendH
   const t = today ? dayIndex(today) : null
   const todayIn = t != null && t >= d0 && t < d1
 
@@ -84,12 +99,13 @@ export function Gantt({ events, today, width = 900 }: GanttProps) {
         </g>
       ))}
       {evs.map((e, i) => {
-        const yTop = axisH + i * rowH
+        const rowH = rowHs[i]
+        const yTop = rowTops[i]
         const yMid = yTop + rowH / 2
         const s = starts[i]
         const en = ends[i]
         const kind = e.kind ?? 'task'
-        const label = e.label + (e.amount ? ` ${php0(e.amount)}` : '')
+        const label = labels[i].join(' ')
         let when: string
         let right: number
         let mark
@@ -112,7 +128,18 @@ export function Gantt({ events, today, width = 900 }: GanttProps) {
           <g key={`${e.key ?? ''}-${i}`}>
             {i % 2 === 1 && <rect x={0} y={yTop} width={W} height={rowH} fill={OFF_WHITE} />}
             <text x={6} y={yMid} dominantBaseline="central" fontSize={12} fontWeight={kind === 'milestone' ? 600 : 400} fill={GRAY}>
-              {trim(label)}
+              {labels[i].length === 1 ? (
+                labels[i][0]
+              ) : (
+                <>
+                  <tspan x={6} dy={-7}>
+                    {labels[i][0]}
+                  </tspan>
+                  <tspan x={6} dy={14}>
+                    {labels[i][1]}
+                  </tspan>
+                </>
+              )}
               <title>{title}</title>
             </text>
             <g>

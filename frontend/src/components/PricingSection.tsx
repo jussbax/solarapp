@@ -1,15 +1,15 @@
 import { Fragment, useState } from 'react'
-import { api } from '../api'
 import type { MaterialItem, PricingBlock, PricingJob } from '../types'
 import MaterialPicker from './MaterialPicker'
 import NumberInput from './NumberInput'
 import Field from './Field'
-import { DefaultNum } from './ProgramSection'
+import { AdjustFold, DefaultNum } from './ProgramSection'
 import { usePricingDefaults } from './shared'
 import { php0, php2 } from '../fmt'
 
 const php = php2
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
+const pctIn = (v: number | null | undefined) => (v == null ? null : Math.round(v * 10000) / 100)
 const qty = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1))
 /** Warnings that stop the job even without the `hard` flag: no item to price. */
 const RED_CODES = new Set(['missing_item', 'no_inverter', 'no_battery', 'ats', 'ac_breaker'])
@@ -28,11 +28,10 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
     return job[key] == null && typeof used === 'number' ? used : undefined
   }
   const pinKm = pricing?.pin_distance?.extra_km
+  const changed = [job.max_panels_per_string, job.extra_toll, job.roof_factor, job.roof_closed_days, job.max_days, job.max_pairs, job.owner_days, job.pv_run_m, job.ac_run_m, job.grounding_run_m, job.conduit_m].filter((v) => v != null).length
   return (
     <div>
-      <div className="lead">
-        A value tagged <span className="field-tag">default</span> comes from the pricing settings and is the one in force; type over it to change it for this job only.
-      </div>
+      <div className="lead">All values are the company defaults unless tagged; type over one to change it for this job only.</div>
       <div className="form-grid">
         <Field label="Inverter" className="wide" state={job.inverter_code ? 'override' : ch?.inverter_code ? 'default' : undefined} onUseDefault={() => set({ inverter_code: null })}>
           {(id) => (
@@ -60,37 +59,45 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
             </select>
           )}
         </Field>
-        <DefaultNum label="Max panels per string" unit="panels" value={job.max_panels_per_string} fallback={typeof cfg?.roles?.max_panels_per_string === 'number' ? cfg.roles.max_panels_per_string : undefined} onChange={(v) => set({ max_panels_per_string: v })} min={1} step={1} />
         <DefaultNum
           label="Strings"
+          unit="strings"
           value={job.strings_override}
           fallback={ch?.strings}
           onChange={(v) => set({ strings_override: v })}
           min={1}
-          step={1}
-          help="Computed from the panels per string; type a count to force it."
-          unknownHelp="Computed from the panels per string; shown after the first calculation."
+          decimals={0}
+          help="Panels per string"
+          about="Computed from the panels per string and the roof's panel count; type a count to force it."
+          unknownHelp="Shown after the first calculation"
         />
         <DefaultNum
-          label="Extra km, one way"
+          label="Extra distance, one way"
           unit="km"
           value={job.extra_km}
           fallback={pinKm ?? def('extra_km', jd.extra_km)}
           onChange={(v) => set({ extra_km: v })}
           min={0}
-          help={pinKm != null ? 'From the map pin: straight line × road factor, less the route’s reference site.' : 'From the map pin once calculated.'}
+          decimals={1}
+          help={pinKm != null ? 'From the map pin' : 'From the pin, once calculated'}
+          about="From the map pin: the straight line to the base × the road factor, less the route's reference site. Each way; the crew's transport and the freight run count it twice."
         />
-        <DefaultNum label="Extra toll" unit="₱" value={job.extra_toll} fallback={def('extra_toll', jd.extra_toll)} onChange={(v) => set({ extra_toll: v })} min={0} />
-        <DefaultNum label="Roof productivity factor" unit="×" value={job.roof_factor} fallback={def('roof_factor', jd.roof_factor)} onChange={(v) => set({ roof_factor: v })} min={0.1} step={0.05} />
-        <DefaultNum label="Days the roof is closed" unit="days" value={job.roof_closed_days} fallback={def('roof_closed_days', jd.roof_closed_days)} onChange={(v) => set({ roof_closed_days: v })} min={0} step={1} />
-        <DefaultNum label="Max installation days" unit="days" value={job.max_days} fallback={def('max_days', jd.max_days)} onChange={(v) => set({ max_days: v })} min={1} step={1} />
-        <DefaultNum label="Max roof pairs" unit="pairs" value={job.max_pairs} fallback={def('max_pairs', jd.max_pairs)} onChange={(v) => set({ max_pairs: v })} min={1} step={1} />
-        <DefaultNum label="Owner days on site" unit="days" value={job.owner_days} fallback={def('owner_days', jd.owner_days)} onChange={(v) => set({ owner_days: v })} min={0} />
-        <DefaultNum label="PV run per string" unit="m" value={job.pv_run_m} fallback={typeof wr.pv_run_m === 'number' ? wr.pv_run_m : undefined} onChange={(v) => set({ pv_run_m: v })} min={1} />
-        <DefaultNum label="AC run" unit="m" value={job.ac_run_m} fallback={typeof wr.ac_run_m === 'number' ? wr.ac_run_m : undefined} onChange={(v) => set({ ac_run_m: v })} min={1} />
-        <DefaultNum label="Grounding run" unit="m" value={job.grounding_run_m} fallback={typeof wr.grounding_run_m === 'number' ? wr.grounding_run_m : undefined} onChange={(v) => set({ grounding_run_m: v })} min={0} />
-        <DefaultNum label="Conduit" unit="m" value={job.conduit_m} fallback={typeof wr.conduit_m === 'number' ? wr.conduit_m : undefined} onChange={(v) => set({ conduit_m: v })} min={0} />
       </div>
+      <AdjustFold changed={changed} testId="adjust-pricing">
+        <div className="form-grid">
+          <DefaultNum label="Max panels per string" unit="panels" value={job.max_panels_per_string} fallback={typeof cfg?.roles?.max_panels_per_string === 'number' ? cfg.roles.max_panels_per_string : undefined} onChange={(v) => set({ max_panels_per_string: v })} min={1} decimals={0} />
+          <DefaultNum label="Extra toll" unit="₱" value={job.extra_toll} fallback={def('extra_toll', jd.extra_toll)} onChange={(v) => set({ extra_toll: v })} min={0} decimals={0} />
+          <DefaultNum label="Roof productivity factor" unit="%" value={pctIn(job.roof_factor)} fallback={pctIn(def('roof_factor', jd.roof_factor)) ?? undefined} onChange={(v) => set({ roof_factor: v == null ? null : v / 100 })} min={10} step={5} decimals={1} />
+          <DefaultNum label="Days the roof is closed" unit="days" value={job.roof_closed_days} fallback={def('roof_closed_days', jd.roof_closed_days)} onChange={(v) => set({ roof_closed_days: v })} min={0} decimals={0} />
+          <DefaultNum label="Max installation days" unit="days" value={job.max_days} fallback={def('max_days', jd.max_days)} onChange={(v) => set({ max_days: v })} min={1} decimals={0} />
+          <DefaultNum label="Max roof pairs" unit="pairs" value={job.max_pairs} fallback={def('max_pairs', jd.max_pairs)} onChange={(v) => set({ max_pairs: v })} min={1} decimals={0} />
+          <DefaultNum label="Owner days on site" unit="days" value={job.owner_days} fallback={def('owner_days', jd.owner_days)} onChange={(v) => set({ owner_days: v })} min={0} decimals={0} />
+          <DefaultNum label="PV run per string" unit="m" value={job.pv_run_m} fallback={typeof wr.pv_run_m === 'number' ? wr.pv_run_m : undefined} onChange={(v) => set({ pv_run_m: v })} min={1} />
+          <DefaultNum label="AC run" unit="m" value={job.ac_run_m} fallback={typeof wr.ac_run_m === 'number' ? wr.ac_run_m : undefined} onChange={(v) => set({ ac_run_m: v })} min={1} />
+          <DefaultNum label="Grounding run" unit="m" value={job.grounding_run_m} fallback={typeof wr.grounding_run_m === 'number' ? wr.grounding_run_m : undefined} onChange={(v) => set({ grounding_run_m: v })} min={0} />
+          <DefaultNum label="Conduit" unit="m" value={job.conduit_m} fallback={typeof wr.conduit_m === 'number' ? wr.conduit_m : undefined} onChange={(v) => set({ conduit_m: v })} min={0} />
+        </div>
+      </AdjustFold>
     </div>
   )
 }
@@ -281,7 +288,7 @@ export function PricingResults({
                 <tr key={l.code} style={!l.found ? { background: '#fdecec' } : undefined}>
                   <td className="cell-code code">{l.code}</td>
                   <td className="cell-main">
-                    {l.name || <span className="badge bad">not in list</span>} <span className="muted">{l.category}</span>
+                    {l.name || <span className="badge bad">Not in the list</span>} <span className="muted">{l.category}</span>
                   </td>
                   <td className="cell-supplier" data-label="Supplier">{l.supplier}</td>
                   <td className="num cell-qty" style={{ width: 90 }}>
@@ -302,7 +309,7 @@ export function PricingResults({
                   <td className="cell-remove">
                     <button type="button" className="toggle link remove-icon" onClick={() => remove(l.code)} aria-label={`Remove ${l.code}`} title="Remove this line">
                       <span className="remove-x" aria-hidden="true">×</span>
-                      <span className="remove-word">remove</span>
+                      <span className="remove-word">Remove</span>
                     </button>
                   </td>
                 </tr>
@@ -312,9 +319,9 @@ export function PricingResults({
               <tr key={'rm' + c} className="row-removed" style={{ opacity: 0.6 }}>
                 <td className="cell-code code">{c}</td>
                 <td colSpan={showInternal ? 8 : 5} className="muted cell-main">
-                  removed{' '}
+                  Removed{' '}
                   <button type="button" className="toggle link" onClick={() => setQty(c, null)}>
-                    restore
+                    Restore
                   </button>
                 </td>
                 <td className="cell-remove"></td>
@@ -364,7 +371,7 @@ export function PricingResults({
                   <tr key={b.key}>
                     <td>{b.label}</td>
                     <td className="num">{php(b.direct)}</td>
-                    <td>{b.pass_through ? 'pass-through' : pct(b.tier)}</td>
+                    <td>{b.pass_through ? 'Pass-through' : pct(b.tier)}</td>
                     <td className="num">{php(b.markup)}</td>
                     <td className="num">{php(b.selling)}</td>
                   </tr>
@@ -407,8 +414,4 @@ export function PricingResults({
       )}
     </div>
   )
-}
-
-export function quotationLink(id: number) {
-  return api.quotationUrl(id)
 }

@@ -1,6 +1,6 @@
 /* PL Development back office: one type scale, one spacing scale, one form grid.
    Brand: primary black (ink), secondary gold, off white, dark gray; Montserrat.
-   Sections: tokens · base · chrome · cards · form system · controls · tables · tiles · banners · pages · phone. */
+   Sections: tokens · base · chrome · cards · form system · controls · tables · tiles · banners · pages · settings · phone. */
 
 /* ---------- tokens ---------- */
 :root {
@@ -104,32 +104,48 @@ ul.warnings li { margin: 2px 0; }
 .list-item.focus { background: var(--gold-bg); box-shadow: inset 3px 0 0 var(--gold); padding-left: 8px; }
 
 /* ---------- the form system: label above, unit beside, help below the row ----------
-   .form-grid holds .field cells; each cell is a subgrid of three rows (label, control, help), so every control in a
-   line of fields sits on the same edge and a help text in one column never staggers the next line. */
+   .form-grid holds .field cells; each cell is a subgrid of four rows (label, control, help, the "?" note's lane), so
+   every control in a line of fields sits on the same edge and a help text in one column never staggers the next
+   line. A help text is one line; the long text sits behind the "?" and opens in a lane under the whole row. */
 label { display: block; font-size: 13px; color: var(--muted); line-height: 1.3; }
 .field { min-width: 0; margin: 0 0 10px; } /* a lone field keeps its breathing room; a grid or a row sets its own */
 .field > label, .field-head { margin-bottom: 4px; }
-.field-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; }
-.field-head > label, .field-head > .field-label { margin: 0; flex: 1 1 auto; min-width: 0; display: block; font-size: 13px; color: var(--muted); line-height: 1.3; }
+.field-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.field-head > label, .field-head > .field-label { margin: 0; flex: 0 1 auto; min-width: 0; display: block; font-size: 13px; color: var(--muted); line-height: 1.3; }
 .field-head .key { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 1px; overflow-wrap: anywhere; word-break: break-all; }
+.field-head > .field-tag { margin-left: auto; }
 .field-tag { flex: 0 0 auto; font: inherit; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; line-height: 1.6; min-height: 0; cursor: default; white-space: nowrap; }
-.field-tag.override { color: var(--gold-text); background: var(--gold-bg); border-color: var(--gold); cursor: pointer; }
+.field-tag.override { color: var(--gold-text); background: var(--gold-bg); border-color: var(--gold); cursor: pointer; min-height: 22px; }
 .field-tag.override:hover { background: var(--gold); color: var(--ink); }
 .field-tag .tag-short { display: none; }
+/* the "?" beside a label: 20 px round, a hit area of 36 px (44 on the phone) */
+.about-btn { flex: 0 0 auto; width: 20px; height: 20px; min-height: 0; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: #fff; color: var(--muted); font-size: 12px; font-weight: 700; line-height: 1; display: inline-flex; align-items: center; justify-content: center; position: relative; cursor: pointer; align-self: center; }
+.about-btn::before { content: ''; position: absolute; inset: -8px; }
+.about-btn:hover, .about-btn[aria-expanded='true'] { border-color: var(--gold); color: var(--ink); background: var(--gold-bg); }
+.about-note { display: flex; gap: 8px; align-items: flex-start; margin: 2px 0 10px; padding: 8px 12px; border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: 8px; background: var(--gold-bg); font-size: 13px; line-height: 1.45; color: var(--text); z-index: 5; }
+.about-note > b { flex: 0 0 auto; color: var(--ink); }
+.about-note > span { flex: 1 1 auto; min-width: 0; }
+.about-close { flex: 0 0 auto; min-height: 0; min-width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; }
+.about-close:hover { color: var(--ink); }
 .control { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .control > input, .control > select, .control > textarea, .control > .suggest { flex: 1 1 auto; min-width: 0; }
-.control > .unit { flex: 0 0 auto; font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.control > .block { flex: 1 1 auto; min-width: 0; }
+.control > .unit { flex: 0 0 auto; font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; }
 .control > .unit:empty { display: none; }
 .control.check-control { min-height: var(--control-h); }
 .field > .help { margin-top: 4px; }
-.form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 14px; margin-top: 4px; }
-.form-grid > .field { display: grid; grid-template-rows: subgrid; grid-row: span 3; align-content: start; margin-bottom: 12px; }
+.form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 14px; margin-top: 4px; position: relative; }
+.form-grid > .field { display: grid; grid-template-rows: subgrid; grid-row: span 4; align-content: start; margin-bottom: 12px; }
 .form-grid > .field > label, .form-grid > .field > .field-head { grid-row: 1; align-self: end; }
 .form-grid > .field > .control { grid-row: 2; }
 .form-grid > .field > .help { grid-row: 3; }
+.form-grid > .field > .about-slot { grid-row: 4; }
+/* the note takes the whole grid line under its row: the slot holds the lane's height, the note is laid across the grid */
+.form-grid > .field > .about-slot > .about-note { position: absolute; left: 0; right: 0; }
 .form-grid > .wide { grid-column: span 2; }
+.form-grid > .wide.own-line { grid-column: 1 / 3; }
 .form-grid > .full { grid-column: 1 / -1; }
-.form-grid > .field-action { display: grid; grid-template-rows: subgrid; grid-row: span 3; align-content: start; margin-bottom: 12px; }
+.form-grid > .field-action { display: grid; grid-template-rows: subgrid; grid-row: span 4; align-content: start; margin-bottom: 12px; }
 .form-grid > .field-action > * { grid-row: 2; align-self: start; justify-self: start; }
 .form-grid > .field-action > .toggle { min-height: var(--control-h); }
 .form-grid > .row-help { grid-column: 1 / -1; margin: -4px 0 12px; }
@@ -170,7 +186,9 @@ label.check input { width: auto; margin-top: 3px; flex: 0 0 auto; }
 /* ---------- controls ---------- */
 input, select, textarea { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; width: 100%; color: var(--text); min-height: var(--control-h); }
 textarea { min-height: 64px; line-height: 1.4; }
-input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
+input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; -moz-appearance: textfield; appearance: textfield; }
+/* spinner arrows nowhere: a number is typed, the phone keyboard still gets the numeric pad from inputmode */
+input[type='number']::-webkit-inner-spin-button, input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type='checkbox'], input[type='radio'] { width: auto; min-height: 0; margin: 0; vertical-align: middle; }
 input[type='file'] { max-width: 100%; min-height: var(--control-h); font-size: 14px; padding: 6px 0; border: 0; }
 input:disabled, select:disabled, textarea:disabled { background: var(--bg); color: var(--muted); }
@@ -236,7 +254,38 @@ th.sortable:hover { color: var(--gold-text); }
 table.kv th { width: 180px; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); font-weight: 600; }
 table.kv.wide th { width: 260px; }
 table.kv td input { max-width: 220px; }
+table.kv thead th { width: auto; font-size: var(--fs-sm); color: var(--muted); }
+table.kv.sizes tbody th, table.kv.minutes tbody th { width: 150px; }
+table.kv.stops tbody th { width: 36px; text-align: right; }
+table.kv td.cell-actions { width: 1%; white-space: nowrap; }
+table.kv.stops td.cell-actions .toggle { margin-right: 2px; }
+table.tasks td { padding: 4px 6px; }
+table.tasks td.cell-main { width: 42%; }
+table.tasks td.cell-main input { min-width: 220px; }
+table.tasks .key { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); margin-top: 2px; }
+table.payments td.cell-main { width: 40%; min-width: 220px; }
+/* a list of sizes or words as chips with an add field */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: var(--control-h); }
+.chip-item { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 10px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip-item button { min-height: 26px; min-width: 26px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 16px; line-height: 1; border-radius: 50%; }
+.chip-item button:hover { color: var(--bad); background: var(--bad-bg); }
+.chip-add { display: inline-flex; gap: 6px; align-items: center; }
+.chip-add input { width: 140px; min-height: var(--control-h-small); padding: 4px 8px; }
+/* a switch row above a grid: "Estimate page  On" */
+.switch-row { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0 0 6px; font-size: var(--fs-base); color: var(--text); cursor: pointer; }
+.switch-row input[type='checkbox'] { appearance: none; -webkit-appearance: none; width: 44px; height: 24px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; margin: 0; flex: 0 0 auto; }
+.switch-row input[type='checkbox']::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+.switch-row input[type='checkbox']:checked { background: var(--gold); }
+.switch-row input[type='checkbox']:checked::after { left: 22px; }
+.switch-row .switch-label { font-weight: 600; color: var(--ink); }
+.switch-row .switch-state { color: var(--muted); }
+/* the project's payment terms as one line, the editor only on Change */
+.terms-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: var(--control-h); font-size: var(--fs-base); margin-top: 4px; }
+.terms-line b { color: var(--ink); }
+details.more.adjust { margin-top: 2px; }
+details.more.adjust > summary { margin-top: 0; margin-bottom: 6px; min-height: 36px; display: flex; align-items: center; }
 table.matrix th { text-transform: none; letter-spacing: 0; font-size: 12px; }
+table.matrix th.unit-cell { color: var(--muted); font-weight: 500; }
 table.matrix input { padding: 4px 6px; min-height: 0; width: 72px; }
 table.protection td { vertical-align: top; }
 table.categories td { padding: 4px 6px; }
@@ -349,37 +398,59 @@ table.bom td.cell-qty input { width: 90px; }
 .doc-field { margin-top: 8px; max-width: 520px; }
 .doc-row .doc-reason { color: var(--warn); }
 
-/* ---------- settings: a section index beside one column of cards ---------- */
-.settings { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 0 var(--sp-5); align-items: start; }
-.settings-index { position: sticky; top: var(--sp-4); display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
-.settings-index .index-title { font-size: var(--fs-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 4px 10px 6px; }
-.settings-index a { display: block; padding: 6px 10px; border-radius: var(--radius); color: var(--text); text-decoration: none; font-size: 13.5px; font-weight: 600; border-left: 3px solid transparent; }
-.settings-index a.sub { padding-left: 22px; font-weight: 500; font-size: 13px; color: var(--muted); }
-.settings-index a:hover { background: var(--gold-bg); color: var(--ink); }
-.settings-index a.on { border-left-color: var(--gold); background: #fff; color: var(--ink); }
+/* ---------- settings: a menu of pages (a left menu on the desk, a list of cards on the phone), one page beside it ---------- */
+.settings { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 0 var(--sp-5); align-items: start; }
+.settings-menu { position: sticky; top: var(--sp-4); display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
+.settings-menu .index-title { font-size: var(--fs-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 4px 10px 6px; }
+.settings-menu .menu-caption { font-size: var(--fs-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 10px 10px 2px; }
+.settings-menu a { display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: var(--radius); color: var(--text); text-decoration: none; font-size: 13.5px; font-weight: 600; border-left: 3px solid transparent; }
+.settings-menu a .menu-label { flex: 1 1 auto; min-width: 0; }
+.settings-menu a.sub { padding-left: 22px; font-weight: 500; font-size: 13px; color: var(--muted); }
+.settings-menu a:hover { background: var(--gold-bg); color: var(--ink); }
+.settings-menu a.on { border-left-color: var(--gold); background: #fff; color: var(--ink); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); margin-left: 6px; flex: 0 0 auto; vertical-align: middle; }
+.setting-find { margin: 2px 0 8px; padding: 0 2px; }
+.setting-find input[type='search'] { min-height: 36px; font-size: 13.5px; }
+.find-results { list-style: none; margin: 6px 0 0; padding: 0; }
+.find-results li.muted { padding: 6px 8px; }
+.find-results button { display: block; width: 100%; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; margin-bottom: 4px; min-height: 44px; font-weight: 500; }
+.find-results button b { display: block; font-weight: 600; color: var(--ink); }
+.find-results button .muted { display: block; font-size: 12px; }
+.find-results button:hover { border-color: var(--gold); background: var(--gold-bg); }
 .settings-main { min-width: 0; }
+.settings-page { min-width: 0; }
+.settings-title { margin: 0 0 4px; font-size: var(--fs-xl); font-weight: 700; color: var(--ink); line-height: 1.3; }
 .settings-section { scroll-margin-top: var(--sp-4); }
 .settings-section h2 { display: block; border-bottom: 0; padding-bottom: 0; margin-bottom: 4px; }
 .settings-section .lead { padding-bottom: 10px; border-bottom: 2px solid var(--gold); margin-bottom: var(--sp-4); }
 .settings-section h3 { margin-top: var(--sp-4); }
-.settings-section h3 .count { font-weight: 500; color: var(--muted); font-size: 13px; margin-left: 6px; }
-.pricing-group { margin-top: var(--sp-4); scroll-margin-top: var(--sp-4); }
-.pricing-group:first-of-type { margin-top: 0; }
-.pricing-group > h3 { margin: 0 0 4px; font-size: var(--fs-lg); }
-.pricing-group > .lead { margin-bottom: 8px; }
-details.setting-group { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; background: #fff; }
-details.setting-group > summary { list-style: none; cursor: pointer; padding: 10px 12px; display: flex; align-items: center; gap: 10px; min-height: 44px; }
-details.setting-group > summary::-webkit-details-marker { display: none; }
-details.setting-group > summary::before { content: ''; flex: 0 0 auto; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s; margin-left: 2px; }
-details.setting-group[open] > summary::before { transform: rotate(45deg); }
-details.setting-group > summary .summary-main { flex: 1 1 auto; min-width: 0; }
-details.setting-group > summary .summary-title { font-weight: 600; color: var(--ink); }
-details.setting-group > summary .summary-keys { display: block; font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
-details.setting-group > summary .chip { flex: 0 0 auto; }
-details.setting-group > .setting-body { padding: 4px 12px 2px; border-top: 1px solid var(--line-soft); }
-details.setting-group > .setting-body > .lead { margin: 8px 0 10px; }
-.setting-filter { margin: 4px 0 12px; max-width: 420px; }
-.setting-filter-note { margin: -6px 0 12px; }
+.setting-block { margin-top: var(--sp-4); }
+.setting-block > .lead { margin: 0 0 8px; }
+.setting-block .setting-block { margin-top: var(--sp-3); }
+.settings-section > .lead + .setting-block, .settings-section > .lead + form > h3, .setting-block > h3 { margin-top: 0; }
+.setting-block > h3 + .form-grid, .setting-block > h3 + .lead { margin-top: 0; }
+.setting-block > .setting-block > h3 { margin-top: var(--sp-3); }
+details.setting-fold { border: 1px solid var(--line); border-radius: 8px; margin-top: var(--sp-4); background: #fff; }
+details.setting-fold > summary { list-style: none; cursor: pointer; padding: 10px 12px; display: flex; align-items: center; gap: 10px; min-height: 44px; }
+details.setting-fold > summary::-webkit-details-marker { display: none; }
+details.setting-fold > summary::before { content: ''; flex: 0 0 auto; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s; margin-left: 2px; }
+details.setting-fold[open] > summary::before { transform: rotate(45deg); }
+details.setting-fold > summary .summary-title { flex: 1 1 auto; min-width: 0; font-weight: 700; color: var(--ink); font-size: var(--fs-md); }
+details.setting-fold > summary .chip { flex: 0 0 auto; }
+details.setting-fold > .setting-body { padding: 4px 12px 8px; border-top: 1px solid var(--line-soft); }
+details.setting-fold > .setting-body > .lead { margin: 8px 0 10px; }
+.reset-foot { margin-top: var(--sp-4); }
+.field, .setting-block { scroll-margin-top: 70px; }
+.field.ring { box-shadow: 0 0 0 3px var(--gold); border-radius: var(--radius); transition: box-shadow 0.3s; }
+/* a block's label as its heading (the sub-block has no h3 of its own, so the name is printed once) */
+.form-grid > .field.headed > .field-head > label { font-size: var(--fs-md); font-weight: 700; color: var(--ink); }
+.form-grid > .field.headed > .field-head { margin-bottom: 8px; }
+.back-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 600; text-decoration: none; margin-bottom: 2px; }
+.settings-list .settings-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 56px; padding: 8px 12px; background: #fff; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; text-decoration: none; color: inherit; }
+.settings-card .card-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.settings-card b { color: var(--ink); }
+.settings-card .muted { font-size: 12.5px; }
+.settings-card .chevron { font-size: 24px; color: var(--muted); flex: 0 0 auto; }
 .settings-key .key { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px; }
 table.settings th { font-weight: 600; text-transform: none; font-size: 13.5px; color: var(--text); letter-spacing: 0; }
 table.settings th.settings-key { width: 260px; text-align: left; vertical-align: top; }
@@ -431,7 +502,7 @@ table.settings th.settings-key { width: 260px; text-align: left; vertical-align:
   .form-grid.face-grid { grid-template-columns: 1fr 1fr; }
   .form-grid > .field-action { grid-column: 1 / -1; margin-bottom: 8px; }
   .form-grid > .field-action > * { grid-row: 1; }
-  .control > .unit { max-width: 40%; }
+  .about-btn::before { inset: -12px; }
   .actions { gap: 6px; padding: 8px 0; }
   .actions .chip { flex: 1 1 auto; min-height: 36px; font-size: 12px; padding: 4px 8px; }
   .actions > button { flex: 0 1 auto; }
@@ -521,23 +592,22 @@ table.settings th.settings-key { width: 260px; text-align: left; vertical-align:
   table.bom .remove-x { display: inline; }
   table.bom .remove-word { display: none; }
   table.bom tr.row-removed { grid-template-areas: "code name remove"; }
-  /* payment terms and categories: one card per row */
-  table.payments, table.payments tbody, table.categories, table.categories tbody { display: block; }
-  table.payments thead, table.categories thead { display: none; }
-  table.payments tr, table.categories tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; padding: 10px 0; border-bottom: 2px solid var(--line); }
-  table.payments td, table.categories td { display: block; border: 0; padding: 0; width: auto !important; }
-  table.payments td.cell-main, table.payments td.cell-actions, table.categories td.cell-main, table.categories td.cell-actions { grid-column: 1 / -1; }
-  table.payments td input, table.payments td select, table.categories td input { width: 100% !important; }
+  /* payment terms, categories and the ground tasks: one card per row */
+  table.payments, table.payments tbody, table.categories, table.categories tbody, table.tasks, table.tasks tbody { display: block; }
+  table.payments thead, table.categories thead, table.tasks thead { display: none; }
+  table.payments tr, table.categories tr, table.tasks tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; padding: 10px 0; border-bottom: 2px solid var(--line); }
+  table.payments td, table.categories td, table.tasks td { display: block; border: 0; padding: 0; width: auto !important; }
+  table.payments td.cell-main, table.payments td.cell-actions, table.categories td.cell-main, table.categories td.cell-actions, table.tasks td.cell-main, table.tasks td.cell-actions { grid-column: 1 / -1; }
+  table.payments td input, table.payments td select, table.categories td input, table.tasks td input { width: 100% !important; min-width: 0; }
+  table.tasks td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
+  table.tasks td.cell-main[data-label]::before { display: none; }
+  table.kv.sizes tbody th, table.kv.minutes tbody th { width: 110px; }
   table.kv th { width: 120px; }
   table.kv td input { max-width: none; }
-  /* settings: the index is a jump list above the cards */
+  /* settings: a list of pages, one open at a time with a way back */
   .settings { grid-template-columns: 1fr; gap: 0; }
-  .settings-index { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 0 0 10px; }
-  .settings-index .index-title { flex: 1 1 100%; padding: 0 0 4px; }
-  .settings-index a { padding: 0 12px; min-height: 40px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; border-left-width: 1px; font-size: 13px; background: #fff; }
-  .settings-index a.sub { display: none; }
-  .settings-index a.on { border-color: var(--gold); background: var(--gold-bg); }
   .settings-section { scroll-margin-top: 10px; }
-  .pricing-group { scroll-margin-top: 10px; }
-  details.setting-group > summary .summary-keys { white-space: normal; }
+  .settings-list .settings-title { margin-bottom: 8px; }
+  .field, .setting-block { scroll-margin-top: 66px; }
+  .terms-line { font-size: var(--fs-body); }
 }

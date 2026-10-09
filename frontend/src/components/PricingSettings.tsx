@@ -1,283 +1,34 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useBlocker } from 'react-router-dom'
+import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import type { PaymentPlan, PricingConfig } from '../types'
 import { PaymentPlanEditor } from './ProgramSection'
 import Field from './Field'
+import NumberInput from './NumberInput'
+import MapPicker from './MapPicker'
 import { fmtDate } from '../fmt'
-import { PRICING_GROUPS } from './shared'
+import { SETTINGS_ENTRIES, WEBSITE_SECTION, type SettingsEntry } from './shared'
+import {
+  DraftCtx, HEADED, HIDDEN, KEYED_SECTIONS, META, OTHER_GROUP, PCT_KEYS, SECTION_LABELS, SECTION_NOTES, SKIP, SUBBLOCKS, TASK_LABELS, TIME_KEYS, UNDO_SECONDS,
+  decimalsFor, dirtyEntryIds, fieldId, findSettings, isCategoryList, isMatrix, isPrimDict, isPrimList, isTaskList, labelOf, numericKey, pctIn, settingsIndex, slug, sortedSizes, titleCase,
+  useFindTarget, usePricingDraft, type CategoryRule, type Draft, type FindRow, type GroundTask,
+} from './pricingMeta'
 
-const OTHER_GROUP = { id: 'pricing-other', label: 'Other settings', lead: 'Sections added since the groups above were drawn.' }
+/* ---------- the shared draft: one in-memory copy of the pricing config for every pricing page ---------- */
 
-const SECTION_LABELS: Record<string, string> = {
-  company_base: 'Company base',
-  truck: 'Truck and freight run', handling: 'Handling at base', route: 'Route: stops, km and toll', categories: 'Categories: wastage and markup tiers',
-  labor: 'Labor day rates', roof: 'Roof work', ground: 'Ground work', hauling: 'Hauling', mobdemob: 'Crew transport (mob/demob)', tools: 'Tools', job: 'Job level: fees, markups, VAT, rounding',
-  job_defaults: 'Job defaults', wiring: 'Wiring rules and voltage drop', roles: 'BOM item roles (codes the generator uses)',
-  program: 'Program of works: site day, durations, payment terms', economics: 'Savings: tariff, export credit, escalation, lifetimes',
-  system_losses: 'System losses after the panels (figures at the meter)', sizing: 'System sizing: battery autonomy', quick: 'Website estimate',
-}
-const SKIP = new Set(['imported_from', 'imported_at'])
-// percentages are stored as fractions (0.12) and edited as percent (12)
-const PCT_KEYS = new Set([
-  'vat', 'agent_commission', 'freight_markup', 'services_markup', 'ocm_share', 'tariff_escalation', 'degradation', 'discount_rate', 'om_share_per_year',
-  'dc_drop_limit', 'ac_drop_limit', 'installment_share', 'dealer_discount', 'payment_fee', 'wastage', 'markup', 'roof_factor', 'k_site',
-  'inverter', 'wiring', 'soiling', 'other',
-])
-const TIME_KEYS = new Set(['depart_time', 'lunch_start'])
-// label, unit and one-line help for the keys the owner meets most; the rest are title-cased
-const META: Record<string, { label: string; unit?: string; help?: string }> = {
-  'job.agent_commission': { label: 'Commission', unit: '% of direct cost', help: 'Paid in cash after the job. Every job carries it (no per-job switch); nothing of it reaches the customer documents.' },
-  'job.vat': { label: 'VAT', unit: '%', help: 'The proposal prints "VAT (12%)" from this figure, worked out on the rounded contract (VAT = total × rate ÷ (1 + rate)), so the before-VAT price, the VAT and the total agree to the peso.' },
-  'job.freight_markup': { label: 'Freight markup', unit: '%' },
-  'job.services_markup': { label: 'Services markup', unit: '%', help: 'On labor, permits and tools.' },
-  'job.ppe_per_person_day': { label: 'Safety gear', unit: '₱ per person-day' },
-  'job.pee_seal': { label: 'PEE sign and seal', unit: '₱' },
-  'job.lgu_permit_cfei': { label: 'Electrical permit and final inspection', unit: '₱' },
-  'job.erc_coc_fee': { label: 'ERC Certificate of Compliance', unit: '₱' },
-  'job.bidirectional_meter_fee': { label: 'Net metering meter', unit: '₱' },
-  'job.ocm_share': { label: 'Overhead share of markup', unit: '%' },
-  'job.round_up_to': { label: 'Round the contract up to', unit: '₱' },
-  'job.quotation_validity_days': { label: 'Proposal valid for', unit: 'days' },
-  'labor.team_lead_day': { label: 'Team lead', unit: '₱ per day' },
-  'labor.skilled_day': { label: 'Skilled technician', unit: '₱ per day' },
-  'labor.laborer_day': { label: 'Helper', unit: '₱ per day' },
-  'labor.allowance_included': { label: 'Allowance included', unit: '₱ per day' },
-  'labor.owner_day': { label: 'Owner on site', unit: '₱ per day' },
-  'labor.paid_hours': { label: 'Paid hours', unit: 'h per day' },
-  'labor.nonproductive_hours': { label: 'Non-productive hours', unit: 'h per day' },
-  'tools.charge_per_installation_day': { label: 'Tool charge', unit: '₱ per installation day' },
-  'job_defaults.roof_factor': { label: 'Roof productivity factor', unit: '%' },
-  'job_defaults.roof_closed_days': { label: 'Days the roof is closed', unit: 'days' },
-  'job_defaults.max_days': { label: 'Max installation days', unit: 'days' },
-  'job_defaults.max_pairs': { label: 'Max roof pairs' },
-  'job_defaults.battery_haul_hours': { label: 'Battery haul', unit: 'h' },
-  'job_defaults.owner_days': { label: 'Owner days on site', unit: 'days' },
-  'job_defaults.extra_km': { label: 'Extra km (one way)', unit: 'km' },
-  'job_defaults.extra_toll': { label: 'Extra toll', unit: '₱' },
-  'wiring.pv_run_m': { label: 'PV run per string', unit: 'm' },
-  'wiring.ac_run_m': { label: 'AC run', unit: 'm' },
-  'wiring.grounding_run_m': { label: 'Grounding run', unit: 'm' },
-  'wiring.conduit_m': { label: 'Conduit', unit: 'm' },
-  'wiring.dc_drop_limit': { label: 'DC voltage drop limit', unit: '%' },
-  'wiring.ac_drop_limit': { label: 'AC voltage drop limit', unit: '%' },
-  'wiring.ac_voltage': { label: 'AC voltage', unit: 'V' },
-  'wiring.battery_voltage': { label: 'Battery voltage', unit: 'V' },
-  'wiring.panel_vmp_v': { label: 'Panel Vmp', unit: 'V' },
-  'wiring.continuous_factor': { label: 'Continuous current factor', help: '1.25 per the code.' },
-  'wiring.thhn_ampacity': { label: 'THHN ampacity', unit: 'A per mm² size', help: 'PEC 60 °C column.' },
-  'wiring.battery_cable_ampacity': { label: 'Battery cable ampacity', unit: 'A per mm² size' },
-  'wiring.ac_breaker_sizes_a': { label: 'Standard AC breaker sizes', unit: 'A', help: 'Each AC circuit gets the next size at or above 1.25 × its current; the conductor is then sized from the breaker.' },
-  'wiring.ac_conductors_per_circuit': { label: 'Conductors per AC circuit', help: 'Line and neutral (2); the ground is the grounding run. Multiplies the AC run per circuit.' },
-  'roles.rail_length_m': { label: 'Rail length', unit: 'm' },
-  'roles.l_feet_per_rail': { label: 'L-feet per rail' },
-  'roles.mc4_pairs_per_string': { label: 'MC4 pairs per string' },
-  'roles.default_inverter_code_grid': { label: 'Default inverter for net metering (code)', help: 'Must be marked grid-interactive on the Materials page (the electric company asks for the anti-islanding listing). Set at import to the first grid-interactive hybrid in the workbook; blank = the cheapest grid-interactive unit that fits. Parallel units as needed.' },
-  'roles.default_inverter_code_offgrid': { label: 'Default inverter for off-grid (code)', help: 'Felicity 6 kW eco-hybrid by default; blank = the cheapest hybrid that fits. Parallel units as needed.' },
-  'program.min_task_minutes': { label: 'Minimum task durations', unit: 'minutes', help: 'A floor for the hour-by-hour plan (commissioning, battery, inverter), in minutes; the labor price is not changed. When the floors push the plan past the priced days the program warns.' },
-  'program.late_finish_max_minutes': { label: 'Late finish allowance', unit: 'minutes', help: 'How long the crew may stay past the usual end of the last priced day to finish the same day (default 120). Only beyond this does the plan add a day.' },
-  'program.installation_outage_hours': { label: 'Power off on installation day', unit: 'hours', help: "Hours the customer's power is off on installation day while the inverter is connected to the panel board; fill in from your crew's practice. Printed on the proposal; 0 (blank) = not stated." },
-  'system_losses.inverter': { label: 'Inverter', unit: '% of energy kept', help: 'DC to AC conversion in the inverter: the datasheet\'s weighted efficiency.' },
-  'system_losses.wiring': { label: 'Wiring', unit: '% of energy kept', help: 'DC and AC cable runs, connectors and terminations.' },
-  'system_losses.soiling': { label: 'Soiling', unit: '% of energy kept', help: 'Dust and dirt on the panels between rains; verify locally (a rice-field roof collects more in the dry season).' },
-  'system_losses.other': { label: 'Other', unit: '% of energy kept', help: 'Module mismatch, availability and anything else after the panels. The four multiply: the array is sized on energy at the meter and the customer documents print that figure.' },
-  'sizing.days_of_autonomy': { label: 'Days of autonomy', unit: 'evenings', help: 'The evenings the battery must carry without sun; your choice. 1 = the night deficit of the worst typical day (the rule until now), 2 = twice that. The balance over a real year of weather then reports how often it still runs out.' },
-  'sizing.panel_code': { label: 'Panel on every job', unit: 'code, blank = automatic', help: 'Blank = automatic (most kWp): of the usable panels in the materials list (active, category Solar Panel, with wattage, length and width) the one that gives the most kWp on each roof, ties to the lower price per watt. A code such as BC-PNL-001 puts that panel on every job; an engineer can still pick another for one project under Design and outputs › System design.' },
-  'roles.ac_breaker_amps': { label: 'AC breaker rating', unit: 'A' },
-  'program.depart_time': { label: 'Leave base at' },
-  'program.lunch_start': { label: 'Lunch at' },
-  'program.lunch_minutes': { label: 'Lunch', unit: 'minutes' },
-  'program.travel_speed_kmh': { label: 'Travel speed', unit: 'km/h' },
-  'program.permit_prep_days': { label: 'Plans and PEE seal', unit: 'days' },
-  'program.permit_approval_days': { label: 'Electrical permit approval', unit: 'days', help: 'Assumption until you have data.' },
-  'program.cfei_days': { label: 'Final inspection certificate', unit: 'days after installation', help: 'Assumption.' },
-  'program.netmeter_application_days': { label: 'Net metering application and agreement', unit: 'days', help: 'Assumption.' },
-  'program.netmeter_meter_days': { label: 'Inspection and net metering meter', unit: 'days after switch-on', help: 'Assumption.' },
-  'program.sourcing_days_before_install': { label: 'Pickup run before installation', unit: 'days' },
-  'program.install_gap_after_permit_days': { label: 'Installation after the permit', unit: 'days' },
-  'program.commissioning_offset_days': { label: 'Switch-on after the last installation day', unit: 'days' },
-  'program.labour_paid_days_after_job': { label: 'Labor paid after the job', unit: 'days' },
-  'program.commission_paid_days_after_job': { label: 'Commission paid after the job', unit: 'days' },
-  'program.vat_remit_days_after_completion': { label: 'VAT remitted after completion', unit: 'days' },
-  'program.payment': { label: 'Payment terms' },
-  'economics.tariff_php_per_kwh': { label: 'Tariff when the audit has no bill', unit: '₱ per kWh' },
-  'economics.export_rate_php_per_kwh': { label: 'Net metering credit', unit: '₱ per kWh', help: "The electric company's generation rate, lower than the tariff." },
-  'economics.tariff_escalation': { label: 'Electricity price rise', unit: '% a year' },
-  'economics.degradation': { label: 'Panel output loss', unit: '% a year' },
-  'economics.analysis_years': { label: 'Analysis period', unit: 'years' },
-  'economics.discount_rate': { label: 'Discount rate', unit: '%' },
-  'economics.battery_life_years_override': {
-    label: 'Battery life, if not the warranty', unit: 'years',
-    help: '0 = the battery warranty years in the company profile (Settings › Company), 5 today: the battery datasheets give 5 years, though the supplier price list says 10 for the Felicity FLB line (verify). The savings view replaces the battery at this interval, at the customer price including VAT.',
-  },
-  'economics.inverter_life_years': {
-    label: 'Inverter life', unit: 'years',
-    help: 'Not the warranty (5 years from the maker, in the company profile): the years before the savings view replaces the inverter, at the customer price including VAT. 12 is the figure carried so far; verify against the datasheet.',
-  },
-  'economics.replacement_labor_php': { label: 'Labor per replacement', unit: '₱ including VAT', help: 'Added to each battery or inverter replacement in the savings view; 0 = none. Verify against your crew rates.' },
-  'economics.om_share_per_year': { label: 'Upkeep', unit: '% of contract a year' },
-  'economics.co2_kg_per_kwh': { label: 'Grid emission factor', unit: 'kg CO2 per kWh' },
-  'quick.enabled': { label: 'Estimate page switched on' },
-  'quick.panel_code': { label: 'Panel used (code)' },
-  'quick.k_site': { label: 'Typical site factor', unit: '%' },
-  'quick.tilt_deg': { label: 'Typical roof pitch', unit: '°' },
-  'quick.azimuth_deg': { label: 'Typical roof facing', unit: '°' },
-  'quick.max_panels': { label: 'Most panels an estimate may use' },
-  'quick.panels_per_row': { label: 'Panels per row' },
-  'quick.peak_factor': { label: 'Peak over the busiest hour', unit: '×' },
-  'quick.price_round_to': { label: 'Round the price up to', unit: '₱' },
-  'quick.max_requests_per_hour': { label: 'Estimates per browser per hour' },
-  'truck.running_cost_per_km': { label: 'Truck running cost', unit: '₱ per km' },
-  'truck.toll_per_round_trip': { label: 'Toll per round trip', unit: '₱' },
-  'route.stops': { label: 'Stops in driving order' },
-  'route.km': { label: 'Km between stops' },
-  'route.toll': { label: 'Toll between stops', unit: '₱' },
-  // BOM item roles: plain names; the key itself is shown in small print under the label
-  'roles.rail': { label: 'Mounting rail', help: 'Two rail lines per row.' },
-  'roles.l_foot': { label: 'L-foot (roof attachment)' },
-  'roles.end_clamp': { label: 'End clamp', help: 'Four per row.' },
-  'roles.mid_clamp': { label: 'Mid clamp', help: 'Two per gap between panels.' },
-  'roles.splice': { label: 'Rail splice', help: 'One per rail joint.' },
-  'roles.pv_cable_red': { label: 'PV cable, red, by size (mm²)' },
-  'roles.pv_cable_black': { label: 'PV cable, black, by size (mm²)' },
-  'roles.thhn': { label: 'THHN wire, by size (mm²)', help: 'AC circuits and grounding.' },
-  'roles.battery_cable_pair': { label: 'Battery cable lug pair, by size (mm²)' },
-  'roles.mc4_pair': { label: 'MC4 connector pair' },
-  'roles.dc_breaker': { label: 'DC breaker', help: 'One per string.' },
-  'roles.dc_spd': { label: 'DC surge protector', help: 'One per MPPT input in use (the MPPT count on the inverter item); one per inverter when the count is not on file.' },
-  'roles.battery_breaker_pattern': { label: 'Battery breaker: words in the item name', help: 'The generator picks the smallest breaker whose name matches and whose amps cover 1.25 × the inverter battery current.' },
-  'roles.battery_breaker_fallback': { label: 'Battery breaker: item when none matches' },
-  'roles.ats': { label: 'Transfer switch (ATS)' },
-  'roles.ats_amps': { label: 'ATS rating', unit: 'A' },
-  'roles.ac_breaker': { label: 'AC breaker', help: 'One per AC circuit, rated at the next standard size above 1.25 × the circuit current (the note on the BOM line says which). When the item is not listed in that size the BOM warns.' },
-  'roles.ac_breakers_per_inverter': { label: 'Inverter-side AC circuits per inverter', help: 'The inverter output to the loads (1), each with its breaker, sized on the output current.' },
-  'roles.ac_spd': { label: 'AC surge protector' },
-  'roles.ac_spds_per_inverter': { label: 'AC surge protectors per board', help: 'One Type 2 per AC board (counted per inverter).' },
-  'roles.enclosure': { label: 'Enclosure', help: 'One box per inverter, AC and DC protection together.' },
-  'roles.enclosures': { label: 'Enclosures per inverter' },
-  'roles.cable_tray': { label: 'Cable tray' },
-  'roles.cable_trays': { label: 'Cable trays per job' },
-  'roles.conduit': { label: 'Conduit' },
-  'roles.ground_rod': { label: 'Ground rod' },
-  'roles.ground_rods': { label: 'Ground rods per job' },
-  'roles.earth_lug': { label: 'Earth lug' },
-  'roles.earth_lugs': { label: 'Earth lugs per job' },
-  'roles.sealant': { label: 'Sealant' },
-  'roles.sealants': { label: 'Sealant tubes per job' },
-  'roles.max_panels_per_string': { label: 'Max panels per string' },
-  'roles.inverter_exclude_words': { label: 'Inverter names to skip (words)', help: 'Items whose name carries one of these are never picked as the inverter.' },
-  'roles.battery_exclude_words': { label: 'Battery names to skip (words)', help: 'Items whose name carries one of these are never picked as the battery.' },
-  'roles.inverter_parallel_tolerance_pct': { label: 'Inverter overshoot tolerance', unit: '%', help: 'When the sizing asks for a little more than one unit gives (within this share), one unit is kept with a warning instead of two in parallel. Above it the cheapest single unit that fits is used (the default\'s brand on ties), then parallel units. 0 = never tolerate; verify the unit\'s overload rating on the datasheet.' },
-  'roles.ac_grid_breakers_per_inverter': { label: 'Grid-side AC circuits per inverter', help: 'The grid feed to the inverter\'s AC input and the maintenance bypass (2), each with its breaker, sized on the inverter\'s AC input (pass-through) rating when the item carries it, else on its output.' },
-  'roles.ac_disconnect': { label: 'AC disconnect (DU)', help: 'The visible, lockable AC disconnect for the electric company at the service; rated at least the grid-side breaker. Verify the DU\'s requirement.' },
-  'roles.ac_disconnects': { label: 'AC disconnects per job' },
-  'roles.placard': { label: 'Placards and labels (set)', help: 'PV system labels and placards at the service, the disconnect, the inverter and the DC box; verify what the LGU and the DU ask for. Blank = no item yet: the BOM carries the line without a price and warns.' },
-  'roles.placard_sets': { label: 'Placard sets per job' },
-  'roles.monitoring': { label: 'Monitoring dongle', help: 'One per inverter; it must match the inverter\'s brand. Blank = no item yet: the BOM carries the line without a price and warns.' },
-  'roles.export_limiter': { label: 'Export limiter (optional)', help: 'Priced on net-metering jobs when set: the export limit between switch-on and the two-way meter (verify the DU\'s rule). Blank = none priced, with a warning on net-metering jobs.' },
-  'roles.array_bonding_wire': { label: 'Array bonding conductor', help: 'The equipment grounding conductor along the array: the rail-line length of every row plus the jumpers. Bare copper where the LGU asks; verify the gauge with the PEE.' },
-  'roles.bonding_extra_m_per_row': { label: 'Bonding jumpers per row', unit: 'm', help: 'Added to each row\'s rail-line length for the jumpers between the two rail lines and to the next row.' },
-  'roles.bonding_lugs_per_panel': { label: 'Bonding lugs per panel', help: 'Panel frame to rail, unless the clamps are listed as bonding clamps (then 0). Added to the earth-lug line.' },
-  'roles.bonding_lugs_per_rail_line': { label: 'Bonding lugs per rail line', help: 'Each rail line to the grounding conductor; two lines per row. Added to the earth-lug line.' },
-  'roles.l_foot_fastener': { label: 'L-foot fastener', help: 'The screws or bolts that fix each L-foot into the purlin; BC-MNT-006 lists none. Blank = no item yet: the BOM carries the line without a price and warns.' },
-  'roles.fasteners_per_l_foot': { label: 'Fasteners per L-foot', help: 'Verify with the rail maker\'s manual and the roof sheet.' },
-}
-/** Sections whose keys are catalogue roles: the key is shown in small print under the plain name. */
-const KEYED_SECTIONS = new Set(['roles'])
-const SECTION_NOTES: Record<string, string> = {
-  roles: 'Each role names the materials-list code the generator uses for that item; change a code to swap the item. The size tables map a wire size in mm² to its code. Counts and patterns are the rules beside them.',
-  categories: 'The markup tier and the wastage allowance for every item in a category, by the category name on the Materials page. A category that is not listed takes 30% markup and no wastage.',
-}
-
-/** A label for a block with no single control (a matrix, a size table, the payment terms): looks like a field label. */
-function BlockLabel({ children, keyName }: { children: ReactNode; keyName?: string }) {
-  return (
-    <div className="field-head">
-      <span className="field-label">
-        {children}
-        {keyName && <span className="key">{keyName}</span>}
-      </span>
-    </div>
-  )
-}
-
-/** A category rule as the server stores it (percentages as fractions). */
-interface CategoryRule {
-  name: string
-  markup_tier: number
-  wastage: number
-}
-
-function titleCase(k: string) {
-  return k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
-}
-const isMatrix = (v: unknown): v is number[][] => Array.isArray(v) && v.length > 0 && v.every((r) => Array.isArray(r) && r.every((x) => typeof x === 'number'))
-const isPrimList = (v: unknown): v is (string | number)[] => Array.isArray(v) && v.every((x) => typeof x === 'string' || typeof x === 'number')
-const isPrimDict = (v: unknown): v is Record<string, string | number> => !!v && typeof v === 'object' && !Array.isArray(v) && Object.values(v as object).every((x) => typeof x === 'string' || typeof x === 'number')
-const isCategoryList = (v: unknown): v is CategoryRule[] => Array.isArray(v) && v.every((r) => r && typeof r === 'object' && typeof (r as CategoryRule).name === 'string' && typeof (r as CategoryRule).markup_tier === 'number')
-const pctIn = (v: number) => Math.round(v * 10000) / 100
-const fieldId = (section: string, key: string) => `cfg-${section}-${key}`.replace(/[^A-Za-z0-9_-]/g, '-')
-
-/** The categories as a small table (name, markup %, wastage %) instead of a JSON textarea. */
-function CategoriesEditor({ rows, onChange }: { rows: CategoryRule[]; onChange: (rows: CategoryRule[]) => void }) {
-  const set = (i: number, p: Partial<CategoryRule>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...p } : r)))
-  const num = (s: string) => (s === '' ? 0 : Number(s)) / 100
-  return (
-    <div>
-      <table className="categories" data-testid="categories-editor">
-        <thead>
-          <tr>
-            <th>Category</th>
-            <th className="num">Markup %</th>
-            <th className="num">Wastage %</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>
-              <td className="cell-main" data-label="Category">
-                <input value={r.name} aria-label={`Category ${i + 1} name`} onChange={(e) => set(i, { name: e.target.value })} />
-              </td>
-              <td className="num" data-label="Markup %">
-                <input type="number" step="any" min={0} value={pctIn(r.markup_tier)} aria-label={`${r.name || 'Category'} markup %`} style={{ width: 110 }} onChange={(e) => set(i, { markup_tier: num(e.target.value) })} />
-              </td>
-              <td className="num" data-label="Wastage %">
-                <input type="number" step="any" min={0} value={pctIn(r.wastage ?? 0)} aria-label={`${r.name || 'Category'} wastage %`} style={{ width: 110 }} onChange={(e) => set(i, { wastage: num(e.target.value) })} />
-              </td>
-              <td className="cell-actions">
-                <button type="button" className="toggle link" onClick={() => onChange(rows.filter((_, j) => j !== i))}>
-                  remove
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={{ marginTop: 6 }}>
-        <button type="button" className="small" onClick={() => onChange([...rows, { name: '', markup_tier: 0.3, wastage: 0 }])}>
-          Add category
-        </button>
-      </div>
-    </div>
-  )
-}
-
-const UNDO_SECONDS = 10
-
-export default function PricingSettings() {
+/** Holds the pricing config while the person moves between the settings pages; Save writes the whole document. */
+export function PricingDraftProvider({ enabled, children }: { enabled: boolean; children: ReactNode }) {
   const [cfg, setCfg] = useState<PricingConfig | null>(null)
   const [saved, setSaved] = useState<PricingConfig | null>(null)
-  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set())
-  const [needle, setNeedle] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   // after Reset to defaults the settings as they were stay here for ten seconds, so a slip can be undone
   const [undo, setUndo] = useState<{ cfg: PricingConfig; saved: PricingConfig; left: number } | null>(null)
 
   useEffect(() => {
+    if (!enabled) return
     api
       .pricingConfig()
       .then((c) => {
@@ -285,15 +36,11 @@ export default function PricingSettings() {
         setSaved(c)
       })
       .catch((e) => setError(e.message))
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
     if (!undo) return
-    if (undo.left <= 0) {
-      setUndo(null)
-      return
-    }
-    const t = window.setTimeout(() => setUndo((u) => (u ? { ...u, left: u.left - 1 } : u)), 1000)
+    const t = window.setTimeout(() => setUndo((u) => (u && u.left > 1 ? { ...u, left: u.left - 1 } : null)), 1000)
     return () => window.clearTimeout(t)
   }, [undo])
 
@@ -311,432 +58,849 @@ export default function PricingSettings() {
     window.addEventListener('beforeunload', onUnload)
     return () => window.removeEventListener('beforeunload', onUnload)
   }, [dirty])
-  const blocker = useBlocker(dirty)
-  useEffect(() => {
-    if (blocker.state !== 'blocked') return
-    if (window.confirm('Pricing settings have unsaved changes. Leave without saving?')) blocker.proceed()
-    else blocker.reset()
-  }, [blocker])
 
-  if (!cfg) return <div className="muted">{error ?? 'Loading pricing settings...'}</div>
-
-  const setField = (section: string, key: string, value: unknown) => setCfg({ ...cfg, [section]: { ...cfg[section], [key]: value } })
-  const save = async () => {
-    setError(null)
-    setBusy(true)
-    try {
-      for (const [path, text] of Object.entries(jsonDrafts)) {
-        const [section, key] = path.split('.')
-        try {
-          JSON.parse(text)
-        } catch {
-          throw new Error(`${SECTION_LABELS[section] ?? titleCase(section)} › ${titleCase(key)} is not valid JSON.`)
-        }
+  const value: Draft = {
+    cfg,
+    saved,
+    error,
+    msg,
+    busy,
+    dirtySections,
+    dirty,
+    undo: undo ? { left: undo.left } : null,
+    setField: (section, key, v) => setCfg((c) => (c ? { ...c, [section]: { ...c[section], [key]: v } } : c)),
+    setSection: (section, v) => setCfg((c) => (c ? { ...c, [section]: v } : c)),
+    save: async () => {
+      if (!cfg) return false
+      setError(null)
+      setBusy(true)
+      try {
+        const r = await api.savePricingConfig(cfg)
+        setCfg(r)
+        setSaved(r)
+        setUndo(null)
+        setMsg('Saved. Calculate a project again to apply them.')
+        return true
+      } catch (e) {
+        setError((e as Error).message)
+        return false
+      } finally {
+        setBusy(false)
       }
-      const r = await api.savePricingConfig(cfg)
-      setCfg(r)
-      setSaved(r)
-      setJsonDrafts({})
-      setUndo(null)
-      setMsg('Pricing settings saved. Calculate an assessment again to apply them.')
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-  const reset = async () => {
-    if (!window.confirm('Reset all pricing settings to the built-in workbook defaults? Your edits in every section are lost. You can undo for ten seconds afterwards.')) return
-    setError(null)
-    setBusy(true)
-    const before = { cfg, saved: saved ?? cfg }
-    try {
-      const r = await api.resetPricingConfig()
-      setCfg(r)
-      setSaved(r)
-      setJsonDrafts({})
-      setMsg('Reset to defaults.')
-      setUndo({ ...before, left: UNDO_SECONDS })
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-  const undoReset = async () => {
-    if (!undo) return
-    setError(null)
-    setBusy(true)
-    try {
-      const r = await api.savePricingConfig(undo.saved)
-      setSaved(r)
-      setCfg(undo.cfg) // unsaved edits from before the reset come back as unsaved edits
-      setJsonDrafts({})
-      setUndo(null)
-      setMsg('Reset undone: your settings are back.')
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-  const discard = () => {
-    if (saved) setCfg(saved)
-    setJsonDrafts({})
-  }
-
-  const q = needle.trim().toLowerCase()
-  const labelOf = (section: string, key: string) => META[`${section}.${key}`]?.label ?? titleCase(key)
-  const matches = (section: string, key: string) =>
-    !q || `${labelOf(section, key)} ${key} ${META[`${section}.${key}`]?.help ?? ''} ${SECTION_LABELS[section] ?? titleCase(section)}`.toLowerCase().includes(q)
-
-  /** One setting as a form cell: a Field for a single control, a full-width block for a table or an editor. */
-  const renderField = (section: string, key: string, v: unknown) => {
-    const path = `${section}.${key}`
-    const meta = META[path]
-    const id = fieldId(section, key)
-    const keyName = KEYED_SECTIONS.has(section) ? key : undefined
-    const label = labelOf(section, key)
-    if (typeof v === 'number') {
-      const pct = PCT_KEYS.has(key)
-      return (
-        <Field key={key} id={id} label={label} unit={meta?.unit ?? (pct ? '%' : undefined)} help={meta?.help} keyName={keyName}>
-          {(fid) => (
-            <input
-              id={fid}
-              type="number"
-              step="any"
-              value={pct ? Math.round(v * 10000) / 100 : v}
-              onChange={(e) => {
-                const n = e.target.value === '' ? 0 : Number(e.target.value)
-                setField(section, key, pct ? n / 100 : n)
-              }}
-            />
-          )}
-        </Field>
-      )
-    }
-    if (typeof v === 'boolean') {
-      return (
-        <Field key={key} id={id} label={label} help={meta?.help} keyName={keyName}>
-          {(fid) => (
-            <span className="inline" style={{ minHeight: 'var(--control-h)' }}>
-              <input id={fid} type="checkbox" checked={v} onChange={(e) => setField(section, key, e.target.checked)} />
-              <span className="muted">{v ? 'on' : 'off'}</span>
-            </span>
-          )}
-        </Field>
-      )
-    }
-    if (typeof v === 'string') {
-      if (TIME_KEYS.has(key)) {
-        return (
-          <Field key={key} id={id} label={label} help={meta?.help} keyName={keyName}>
-            {(fid) => <input id={fid} type="time" value={v} onChange={(e) => setField(section, key, e.target.value)} />}
-          </Field>
-        )
+    },
+    discard: () => {
+      if (saved) setCfg(saved)
+    },
+    reset: async () => {
+      if (!cfg) return
+      if (!window.confirm('Reset every pricing setting to the built-in workbook defaults? Your edits in every section are lost. You can undo for ten seconds afterwards.')) return
+      setError(null)
+      setBusy(true)
+      const before = { cfg, saved: saved ?? cfg }
+      try {
+        const r = await api.resetPricingConfig()
+        setCfg(r)
+        setSaved(r)
+        setMsg('Reset to defaults.')
+        setUndo({ ...before, left: UNDO_SECONDS })
+      } catch (e) {
+        setError((e as Error).message)
+      } finally {
+        setBusy(false)
       }
-      const long = v.length > 24 || /words|names/.test(label)
-      return (
-        <Field key={key} id={id} label={label} help={meta?.help} keyName={keyName} className={long ? 'wide' : undefined}>
-          {(fid) => <input id={fid} value={v} onChange={(e) => setField(section, key, e.target.value)} className={KEYED_SECTIONS.has(section) ? 'code' : undefined} />}
-        </Field>
-      )
+    },
+    undoReset: async () => {
+      if (!undo) return
+      setError(null)
+      setBusy(true)
+      try {
+        const r = await api.savePricingConfig(undo.saved)
+        setSaved(r)
+        setCfg(undo.cfg) // unsaved edits from before the reset come back as unsaved edits
+        setUndo(null)
+        setMsg('Reset undone: your settings are back.')
+      } catch (e) {
+        setError((e as Error).message)
+      } finally {
+        setBusy(false)
+      }
+    },
+  }
+  return <DraftCtx.Provider value={value}>{children}</DraftCtx.Provider>
+}
+
+/* ---------- the editors: a table for every list, never a JSON box ---------- */
+
+/** The categories as a small table (name, markup %, wastage %). */
+function CategoriesEditor({ rows, onChange }: { rows: CategoryRule[]; onChange: (rows: CategoryRule[]) => void }) {
+  const set = (i: number, p: Partial<CategoryRule>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...p } : r)))
+  return (
+    <div id={fieldId('categories', 'value')} className="setting-block">
+      <table className="categories" data-testid="categories-editor">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th className="num">Markup %</th>
+            <th className="num">Wastage %</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              <td className="cell-main" data-label="Category">
+                <input value={r.name} aria-label={`Category ${i + 1} name`} onChange={(e) => set(i, { name: e.target.value })} />
+              </td>
+              <td className="num" data-label="Markup %">
+                <NumberInput value={pctIn(r.markup_tier)} decimals={1} min={0} ariaLabel={`${r.name || 'Category'} markup %`} style={{ width: 110 }} onChange={(v) => set(i, { markup_tier: (v ?? 0) / 100 })} />
+              </td>
+              <td className="num" data-label="Wastage %">
+                <NumberInput value={pctIn(r.wastage ?? 0)} decimals={1} min={0} ariaLabel={`${r.name || 'Category'} wastage %`} style={{ width: 110 }} onChange={(v) => set(i, { wastage: (v ?? 0) / 100 })} />
+              </td>
+              <td className="cell-actions">
+                <button type="button" className="toggle link" onClick={() => onChange(rows.filter((_, j) => j !== i))}>
+                  Remove
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ marginTop: 6 }}>
+        <button type="button" className="small" onClick={() => onChange([...rows, { name: '', markup_tier: 0.3, wastage: 0 }])}>
+          Add category
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** The ground tasks: one row per task, the weights as numbers, the key under the name for the developer's sake. */
+function GroundTasksEditor({ rows, savedKeys, onChange }: { rows: GroundTask[]; savedKeys: Set<string>; onChange: (rows: GroundTask[]) => void }) {
+  const set = (i: number, p: Partial<GroundTask>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...p } : r)))
+  return (
+    <div className="block">
+      <table className="tasks" data-testid="ground-tasks">
+        <thead>
+          <tr>
+            <th>Task</th>
+            <th className="num">Mounting weight</th>
+            <th className="num">Wiring weight</th>
+            <th>Per</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              <td className="cell-main" data-label="Task">
+                <input value={r.label} aria-label={`Task ${i + 1} name`} onChange={(e) => set(i, { label: e.target.value, key: savedKeys.has(r.key) ? r.key : slug(e.target.value) })} />
+                <span className="key">{r.key}</span>
+              </td>
+              <td className="num" data-label="Mounting weight">
+                <NumberInput value={r.mounting_weight} decimals={2} min={0} ariaLabel={`${r.label} mounting weight`} style={{ width: 100 }} onChange={(v) => set(i, { mounting_weight: v ?? 0 })} />
+              </td>
+              <td className="num" data-label="Wiring weight">
+                <NumberInput value={r.wiring_weight} decimals={2} min={0} ariaLabel={`${r.label} wiring weight`} style={{ width: 100 }} onChange={(v) => set(i, { wiring_weight: v ?? 0 })} />
+              </td>
+              <td data-label="Per">
+                <input value={r.unit} aria-label={`${r.label} unit`} style={{ width: 130 }} onChange={(e) => set(i, { unit: e.target.value })} />
+              </td>
+              <td className="cell-actions">
+                <button type="button" className="toggle link" onClick={() => onChange(rows.filter((_, j) => j !== i))}>
+                  Remove
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ marginTop: 6 }}>
+        <button type="button" className="small" onClick={() => onChange([...rows, { key: slug(`task ${rows.length + 1}`), label: '', mounting_weight: 0, wiring_weight: 0, unit: 'per job' }])}>
+          Add task
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** A list of sizes or words as chips with an add field: Enter adds, × removes. */
+function ChipsEditor({ values, unit, numeric, label, onChange }: { values: (string | number)[]; unit?: string; numeric: boolean; label: string; onChange: (v: (string | number)[]) => void }) {
+  const [text, setText] = useState('')
+  const add = () => {
+    const t = text.trim()
+    if (!t) return
+    const v: string | number = numeric ? Number(t) : t
+    if (numeric && !Number.isFinite(v as number)) return
+    if (values.includes(v)) {
+      setText('')
+      return
     }
-    if (section === 'program' && key === 'payment') {
-      return (
-        <div key={key} className="field full">
-          <BlockLabel>{label}</BlockLabel>
-          <div className="control">
-            <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-              <PaymentPlanEditor plan={v as PaymentPlan} defaults={v as PaymentPlan} onChange={(p) => p && setField(section, key, p)} hideDefaultLink />
-            </div>
-          </div>
-          {meta?.help && <div className="help">{meta.help}</div>}
-        </div>
-      )
-    }
-    if (isMatrix(v)) {
-      const stops: string[] = Array.isArray(cfg[section]?.stops) ? (cfg[section].stops as string[]) : v.map((_, i) => `#${i + 1}`)
-      return (
-        <div key={key} className="field full">
-          <BlockLabel keyName={keyName}>{label}</BlockLabel>
-          <div className="control">
-            <div className="table-wrap scroll-x" style={{ flex: '1 1 auto' }}>
-              <div className="scroll-note muted">Scroll sideways to see every stop.</div>
-              <table className="matrix">
-                <thead>
-                  <tr>
-                    <th></th>
-                    {stops.map((st, j) => (
-                      <th key={j} className="num">
-                        {st}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {v.map((row, i) => (
-                    <tr key={i}>
-                      <th>{stops[i] ?? `#${i + 1}`}</th>
-                      {row.map((x, j) => (
-                        <td key={j} className="num">
-                          <input
-                            type="number"
-                            step="any"
-                            value={x}
-                            aria-label={`${stops[i] ?? i + 1} to ${stops[j] ?? j + 1}`}
-                            onChange={(e) => {
-                              const next = v.map((r) => [...r])
-                              next[i][j] = e.target.value === '' ? 0 : Number(e.target.value)
-                              setField(section, key, next)
-                            }}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          {meta?.help && <div className="help">{meta.help}</div>}
-        </div>
-      )
-    }
-    if (isPrimList(v)) {
-      const numeric = v.every((x) => typeof x === 'number')
-      return (
-        <Field key={key} id={id} label={label} help={meta?.help ?? 'Comma separated.'} keyName={keyName} className="wide">
-          {(fid) => (
-            <input
-              id={fid}
-              value={jsonDrafts[path] ?? v.join(', ')}
-              onChange={(e) => {
-                setJsonDrafts({ ...jsonDrafts, [path]: e.target.value })
-                const parts = e.target.value.split(',').map((x) => x.trim()).filter(Boolean)
-                setField(section, key, numeric ? parts.map(Number).filter((n) => Number.isFinite(n)) : parts)
-              }}
-              onBlur={() => {
-                const d = { ...jsonDrafts }
-                delete d[path]
-                setJsonDrafts(d)
-              }}
-              placeholder="comma separated"
-            />
-          )}
-        </Field>
-      )
-    }
-    if (isPrimDict(v)) {
-      const sizes = KEYED_SECTIONS.has(section)
-      return (
-        <div key={key} className="field wide">
-          <BlockLabel keyName={keyName}>{label}</BlockLabel>
-          <div className="control">
-            <table className="kv">
-              <tbody>
-                {Object.entries(v).map(([k, x]) => (
-                  <tr key={k}>
-                    <th>{sizes && /^[\d.]+$/.test(k) ? `${k} mm²` : k}</th>
-                    <td>
-                      <input
-                        type={typeof x === 'number' ? 'number' : 'text'}
-                        step="any"
-                        value={x}
-                        aria-label={`${label} ${k}`}
-                        className={sizes ? 'code' : undefined}
-                        onChange={(e) => setField(section, key, { ...v, [k]: typeof x === 'number' ? (e.target.value === '' ? 0 : Number(e.target.value)) : e.target.value })}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {meta?.help && <div className="help">{meta.help}</div>}
-        </div>
-      )
-    }
-    const text = jsonDrafts[path] ?? JSON.stringify(v, null, 1)
-    return (
-      <Field key={key} id={id} label={label} help={meta?.help} keyName={keyName} className="full">
-        {(fid) => (
-          <textarea
-            id={fid}
-            rows={Math.min(12, Math.max(2, text.split('\n').length))}
-            value={text}
-            style={{ fontFamily: 'monospace', fontSize: 12 }}
-            onChange={(e) => {
-              setJsonDrafts({ ...jsonDrafts, [path]: e.target.value })
-              try {
-                setField(section, key, JSON.parse(e.target.value))
-              } catch {
-                /* keep typing */
+    const next = [...values, v]
+    onChange(numeric ? (next as number[]).sort((a, b) => a - b) : next)
+    setText('')
+  }
+  return (
+    <div className="block chips" data-testid="chips">
+      {values.map((v, i) => (
+        <span key={`${v}-${i}`} className="chip-item">
+          {String(v)}
+          {unit && numeric ? ` ${unit}` : ''}
+          <button type="button" aria-label={`Remove ${v}`} title="Remove" onClick={() => onChange(values.filter((_, j) => j !== i))}>
+            ×
+          </button>
+        </span>
+      ))}
+      <span className="chip-add">
+        <input
+          value={text}
+          type={numeric ? 'number' : 'text'}
+          inputMode={numeric ? 'numeric' : undefined}
+          aria-label={`Add ${numeric ? 'size' : 'word'} to ${label}`}
+          placeholder={numeric ? 'Add size' : 'Add word'}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              add()
+            }
+          }}
+        />
+        <button type="button" className="small" onClick={add}>
+          Add
+        </button>
+      </span>
+    </div>
+  )
+}
+
+/** A size → value table ("3.5 mm²" → 20 A, or → an item code), sorted by size, with Add size and Remove. */
+function SizeTableEditor({ value, unit, code, label, onChange }: { value: Record<string, string | number>; unit?: string; code: boolean; label: string; onChange: (v: Record<string, string | number>) => void }) {
+  const [size, setSize] = useState('')
+  const keys = sortedSizes(Object.keys(value))
+  const sizes = keys.every(numericKey)
+  const numeric = Object.values(value).every((x) => typeof x === 'number')
+  const add = () => {
+    const k = size.trim().replace(/\s*mm².*$/, '')
+    if (!k || k in value) return
+    onChange({ ...value, [k]: numeric ? 0 : '' })
+    setSize('')
+  }
+  return (
+    <div className="block">
+      <table className="kv sizes">
+        <thead>
+          <tr>
+            <th>{sizes ? 'Size' : 'Task'}</th>
+            <th>{unit ?? (numeric ? 'Value' : 'Code')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {keys.map((k) => {
+            const x = value[k]
+            const name = sizes ? `${k} mm²` : (TASK_LABELS[k] ?? titleCase(k))
+            return (
+              <tr key={k}>
+                <th scope="row">{name}</th>
+                <td>
+                  {typeof x === 'number' ? (
+                    <NumberInput value={x} decimals={0} min={0} ariaLabel={`${label} ${name}`} onChange={(v) => onChange({ ...value, [k]: v ?? 0 })} />
+                  ) : (
+                    <input value={x} aria-label={`${label} ${name}`} className={code ? 'code' : undefined} onChange={(e) => onChange({ ...value, [k]: e.target.value })} />
+                  )}
+                </td>
+                <td className="cell-actions">
+                  <button
+                    type="button"
+                    className="toggle link"
+                    onClick={() => {
+                      const next = { ...value }
+                      delete next[k]
+                      onChange(next)
+                    }}
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {sizes && (
+        <span className="chip-add" style={{ marginTop: 6 }}>
+          <input
+            value={size}
+            inputMode="decimal"
+            aria-label={`Add size to ${label}`}
+            placeholder="Add size, mm²"
+            onChange={(e) => setSize(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                add()
               }
             }}
+          />
+          <button type="button" className="small" onClick={add}>
+            Add
+          </button>
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** The minimum task durations and the late finish allowance as one "Minutes" table. */
+function MinutesTable({ tasks, late, onTasks, onLate }: { tasks: Record<string, number>; late: number | undefined; onTasks: (v: Record<string, number>) => void; onLate: (v: number) => void }) {
+  return (
+    <div className="block">
+      <table className="kv minutes">
+        <thead>
+          <tr>
+            <th>Task</th>
+            <th>Minutes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(tasks).map(([k, x]) => (
+            <tr key={k}>
+              <th scope="row">{TASK_LABELS[k] ?? titleCase(k)}</th>
+              <td>
+                <NumberInput value={x} decimals={0} min={0} ariaLabel={`${TASK_LABELS[k] ?? titleCase(k)} minutes`} onChange={(v) => onTasks({ ...tasks, [k]: v ?? 0 })} />
+              </td>
+            </tr>
+          ))}
+          {late != null && (
+            <tr>
+              <th scope="row">Late finish allowance</th>
+              <td>
+                <NumberInput value={late} decimals={0} min={0} ariaLabel="Late finish allowance minutes" onChange={(v) => onLate(v ?? 0)} />
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** The route's stops as a one-column table with arrows; the km and toll tables follow every change. */
+function StopsEditor({ stops, km, toll, onChange }: { stops: string[]; km: number[][]; toll: number[][]; onChange: (stops: string[], km: number[][], toll: number[][]) => void }) {
+  const permute = (m: number[][], order: number[]) => order.map((i) => order.map((j) => m[i]?.[j] ?? 0))
+  const move = (i: number, d: number) => {
+    const j = i + d
+    if (j < 0 || j >= stops.length) return
+    const order = stops.map((_, k) => k)
+    ;[order[i], order[j]] = [order[j], order[i]]
+    onChange(order.map((k) => stops[k]), permute(km, order), permute(toll, order))
+  }
+  const remove = (i: number) => {
+    const order = stops.map((_, k) => k).filter((k) => k !== i)
+    onChange(order.map((k) => stops[k]), permute(km, order), permute(toll, order))
+  }
+  const add = () => {
+    const at = Math.max(stops.length - 1, 0) // before the site, which stays last
+    const grow = (m: number[][]) => {
+      const rows = m.map((r) => [...r.slice(0, at), 0, ...r.slice(at)])
+      rows.splice(at, 0, new Array(stops.length + 1).fill(0))
+      return rows
+    }
+    onChange([...stops.slice(0, at), 'New stop', ...stops.slice(at)], grow(km), grow(toll))
+  }
+  return (
+    <div className="block">
+      <table className="kv stops" data-testid="stops-editor">
+        <tbody>
+          {stops.map((s, i) => (
+            <tr key={i}>
+              <th scope="row" className="num">
+                {i + 1}
+              </th>
+              <td>
+                <input value={s} aria-label={`Stop ${i + 1}`} onChange={(e) => onChange(stops.map((x, k) => (k === i ? e.target.value : x)), km, toll)} />
+              </td>
+              <td className="cell-actions">
+                <button type="button" className="toggle" aria-label={`Move ${s} up`} title="Move up" disabled={i === 0} onClick={() => move(i, -1)}>
+                  ▲
+                </button>
+                <button type="button" className="toggle" aria-label={`Move ${s} down`} title="Move down" disabled={i === stops.length - 1} onClick={() => move(i, 1)}>
+                  ▼
+                </button>
+                <button type="button" className="toggle link" onClick={() => remove(i)}>
+                  Remove
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ marginTop: 6 }}>
+        <button type="button" className="small" onClick={add}>
+          Add stop
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function MatrixEditor({ value, stops, label, unit, onChange }: { value: number[][]; stops: string[]; label: string; unit?: string; onChange: (v: number[][]) => void }) {
+  return (
+    <div className="block table-wrap scroll-x">
+      <div className="scroll-note muted">Scroll sideways to see every stop.</div>
+      <table className="matrix">
+        <thead>
+          <tr>
+            <th className="unit-cell">{unit}</th>
+            {stops.map((st, j) => (
+              <th key={j} className="num">
+                {st}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {value.map((row, i) => (
+            <tr key={i}>
+              <th>{stops[i] ?? `#${i + 1}`}</th>
+              {row.map((x, j) => (
+                <td key={j} className="num">
+                  <NumberInput
+                    value={x}
+                    decimals={0}
+                    min={0}
+                    ariaLabel={`${label}: ${stops[i] ?? i + 1} to ${stops[j] ?? j + 1}`}
+                    onChange={(v) => {
+                      const next = value.map((r) => [...r])
+                      next[i][j] = v ?? 0
+                      onChange(next)
+                    }}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** A switch row above a grid: "Estimate page  On". */
+function SwitchRow({ id, label, value, onChange }: { id: string; label: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="switch-row" htmlFor={id}>
+      <input id={id} type="checkbox" role="switch" checked={value} aria-checked={value} onChange={(e) => onChange(e.target.checked)} />
+      <span className="switch-label">{label}</span>
+      <span className={`switch-state ${value ? 'on' : ''}`}>{value ? 'On' : 'Off'}</span>
+    </label>
+  )
+}
+
+/* ---------- one section of the config as form cells and blocks ---------- */
+
+/** One setting as a form cell: a Field for a single control, a block on its own line for a table or an editor. */
+function SettingCell({ section, k, v }: { section: string; k: string; v: unknown }) {
+  const { cfg, saved, setField } = usePricingDraft()
+  const path = `${section}.${k}`
+  const meta = META[path]
+  const id = fieldId(section, k)
+  const keyName = KEYED_SECTIONS.has(section) ? k : undefined
+  const label = labelOf(section, k)
+  const headed = HEADED.has(path) ? ' headed' : ''
+  const common = { id, label, help: meta?.help, about: meta?.about, keyName }
+  if (typeof v === 'number') {
+    const pct = PCT_KEYS.has(k)
+    const decimals = decimalsFor(meta, pct)
+    return (
+      <Field {...common} unit={meta?.unit ?? (pct ? '%' : undefined)}>
+        {(fid) => (
+          <NumberInput
+            id={fid}
+            value={pct ? pctIn(v) : v}
+            decimals={decimals}
+            disabled={meta?.readOnly}
+            onChange={(n) => setField(section, k, pct ? (n ?? 0) / 100 : (n ?? 0))}
           />
         )}
       </Field>
     )
   }
-
-  /** A whole section: its fields in the form grid, or its editor when the section is not a plain object. */
-  const renderSection = (sec: string) => {
-    const v = cfg[sec]
-    const isObj = v && typeof v === 'object' && !Array.isArray(v)
-    if (isObj) {
-      const entries = Object.entries(v as Record<string, unknown>).filter(([k]) => matches(sec, k))
-      if (entries.length === 0) return null
-      return <div className="form-grid">{entries.map(([k, val]) => renderField(sec, k, val))}</div>
-    }
-    if (!matches(sec, sec)) return null
-    if (isCategoryList(v)) return <CategoriesEditor rows={v} onChange={(rows) => setCfg({ ...cfg, [sec]: rows })} />
-    if (typeof v === 'string') {
-      return (
-        <div className="form-grid">
-          <Field label={SECTION_LABELS[sec] ?? titleCase(sec)} className="wide" id={fieldId(sec, 'value')}>
-            {(fid) => <input id={fid} value={v} onChange={(e) => setCfg({ ...cfg, [sec]: e.target.value })} />}
-          </Field>
-        </div>
-      )
-    }
+  if (typeof v === 'boolean') {
     return (
-      <div className="form-grid">
-        <Field label={SECTION_LABELS[sec] ?? titleCase(sec)} className="full" id={fieldId(sec, 'value')}>
-          {(fid) => (
-            <textarea
-              id={fid}
-              rows={10}
-              style={{ fontFamily: 'monospace', fontSize: 12 }}
-              value={jsonDrafts[sec] ?? JSON.stringify(v, null, 1)}
-              onChange={(e) => {
-                setJsonDrafts({ ...jsonDrafts, [sec]: e.target.value })
-                try {
-                  setCfg({ ...cfg, [sec]: JSON.parse(e.target.value) })
-                } catch {
-                  /* keep typing */
-                }
+      <Field {...common}>
+        {(fid) => (
+          <span className="inline" style={{ minHeight: 'var(--control-h)' }}>
+            <input id={fid} type="checkbox" checked={v} onChange={(e) => setField(section, k, e.target.checked)} />
+            <span className="muted">{v ? 'On' : 'Off'}</span>
+          </span>
+        )}
+      </Field>
+    )
+  }
+  if (typeof v === 'string') {
+    if (TIME_KEYS.has(k)) return <Field {...common}>{(fid) => <input id={fid} type="time" value={v} onChange={(e) => setField(section, k, e.target.value)} />}</Field>
+    const long = meta?.wide || v.length > 24 || /words|names/.test(label)
+    return (
+      <Field {...common} className={long ? 'wide' : undefined}>
+        {(fid) => <input id={fid} value={v} onChange={(e) => setField(section, k, e.target.value)} className={KEYED_SECTIONS.has(section) ? 'code' : undefined} />}
+      </Field>
+    )
+  }
+  if (section === 'program' && k === 'payment') {
+    return (
+      <Field {...common} className={`full${headed}`}>
+        {(fid) => (
+          <div className="block" id={fid}>
+            <PaymentPlanEditor plan={v as PaymentPlan} defaults={v as PaymentPlan} onChange={(p) => p && setField(section, k, p)} hideDefaultLink heading={false} />
+          </div>
+        )}
+      </Field>
+    )
+  }
+  if (section === 'program' && k === 'min_task_minutes' && isPrimDict(v)) {
+    const late = cfg?.program?.late_finish_max_minutes
+    return (
+      <Field {...common} className={`wide own-line${headed}`} unit={undefined}>
+        {(fid) => (
+          <div id={fid} className="block">
+            <MinutesTable tasks={v as Record<string, number>} late={typeof late === 'number' ? late : undefined} onTasks={(t) => setField(section, k, t)} onLate={(n) => setField(section, 'late_finish_max_minutes', n)} />
+          </div>
+        )}
+      </Field>
+    )
+  }
+  if (section === 'ground' && k === 'tasks' && isTaskList(v)) {
+    const savedKeys = new Set<string>(((saved?.ground?.tasks as GroundTask[] | undefined) ?? []).map((t) => t.key))
+    return (
+      <Field {...common} className="full">
+        {(fid) => (
+          <div id={fid} className="block">
+            <GroundTasksEditor rows={v} savedKeys={savedKeys} onChange={(rows) => setField(section, k, rows)} />
+          </div>
+        )}
+      </Field>
+    )
+  }
+  if (section === 'route' && k === 'stops' && isPrimList(v)) {
+    const km = isMatrix(cfg?.route?.km) ? (cfg!.route.km as number[][]) : []
+    const toll = isMatrix(cfg?.route?.toll) ? (cfg!.route.toll as number[][]) : []
+    return (
+      <Field {...common} className="wide own-line">
+        {(fid) => (
+          <div id={fid} className="block">
+            <StopsEditor
+              stops={v as string[]}
+              km={km}
+              toll={toll}
+              onChange={(stops, km2, toll2) => {
+                setField(section, k, stops)
+                setField(section, 'km', km2)
+                setField(section, 'toll', toll2)
               }}
             />
-          )}
+          </div>
+        )}
+      </Field>
+    )
+  }
+  if (isMatrix(v)) {
+    const stops: string[] = Array.isArray(cfg?.[section]?.stops) ? (cfg![section].stops as string[]) : v.map((_, i) => `#${i + 1}`)
+    return (
+      <Field {...common} className="full">
+        {(fid) => (
+          <div id={fid} className="block">
+            <MatrixEditor value={v} stops={stops} label={label} unit={meta?.unit} onChange={(m) => setField(section, k, m)} />
+          </div>
+        )}
+      </Field>
+    )
+  }
+  if (isPrimList(v)) {
+    const numeric = v.every((x) => typeof x === 'number')
+    return (
+      <Field {...common} className="full">
+        {(fid) => (
+          <div id={fid}>
+            <ChipsEditor values={v} unit={meta?.unit} numeric={numeric} label={label} onChange={(list) => setField(section, k, list)} />
+          </div>
+        )}
+      </Field>
+    )
+  }
+  if (isPrimDict(v)) {
+    return (
+      <Field {...common} className="wide own-line">
+        {(fid) => (
+          <div id={fid}>
+            <SizeTableEditor value={v} unit={meta?.unit} code={KEYED_SECTIONS.has(section)} label={label} onChange={(d) => setField(section, k, d)} />
+          </div>
+        )}
+      </Field>
+    )
+  }
+  // a shape the editor does not know: say so instead of printing a JSON box
+  return (
+    <Field {...common} className="full">
+      {(fid) => (
+        <div id={fid} className="muted" style={{ minHeight: 'var(--control-h)', display: 'flex', alignItems: 'center' }}>
+          Set by the developer.
+        </div>
+      )}
+    </Field>
+  )
+}
+
+const isCell = (v: unknown) => typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string'
+
+/** A set of keys of one section: the single controls first, then the tables each on a line of its own. */
+function KeysGrid({ section, keys }: { section: string; keys: string[] }) {
+  const { cfg } = usePricingDraft()
+  const v = cfg?.[section] as Record<string, unknown> | undefined
+  if (!v) return null
+  const shown = keys.filter((k) => k in v && !HIDDEN.has(`${section}.${k}`))
+  const cells = shown.filter((k) => isCell(v[k]))
+  const blocks = shown.filter((k) => !isCell(v[k]))
+  if (shown.length === 0) return null
+  return (
+    <div className="form-grid">
+      {cells.map((k) => (
+        <SettingCell key={k} section={section} k={k} v={v[k]} />
+      ))}
+      {blocks.map((k) => (
+        <SettingCell key={k} section={section} k={k} v={v[k]} />
+      ))}
+    </div>
+  )
+}
+
+/** The company base: its name and its pin on the map (the route's coordinates). */
+function CompanyBaseBlock() {
+  const { cfg, setSection, setField } = usePricingDraft()
+  const name = typeof cfg?.company_base === 'string' ? (cfg.company_base as string) : ''
+  const lat = typeof cfg?.route?.base_lat === 'number' ? (cfg.route.base_lat as number) : null
+  const lon = typeof cfg?.route?.base_lon === 'number' ? (cfg.route.base_lon as number) : null
+  const meta = META['company_base.value']
+  return (
+    <div className="form-grid">
+      <Field id={fieldId('company_base', 'value')} label={meta.label} help={meta.help} className="wide">
+        {(fid) => <input id={fid} value={name} onChange={(e) => setSection('company_base', e.target.value)} />}
+      </Field>
+      <Field id={fieldId('route', 'base_lat')} label="Base on the map" help="The route's km start here" className="full">
+        {(fid) => (
+          <div id={fid} className="block">
+            <MapPicker
+              lat={lat}
+              lon={lon}
+              onChange={(a, o) => {
+                setField('route', 'base_lat', a)
+                setField('route', 'base_lon', o)
+              }}
+            />
+          </div>
+        )}
+      </Field>
+    </div>
+  )
+}
+
+/** A whole section: its blocks and grids, or its own editor when the section is not a plain object. */
+export function SectionBody({ sec }: { sec: string }) {
+  const { cfg, setSection, setField } = usePricingDraft()
+  if (!cfg) return null
+  const v = cfg[sec]
+  if (sec === 'company_base') return <CompanyBaseBlock />
+  if (isCategoryList(v)) return <CategoriesEditor rows={v} onChange={(rows) => setSection(sec, rows)} />
+  if (typeof v === 'string') {
+    const meta = META[`${sec}.value`]
+    return (
+      <div className="form-grid">
+        <Field label={meta?.label ?? SECTION_LABELS[sec] ?? titleCase(sec)} help={meta?.help} className="wide" id={fieldId(sec, 'value')}>
+          {(fid) => <input id={fid} value={v} onChange={(e) => setSection(sec, e.target.value)} />}
         </Field>
       </div>
     )
   }
-
-  /** What a closed section holds, for the summary line: the first few labels. */
-  const preview = (sec: string) => {
-    const v = cfg[sec]
-    if (isCategoryList(v)) return v.map((r) => r.name).filter(Boolean).slice(0, 6).join(', ') + (v.length > 6 ? ', …' : '')
-    if (typeof v === 'string') return v
-    const keys = v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v as object) : []
-    const names = keys.slice(0, 5).map((k) => labelOf(sec, k))
-    return names.join(', ') + (keys.length > 5 ? `, … (${keys.length} settings)` : '')
+  if (!v || typeof v !== 'object' || Array.isArray(v)) {
+    return <div className="muted">Set by the developer.</div>
   }
-  const countOf = (sec: string) => {
-    const v = cfg[sec]
-    if (v && typeof v === 'object' && !Array.isArray(v)) return Object.keys(v as object).filter((k) => matches(sec, k)).length
-    return matches(sec, sec) ? 1 : 0
+  const obj = v as Record<string, unknown>
+  const keys = Object.keys(obj)
+  const blocks = SUBBLOCKS[sec]
+  if (blocks) {
+    const named = new Set(blocks.flatMap((b) => b.keys))
+    const rest = keys.filter((k) => !named.has(k) && !HIDDEN.has(`${sec}.${k}`))
+    return (
+      <>
+        {blocks.map((b) => (
+          <div key={b.title} className="setting-block" id={`${sec}-${slug(b.title)}`}>
+            {!b.headed && <h3>{b.title}</h3>}
+            <KeysGrid section={sec} keys={b.keys} />
+          </div>
+        ))}
+        {rest.length > 0 && <KeysGrid section={sec} keys={rest} />}
+      </>
+    )
   }
+  // the website estimate: the switch above the grid, the assumptions under it
+  if (sec === WEBSITE_SECTION && typeof obj.enabled === 'boolean') {
+    return (
+      <>
+        <SwitchRow id={fieldId(sec, 'enabled')} label={META['quick.enabled'].label} value={obj.enabled} onChange={(on) => setField(sec, 'enabled', on)} />
+        <KeysGrid section={sec} keys={keys.filter((k) => k !== 'enabled')} />
+      </>
+    )
+  }
+  return <KeysGrid section={sec} keys={keys} />
+}
 
-  const sections = Object.keys(cfg).filter((k) => !SKIP.has(k))
-  const grouped = new Set(PRICING_GROUPS.flatMap((g) => g.sections))
-  const groups = [...PRICING_GROUPS, { ...OTHER_GROUP, sections: sections.filter((k) => !grouped.has(k)) }]
-  const matchCount = sections.reduce((a, sec) => a + countOf(sec), 0)
+/** The number of settings in a section, for the fold's summary. */
+function countOf(cfg: PricingConfig, sec: string): number {
+  const v = cfg[sec]
+  if (v && typeof v === 'object' && !Array.isArray(v)) return Object.keys(v as object).filter((k) => !HIDDEN.has(`${sec}.${k}`)).length
+  return 1
+}
 
+/** The sections of one pricing page, each an open block with its heading (the longest one folded), and the save bar. */
+export function PricingPage({ entry }: { entry: SettingsEntry }) {
+  const { cfg, error } = usePricingDraft()
+  const rows = useMemo(() => settingsIndex(cfg).filter((r) => r.route === entry.route), [cfg, entry.route])
+  useFindTarget(!!cfg, rows)
+  if (!cfg) return <div className="muted">{error ?? 'Loading pricing settings...'}</div>
+  const named = new Set(SETTINGS_ENTRIES.flatMap((e) => e.sections ?? []).concat([WEBSITE_SECTION]))
+  const others = entry.id === 'system' ? Object.keys(cfg).filter((k) => !SKIP.has(k) && !named.has(k)) : []
+  const sections = (entry.sections ?? []).filter((s) => s in cfg)
+  const single = sections.length === 1 && others.length === 0 && !SUBBLOCKS[sections[0]]
+  const block = (sec: string) => (
+    <div key={sec} className="setting-block" id={`section-${sec}`} data-testid={`setting-${sec}`}>
+      {!single && !SUBBLOCKS[sec] && <h3>{SECTION_LABELS[sec] ?? titleCase(sec)}</h3>}
+      {SECTION_NOTES[sec] && <div className="lead">{SECTION_NOTES[sec]}</div>}
+      <SectionBody sec={sec} />
+    </div>
+  )
   return (
-    <div>
-      <div className="lead">
-        Imported from {cfg.imported_from ?? 'built-in defaults'}
-        {cfg.imported_at ? ` on ${fmtDate(cfg.imported_at)}` : ''}. These drive the price build-up, the program and the savings; the workbook's DRIVERS, ROUTE, LABOR RATES,
-        MOB-DEMOB, TOOLS and JOB sheets live here now. Percentages are shown as percent. Open a section to edit it; the bar at the foot saves every section at once.
-      </div>
-      <div className="setting-filter">
-        <Field label="Find a setting" id="setting-filter">
-          {(fid) => <input id={fid} type="search" value={needle} onChange={(e) => setNeedle(e.target.value)} placeholder="e.g. VAT, team lead, toll, battery life" />}
-        </Field>
-      </div>
-      {q && (
-        <div className="muted setting-filter-note" data-testid="setting-filter-note">
-          {matchCount === 0 ? 'No setting matches. Try another word.' : `${matchCount} ${matchCount === 1 ? 'setting matches' : 'settings match'}; every matching section is open.`}
+    <>
+      {sections.map((sec) =>
+        sec === 'roles' ? (
+          <details key={sec} className="setting-fold" id={`section-${sec}`} data-testid={`setting-${sec}`}>
+            <summary>
+              <span className="summary-title">{SECTION_LABELS[sec]}</span>
+              <span className="chip">{countOf(cfg, sec)} settings</span>
+            </summary>
+            <div className="setting-body">
+              {SECTION_NOTES[sec] && <div className="lead">{SECTION_NOTES[sec]}</div>}
+              <SectionBody sec={sec} />
+            </div>
+          </details>
+        ) : (
+          block(sec)
+        ),
+      )}
+      {others.length > 0 && (
+        <div className="setting-block" id={OTHER_GROUP.id}>
+          <h3>{OTHER_GROUP.label}</h3>
+          <div className="lead">{OTHER_GROUP.lead}</div>
+          {others.map((sec) => (
+            <div key={sec} className="setting-block" id={`section-${sec}`} data-testid={`setting-${sec}`}>
+              <h3>{SECTION_LABELS[sec] ?? titleCase(sec)}</h3>
+              <SectionBody sec={sec} />
+            </div>
+          ))}
         </div>
       )}
-      {groups.map((g) => {
-        const visible = g.sections.filter((sec) => sec in cfg && (!q || countOf(sec) > 0))
-        if (visible.length === 0) return null
-        return (
-          <div key={g.id} className="pricing-group" id={g.id}>
-            <h3>{g.label}</h3>
-            <div className="lead">{g.lead}</div>
-            {visible.map((sec) => {
-              const changed = dirtySections.includes(sec)
-              const open = !!q || openSections.has(sec)
-              return (
-                <details
-                  key={sec}
-                  className="setting-group"
-                  open={open}
-                  data-testid={`setting-${sec}`}
-                  onToggle={(e) => {
-                    if (q) return
-                    const next = new Set(openSections)
-                    if (e.currentTarget.open) next.add(sec)
-                    else next.delete(sec)
-                    setOpenSections(next)
-                  }}
-                >
-                  <summary>
-                    <span className="summary-main">
-                      <span className="summary-title">{SECTION_LABELS[sec] ?? titleCase(sec)}</span>
-                      <span className="summary-keys">{preview(sec)}</span>
-                    </span>
-                    {changed && <span className="chip unsaved">edited</span>}
-                  </summary>
-                  {open && (
-                    <div className="setting-body">
-                      {SECTION_NOTES[sec] && <div className="lead">{SECTION_NOTES[sec]}</div>}
-                      {renderSection(sec)}
-                    </div>
-                  )}
-                </details>
-              )
-            })}
-          </div>
-        )
-      })}
-      <div className="actions card-bar" data-testid="pricing-bar">
-        <span className={`chip ${dirty ? 'unsaved' : 'ok'}`}>{dirty ? `${dirtySections.length} ${dirtySections.length === 1 ? 'section' : 'sections'} edited` : 'Saved'}</span>
-        <button type="button" className="primary" onClick={save} disabled={!dirty || busy}>
-          <span className="bar-long">Save pricing settings</span>
-          <span className="bar-short">Save pricing</span>
+      {entry.id === 'materials' && <ResetFoot />}
+      <PricingBar />
+    </>
+  )
+}
+
+/** The sticky bar at the foot of a pricing page: the edited pages across the draft, Save, Discard. */
+export function PricingBar() {
+  const { dirty, dirtySections, busy, msg, error, save, discard } = usePricingDraft()
+  const pages = [...dirtyEntryIds(dirtySections)].map((id) => SETTINGS_ENTRIES.find((e) => e.id === id)?.label ?? id)
+  const n = dirtySections.length
+  return (
+    <div className="actions card-bar" data-testid="pricing-bar">
+      <span className={`chip ${dirty ? 'unsaved' : 'ok'}`}>{dirty ? `${n} ${n === 1 ? 'section' : 'sections'} edited · ${pages.join(', ')}` : 'Saved'}</span>
+      <button type="button" className="primary" onClick={save} disabled={!dirty || busy}>
+        Save
+      </button>
+      <span className={`second-row ${!dirty ? 'hidden-phone' : ''}`}>
+        <button type="button" onClick={discard} disabled={!dirty}>
+          Discard changes
         </button>
-        {!dirty && !undo && (
-          <button type="button" className="toggle link phone-only" onClick={reset} disabled={busy}>
-            Reset to defaults
-          </button>
-        )}
-        <span className={`second-row ${!dirty && !undo ? 'hidden-phone' : ''}`}>
-          <button type="button" onClick={discard} disabled={!dirty}>
-            Discard changes
-          </button>
-          {undo ? (
-            <button type="button" onClick={undoReset} disabled={busy} className="push" data-testid="undo-reset">
-              Undo reset ({undo.left} s)
-            </button>
-          ) : (
-            <button type="button" onClick={reset} disabled={busy} className="push">
-              Reset to defaults
-            </button>
-          )}
-        </span>
-        {msg && <span className="muted" style={{ flexBasis: '100%' }}>{msg}</span>}
-        {error && (
-          <div className="banner bad" style={{ flexBasis: '100%', margin: 0 }}>
-            {error}
-          </div>
-        )}
-      </div>
+      </span>
+      {msg && !dirty && <span className="muted bar-note">{msg}</span>}
+      {error && (
+        <div className="banner bad" style={{ flexBasis: '100%', margin: 0 }}>
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The foot of the Materials page: where the settings came from, and the way back to the workbook defaults. */
+function ResetFoot() {
+  const { cfg, busy, undo, reset, undoReset } = usePricingDraft()
+  if (!cfg) return null
+  return (
+    <div className="muted reset-foot" data-testid="reset-foot">
+      Imported from {cfg.imported_from ?? 'the built-in defaults'}
+      {cfg.imported_at ? ` on ${fmtDate(cfg.imported_at)}` : ''}.{' '}
+      {undo ? (
+        <button type="button" className="toggle link" onClick={undoReset} disabled={busy} data-testid="undo-reset">
+          Undo the reset ({undo.left} s)
+        </button>
+      ) : (
+        <button type="button" className="toggle link" onClick={reset} disabled={busy} data-testid="reset-defaults">
+          Reset every pricing setting to the workbook defaults
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** The menu's search: a result list that opens the page and scrolls to the setting. */
+export function FindSettings({ rows, needle, onNeedle, extraRows = [] }: { rows: FindRow[]; needle: string; onNeedle: (s: string) => void; extraRows?: FindRow[] }) {
+  const navigate = useNavigate()
+  const all = useMemo(() => [...extraRows, ...rows], [extraRows, rows])
+  const hits = findSettings(all, needle)
+  const q = needle.trim()
+  return (
+    <div className="setting-find">
+      <input
+        id="setting-find"
+        type="search"
+        value={needle}
+        placeholder="Find a setting: VAT, team lead, toll"
+        aria-label="Find a setting"
+        onChange={(e) => onNeedle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onNeedle('')
+        }}
+      />
+      {q && (
+        <ul className="find-results" data-testid="find-results">
+          {hits.length === 0 && <li className="muted">No setting matches</li>}
+          {hits.slice(0, 40).map((r) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  onNeedle('')
+                  navigate(`${r.route}?find=${encodeURIComponent(r.find)}`)
+                }}
+              >
+                <b>{r.label}</b>
+                <span className="muted">{r.where}</span>
+              </button>
+            </li>
+          ))}
+          {hits.length > 40 && <li className="muted">{hits.length - 40} more; type another word</li>}
+        </ul>
+      )}
     </div>
   )
 }
