@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
-import { JOB_STAGES, LEAD_STATUSES, type AssessmentSummary, type JobStage, type Lead, type LeadStatus } from '../types'
+import { ENGINEERING_STATUSES, LEAD_STATUSES, statusLabel, type AssessmentSummary, type EngineeringStatus, type Lead, type LeadStatus } from '../types'
 import { fmtDateTime, php0, plural } from '../fmt'
 
 /** A booking that has not become a project and was not closed by the CRM. */
@@ -12,7 +12,8 @@ const OPEN: LeadStatus[] = ['new', 'contacted', 'visit_booked']
 export default function AssessmentListPage() {
   const [items, setItems] = useState<AssessmentSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [stage, setStage] = useState<JobStage | 'all'>('all')
+  // the filter is the engineering status (draft, surveyed, designed, proposal issued), read from the facts; the job stage the record keeps is the CRM's and PM module's
+  const [status, setStatus] = useState<EngineeringStatus | 'all'>('all')
   const [q, setQ] = useState('')
   const [params] = useSearchParams()
   const focusBooking = Number(params.get('booking')) || null // the e-mail notice links here
@@ -52,13 +53,13 @@ export default function AssessmentListPage() {
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {}
-    for (const a of items ?? []) c[a.stage] = (c[a.stage] ?? 0) + 1
+    for (const a of items ?? []) c[a.status] = (c[a.status] ?? 0) + 1
     return c
   }, [items])
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    return (items ?? []).filter((a) => (stage === 'all' || a.stage === stage) && (!needle || `${a.customer_name} ${a.address}`.toLowerCase().includes(needle)))
-  }, [items, stage, q])
+    return (items ?? []).filter((a) => (status === 'all' || a.status === status) && (!needle || `${a.customer_name} ${a.address}`.toLowerCase().includes(needle)))
+  }, [items, status, q])
 
   const facts = (a: AssessmentSummary) => {
     const parts = [a.address || 'No address', plural(a.face_count, 'roof face')]
@@ -98,11 +99,11 @@ export default function AssessmentListPage() {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or address" aria-label="Search projects" />
           </div>
           <div className="toggles" style={{ flex: '1 1 auto' }}>
-            <button type="button" className={`toggle ${stage === 'all' ? 'on' : ''}`} onClick={() => setStage('all')}>
+            <button type="button" className={`toggle ${status === 'all' ? 'on' : ''}`} onClick={() => setStatus('all')}>
               All {items ? items.length : ''}
             </button>
-            {JOB_STAGES.filter((s) => counts[s.id]).map((s) => (
-              <button key={s.id} type="button" className={`toggle ${stage === s.id ? 'on' : ''}`} onClick={() => setStage(s.id)}>
+            {ENGINEERING_STATUSES.filter((s) => counts[s.id]).map((s) => (
+              <button key={s.id} type="button" className={`toggle ${status === s.id ? 'on' : ''}`} onClick={() => setStatus(s.id)} title={s.what} data-testid={`filter-${s.id}`}>
                 {s.label} {counts[s.id]}
               </button>
             ))}
@@ -114,16 +115,18 @@ export default function AssessmentListPage() {
         ) : items.length === 0 ? (
           <div className="muted">No projects yet. Press New project to start one on site, or start one from a website booking.</div>
         ) : shown.length === 0 ? (
-          <div className="muted">Nothing matches. Clear the search or pick another stage.</div>
+          <div className="muted">Nothing matches. Clear the search or pick another status.</div>
         ) : (
           shown.map((a) => (
             <Link key={a.id} to={`/assessments/${a.id}`} className="list-item">
               <div className="title">
                 {a.customer_name || <span className="muted">Unnamed</span>}{' '}
-                <span className="badge neutral">{JOB_STAGES.find((s) => s.id === a.stage)?.label ?? a.stage}</span>{' '}
+                <span className={`badge ${a.status === 'proposal_issued' ? 'gold' : a.status === 'designed' ? 'good' : 'neutral'}`} data-testid="status-badge" data-status={a.status}>
+                  {statusLabel(a.status)}
+                </span>{' '}
                 {a.results_stale && <span className="badge neutral">needs recalculating</span>}{' '}
                 {a.pricing_settings_changed && (
-                  <span className="badge neutral" title="Calculate asks before re-pricing a quoted job">
+                  <span className="badge neutral" title="Calculate asks before re-pricing a job whose proposal is issued">
                     pricing settings changed since this price
                   </span>
                 )}

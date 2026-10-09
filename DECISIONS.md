@@ -1239,3 +1239,63 @@ and built; the next sections record them.
   the base in Pila with the pin's extra kilometres, so a far site carries a
   long trip; a regional base, or a freight rule per island group, is the
   owner's call when such jobs come.
+
+## Round 4: the panel in the background, and an engineering status instead of the job stage
+
+The owner (9 Oct 2026): "For the panel, make it automatic done on the
+background and the section remove in data entry" and, of the stage pill,
+"is this really necessary for the part of the Engineering/Technical team?"
+
+- The Panel options card is gone from the On site step; a record no longer
+  carries its own candidate panels. The candidates are the usable panels of
+  the materials list: every active item of category Solar Panel that
+  carries a wattage, a length and a width (the bundled list has four, the
+  Blue Carbon 585, 585 bifacial, 600 and 630 W; the others wait for their
+  size on the Materials page). Every candidate is fitted to the roof and the
+  one with the most kWp wins, the owner's "Automatic (most kWp)" rule as it
+  was; two panels at the same kWp go to the lower list price per watt. The
+  code is the candidate's id, so the results, the roof check, the card and
+  the proposal name the panel as they did. A list with no usable panel
+  refuses the calculation with a plain message; nothing fits.
+- Two ways to say otherwise. Pricing settings › System design carries
+  "Panel on every job" (`sizing.panel_code`, blank = automatic): one code
+  puts that panel on every job. The engineer may still pick another for one
+  project, but in Design and outputs, not in data entry: the System design
+  card opens with one line, "Panel: Blue Carbon 585 W (most kWp of the 4
+  panels in the materials list) · Use a different panel", and the link
+  opens a select of the candidates with what each fits. The choice is saved
+  on the document (`panel_code`, blank = automatic) and Calculate applies
+  it. A code that is no longer a usable panel is said so in the results and
+  the automatic rule applies. The setting moves the price, so it is part of
+  the pricing settings' version.
+- Old records. A forced panel that was a materials-list item becomes the
+  project's `panel_code`; panels typed by hand are dropped when the record
+  is read, named under `dropped_panels`, and the next calculation says "the
+  panel typed by hand (X) was replaced by Y from the materials list" once
+  (a results warning and a log line), then clears the note. The pricing's
+  wattage fallback for an unlinked panel is unreachable now and stays as a
+  safety net only.
+- The website estimate keeps its own typical-panel rule: core/quick.py reads
+  one code from the website settings (`quick.panel_code`, BC-PNL-001 by
+  default) and never the candidate list, so the visitor's figure does not
+  move when the owner adds a panel to the list; the roof visit settles it.
+- The job stages were never the engineering team's: Quoted and Signed are
+  the CRM's facts (when the proposal was sent and accepted), Sourcing to
+  Closed are the PM module's. The engineering app knows four things and
+  shows them as a read-only status on the project head and in the list:
+  Draft (nothing measured yet), Surveyed (at least one reading set saved),
+  Designed (results calculated and not stale), Proposal issued (the
+  proposal PDF was generated for the record, with the date). Nobody types
+  it; the only control is "Reopen design" beside an issued proposal, which
+  asks first and clears the mark. The mark lives on the record
+  (`proposal_issued_at`), outside the document, so a Save never wipes it; a
+  stale design keeps "Proposal issued" because the customer holds that
+  proposal until the engineer says otherwise.
+- The price lock from round three keys off "Proposal issued" instead of
+  stage quoted: once the proposal is out, Calculate refuses to re-price
+  under changed pricing settings (409) unless confirmed, and a confirmed
+  re-price keeps the proposal issued; after Reopen design the job re-prices
+  freely. The job stage stays in the document for the CRM and PM modules
+  (the funnel endpoint still reads it; nothing deletes it) but no screen
+  shows or edits it; the project list's filter is the status. The program
+  of works keeps its signing date as an input.

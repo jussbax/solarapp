@@ -22,10 +22,6 @@ DOC = {
         {"id": "f1", "name": "Front", "length_m": 10.1, "width_m": 6.4, "tilt_deg": 15, "azimuth_deg": 180},
         {"id": "f2", "name": "Back", "length_m": 10.1, "width_m": 6.4, "tilt_deg": 15, "azimuth_deg": 0},
     ],
-    "panels": [
-        {"id": "p1", "name": "550W", "watt_peak": 550, "length_m": 2.278, "width_m": 1.134},
-        {"id": "p2", "name": "450W", "watt_peak": 450, "length_m": 2.094, "width_m": 1.038},
-    ],
     "reading_sets": [
         {"id": "s1", "face_id": "f1", "label": "Front", "measured_at": "2026-03-10T11:30:00", "ambient_temp_c": 32, "sky_condition": "clear",
          "readings": [{"irradiance_wm2": 905, "power_w": 36.2, "module_temp_c": 58}, {"irradiance_wm2": 890, "power_w": 35.6, "module_temp_c": 58}, {"irradiance_wm2": 915, "power_w": 36.8, "module_temp_c": 59}]},
@@ -61,8 +57,13 @@ def test_login_and_flow(client):
     assert res["k"]["thermal_kind"] == "site_rise"
     assert res["production"]["total_panels"] > 0
     assert res["production"]["annual_kwh"] > 0
-    assert res["panels"][0]["best"] is True  # 550 W gives more kWp
-    assert res["best_panel"]["id"] == "p1" and res["best_panel"]["count"] == res["production"]["total_panels"]
+    # the panel comes from the materials list in the background (round 4): the usable panels are fitted, the most kWp wins
+    assert len(res["panels"]) == 4 and {p["panel"]["code"] for p in res["panels"]} == {"BC-PNL-001", "BC-PNL-002", "BC-PNL-003", "BC-PNL-004"}
+    best = next(p for p in res["panels"] if p["best"])
+    assert best["system_kwp"] == max(p["system_kwp"] for p in res["panels"])
+    assert res["best_panel"]["id"] == best["panel"]["code"] == res["selected_panel_id"] and res["best_panel"]["count"] == res["production"]["total_panels"]
+    assert res["panel_choice"] == {"rule": "automatic", "code": best["panel"]["code"], "name": best["panel"]["name"], "watt_peak": best["panel"]["watt_peak"], "candidates": 4, "best_code": best["panel"]["code"], "setting_code": None}
+    assert r.json()["status"] == "designed"
     assert abs(res["comparison"]["deviation_pct"]) < 60
     assert res["nasa_reference"] is not None
     # set 2 has no ambient -> estimated from the dataset
@@ -188,7 +189,7 @@ def test_pricing_flow(client):
     assert client.put("/api/pricing/config", json=cfg).json()["job_defaults"]["max_days"] == 3
 
     doc = dict(DOC)
-    doc["panels"] = [{"id": "p1", "name": "Blue Carbon 585W", "watt_peak": 585, "length_m": 2.278, "width_m": 1.134, "code": "BC-PNL-001"}]
+    doc["panel_code"] = "BC-PNL-001"   # the engineer's panel for this project; blank = the most kWp of the materials list
     doc["audit"] = dict(TANAUAN_AUDIT, system={"kind": "combination"})
     aid = client.post("/api/assessments", json=doc).json()["id"]
     r = client.post(f"/api/assessments/{aid}/compute")
@@ -196,7 +197,7 @@ def test_pricing_flow(client):
     res = r.json()["results"]
     pr = res["pricing"]
     assert pr["available"], pr
-    assert pr["panel"]["code"] == "BC-PNL-001"
+    assert pr["panel"]["code"] == "BC-PNL-001" and res["panel_choice"]["rule"] == "project" and res["panel_choice"]["candidates"] == 5  # OP-PNL-004 got its size above
     roles = {l["role"] for l in pr["lines"]}
     assert {"panel", "inverter", "battery", "rail", "l_foot", "thhn", "ats"} <= roles
     panel_line = next(l for l in pr["lines"] if l["role"] == "panel")
@@ -232,14 +233,16 @@ def test_pricing_flow(client):
     codes = {l["code"]: l["qty"] for l in res2["lines"]}
     assert "IAN-CSM-001" not in codes and codes["OP-GND-001"] == 2
     assert res2["job_inputs"]["extra_km"] == 0 and res2["totals"]["contract_rounded"] != before
-    # an unlinked panel is matched by wattage with a warning; an unknown wattage is not priced
+    # another panel of the list for this project is priced as that item; a code that is not a usable panel falls back to automatic with a warning
     doc3 = dict(doc2)
-    doc3["panels"] = [{"id": "p1", "name": "Some 585W", "watt_peak": 585, "length_m": 2.278, "width_m": 1.134}]
-    res3 = client.post(f"/api/assessments/{aid}/compute", json=doc3).json()["results"]["pricing"]
-    assert res3["available"] and any(w["code"] == "panel_unlinked" for w in res3["warnings"])
-    doc3["panels"] = [{"id": "p1", "name": "Odd 999W", "watt_peak": 999, "length_m": 2.278, "width_m": 1.134}]
-    res4 = client.post(f"/api/assessments/{aid}/compute", json=doc3).json()["results"]["pricing"]
-    assert not res4["available"]
+    doc3["panel_code"] = "BC-PNL-004"
+    res3 = client.post(f"/api/assessments/{aid}/compute", json=doc3).json()["results"]
+    assert res3["pricing"]["available"] and res3["pricing"]["panel"]["code"] == "BC-PNL-004" and res3["selected_panel_id"] == "BC-PNL-004"
+    assert next(l for l in res3["pricing"]["lines"] if l["role"] == "panel")["code"] == "BC-PNL-004"
+    doc3["panel_code"] = "OP-PNL-001"   # a 200 W panel without its size: not a candidate
+    res4 = client.post(f"/api/assessments/{aid}/compute", json=doc3).json()["results"]
+    assert res4["panel_choice"]["rule"] == "automatic" and res4["selected_panel_id"] == res4["best_panel"]["id"]
+    assert any(w["code"] == "panel_choice_unavailable" and "OP-PNL-001" in w["message"] for w in res4["warnings"])
 
 
 def test_quick_estimate_and_lead(client):
@@ -666,14 +669,14 @@ def test_new_project_is_not_a_record_until_the_first_save(client):
 
 def test_warranty_defaults_and_the_pricing_settings_version_rule(client):
     """The owner's warranty terms are the profile's defaults and feed the savings; a pricing-settings change flags every
-    priced project in the list and on its page, and a job from stage quoted onward is re-priced only with confirmation
-    (finance 1). An assessed job re-prices freely."""
+    priced project in the list and on its page, and a job whose proposal is issued is re-priced only with confirmation
+    (finance 1; round 4 keys the lock off the engineering status, not the job stage). A job whose design is open re-prices freely."""
     client.post("/api/auth/login", json={"username": "u", "password": "p"})
     prof = client.get("/api/settings").json()
     assert (prof["warranty_panels_product_years"], prof["warranty_battery_years"], prof["warranty_inverter_years"], prof["warranty_workmanship_years"]) == ("12", "5", "5", "2")
     assert prof["warranty_panels_performance_years"] == ""
     doc = dict(DOC)
-    doc["panels"] = [{"id": "p1", "name": "Blue Carbon 585W", "watt_peak": 585, "length_m": 2.278, "width_m": 1.134, "code": "BC-PNL-001"}]
+    doc["panel_code"] = "BC-PNL-001"
     doc["audit"] = dict(TANAUAN_AUDIT, system={"kind": "combination"})
     aid = client.post("/api/assessments", json=doc).json()["id"]
     out = client.post(f"/api/assessments/{aid}/compute").json()
@@ -696,22 +699,35 @@ def test_warranty_defaults_and_the_pricing_settings_version_rule(client):
     assert row["pricing_settings_changed"] is True and row["results_stale"] is False and row["contract_php"] == was
     full = client.get(f"/api/assessments/{aid}").json()
     assert full["pricing_settings_changed"] is True and full["results_stale"] is False
-    # from stage quoted onward Calculate refuses without confirmation, and the stored price stays as quoted
-    quoted = dict(full["doc"])
-    quoted["program"] = {**full["doc"]["program"], "stage": "quoted"}
-    r = client.post(f"/api/assessments/{aid}/compute", json=quoted)
-    assert r.status_code == 409 and r.json()["detail"].startswith(f"Pricing settings changed since this price was quoted (was ₱{was:,.0f})")
+    # the design is open (no proposal issued yet; the job stage the document carries plays no part): the flagged job still re-prices freely
+    assert full["status"] == "designed" and full["proposal_issued_at"] is None
+    assert client.post(f"/api/assessments/{aid}/compute", json={**full["doc"], "program": {**full["doc"]["program"], "stage": "quoted"}}).status_code == 200
+    cfg["job"]["services_markup"] = 0.30
+    assert client.put("/api/pricing/config", json=cfg).status_code == 200
+    assert client.post(f"/api/assessments/{aid}/compute", json=full["doc"]).json()["results"]["pricing"]["totals"]["contract_rounded"] == was
+    # the proposal is issued: from here Calculate refuses to re-price without confirmation, and the stored price stays as proposed
+    from tests.conftest import real_weather
+    real_weather(aid, client)
+    assert client.get(f"/api/assessments/{aid}/quotation.pdf").status_code == 200
+    full = client.get(f"/api/assessments/{aid}").json()
+    assert full["status"] == "proposal_issued" and full["proposal_issued_at"] and full["pricing_settings_changed"] is False
+    cfg["job"]["services_markup"] = 0.35
+    assert client.put("/api/pricing/config", json=cfg).status_code == 200
+    r = client.post(f"/api/assessments/{aid}/compute", json=full["doc"])
+    assert r.status_code == 409 and r.json()["detail"].startswith(f"Pricing settings changed since the proposal was issued at this price (was ₱{was:,.0f})")
     assert client.get(f"/api/assessments/{aid}").json()["results"]["pricing"]["totals"]["contract_rounded"] == was
-    r = client.post(f"/api/assessments/{aid}/compute", json=quoted, params={"confirm_reprice": "true"})
+    r = client.post(f"/api/assessments/{aid}/compute", json=full["doc"], params={"confirm_reprice": "true"})
     assert r.status_code == 200
     repriced = r.json()
     assert repriced["pricing_settings_changed"] is False and repriced["results"]["pricing"]["totals"]["contract_rounded"] > was
     assert repriced["results"]["pricing"]["settings_version"] == client.get("/api/pricing/status").json()["settings_version"]
-    # the settings go back: the project is flagged again; as an assessed job it re-prices without the flag, back to the quoted figure
+    assert repriced["status"] == "proposal_issued"   # a confirmed re-price keeps the proposal issued; only Reopen design clears it
+    # the settings go back: the project is flagged again; once the design is reopened it re-prices without the flag, back to the proposed figure
     cfg["job"]["services_markup"] = 0.30
     assert client.put("/api/pricing/config", json=cfg).status_code == 200
     assert client.get(f"/api/assessments/{aid}").json()["pricing_settings_changed"] is True
-    assessed = dict(quoted)
-    assessed["program"] = {**quoted["program"], "stage": "assessed"}
-    r = client.post(f"/api/assessments/{aid}/compute", json=assessed)
+    assert client.post(f"/api/assessments/{aid}/compute", json=full["doc"]).status_code == 409
+    reopened = client.post(f"/api/assessments/{aid}/reopen").json()
+    assert reopened["status"] == "designed" and reopened["proposal_issued_at"] is None and reopened["pricing_settings_changed"] is True
+    r = client.post(f"/api/assessments/{aid}/compute", json=full["doc"])
     assert r.status_code == 200 and r.json()["results"]["pricing"]["totals"]["contract_rounded"] == was and r.json()["pricing_settings_changed"] is False

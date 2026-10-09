@@ -167,10 +167,13 @@ What has moved out of the engineering screens: the Leads page with its
 funnel, statuses and notes; the funnel card and the lead badges on the
 list; the stages lead and contacted; preferred time, callback promise and
 the privacy line (website settings); the estimate page link in the nav.
-What stays: the job stage as a status pill on the project head (assessed
-to closed, until the PM module takes the later ones), the card's next step
-as a saved field, the hour-by-hour crew plan, the pickup list and the
-cashflow projection (plans, not tracking).
+What stays: the card's next step as a saved field, the hour-by-hour crew
+plan, the pickup list and the cashflow projection (plans, not tracking).
+The job stage (assessed to closed) stays on the record for the CRM and PM
+modules but has no screen since round 4: the project head and the list
+show the engineering status read from the facts (draft, surveyed,
+designed, proposal issued; see DECISIONS.md "Round 4: the panel in the
+background, and an engineering status instead of the job stage").
 
 ## 6. Findings from the four audits, and what happens to each
 

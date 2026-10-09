@@ -28,6 +28,7 @@ def init_engine(db_path: Path) -> Engine:
 
     SQLModel.metadata.create_all(_engine)
     ensure_columns(_engine, "passkeys", models.Passkey)
+    ensure_columns(_engine, "assessments", models.Assessment)   # proposal_issued_at (round 4)
     return _engine
 
 

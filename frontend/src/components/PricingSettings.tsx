@@ -82,6 +82,7 @@ const META: Record<string, { label: string; unit?: string; help?: string }> = {
   'system_losses.soiling': { label: 'Soiling', unit: '% of energy kept', help: 'Dust and dirt on the panels between rains; verify locally (a rice-field roof collects more in the dry season).' },
   'system_losses.other': { label: 'Other', unit: '% of energy kept', help: 'Module mismatch, availability and anything else after the panels. The four multiply: the array is sized on energy at the meter and the customer documents print that figure.' },
   'sizing.days_of_autonomy': { label: 'Days of autonomy', unit: 'evenings', help: 'The evenings the battery must carry without sun; your choice. 1 = the night deficit of the worst typical day (the rule until now), 2 = twice that. The balance over a real year of weather then reports how often it still runs out.' },
+  'sizing.panel_code': { label: 'Panel on every job', unit: 'code, blank = automatic', help: 'Blank = automatic (most kWp): of the usable panels in the materials list (active, category Solar Panel, with wattage, length and width) the one that gives the most kWp on each roof, ties to the lower price per watt. A code such as BC-PNL-001 puts that panel on every job; an engineer can still pick another for one project under Design and outputs › System design.' },
   'roles.ac_breaker_amps': { label: 'AC breaker rating', unit: 'A' },
   'program.depart_time': { label: 'Leave base at' },
   'program.lunch_start': { label: 'Lunch at' },

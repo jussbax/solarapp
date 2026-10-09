@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import ConfigDict, BaseModel, Field, field_validator
+from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 
 
 class WallObstacle(BaseModel):
@@ -41,6 +41,8 @@ class RoofFace(BaseModel):
 
 
 class CandidatePanel(BaseModel):
+    """A panel the layout fits to the roof. Since round 4 the candidates are the usable panels of the materials list
+    (`Catalog.panel_candidates`), with the code as the id; a record no longer carries its own list."""
     id: str
     name: str = ""
     watt_peak: float = Field(gt=0)
@@ -179,10 +181,18 @@ class PaymentPlanIn(BaseModel):
     installment_first_offset_days: int = Field(default=30, ge=0)
 
 
-# The project's own stage, from the first visit to the closed job. "lead" and "contacted" belong to the booking (the CRM's data behind /api/leads).
+# The job's stage, from the first visit to the closed job. Kept on the document for the CRM (quoted, signed) and the PM
+# module (sourcing to closed) to come; since round 4 no engineering screen edits it and the project head shows the
+# engineering status instead (EngineeringStatus below). "lead" and "contacted" belong to the booking (the CRM's data behind /api/leads).
 JobStage = Literal["assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
 JOB_STAGES: list[str] = ["assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
 LEGACY_LEAD_STAGES = ("lead", "contacted")
+
+# The engineering status (round 4): read-only, derived from the record's facts and never typed. Draft = nothing
+# measured yet; surveyed = at least one reading set saved; designed = results calculated and not stale; proposal
+# issued = the proposal PDF was generated for the record (the date is kept; "Reopen design" clears it).
+EngineeringStatus = Literal["draft", "surveyed", "designed", "proposal_issued"]
+ENGINEERING_STATUSES: list[str] = ["draft", "surveyed", "designed", "proposal_issued"]
 
 
 class ProgramJob(BaseModel):
@@ -266,8 +276,13 @@ class AssessmentDoc(BaseModel):
     lat: Optional[float] = Field(default=None, ge=-90, le=90)
     lon: Optional[float] = Field(default=None, ge=-180, le=180)
     faces: list[RoofFace] = Field(default_factory=list)
-    panels: list[CandidatePanel] = Field(default_factory=list)
-    selected_panel_id: Optional[str] = None
+    # The panel is chosen in the background (round 4): the usable panels of the materials list are the candidates and
+    # the one with the most kWp on this roof wins (ties to the lower list price per watt), unless the pricing settings
+    # name one for every job or the engineer names one here. Blank = automatic.
+    panel_code: Optional[str] = Field(default=None, max_length=40)
+    # Panels typed by hand on a record saved before the materials list chose the panel (the old "Panel options" card):
+    # the next calculation says they were replaced, then clears this.
+    dropped_panels: list[str] = Field(default_factory=list)
     reading_sets: list[ReadingSet] = Field(default_factory=list)
     test_panel_rating_w: float = Field(default=50, gt=0)
     test_panel_calibration: float = Field(default=1.0, gt=0, le=1.5)
@@ -280,6 +295,27 @@ class AssessmentDoc(BaseModel):
     lead: Optional[LeadInfo] = None   # old records that started as a website lead; converted leads carry only the estimate the visitor saw
     lead_id: Optional[int] = None     # the leads-inbox row this project was started from
     card_next_step: str = ""  # the card's next-step line, saved with the record
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_panels(cls, data):  # noqa: ANN001
+        """A record saved before round 4 carried its own candidate panels (`panels`) and the one ticked under Use
+        (`selected_panel_id`). A ticked panel that is a materials-list item becomes the project's override; panels typed
+        by hand are dropped and named under `dropped_panels`, so the next calculation can say what replaced them."""
+        if not isinstance(data, dict) or ("panels" not in data and "selected_panel_id" not in data):
+            return data
+        data = dict(data)
+        panels = data.pop("panels", None) or []
+        selected = data.pop("selected_panel_id", None)
+        if not isinstance(panels, list):
+            return data
+        chosen = next((p for p in panels if isinstance(p, dict) and p.get("id") == selected), None)
+        if chosen and chosen.get("code") and not data.get("panel_code"):
+            data["panel_code"] = str(chosen["code"])
+        typed = [str(p.get("name") or f"{p.get('watt_peak')} W panel") for p in panels if isinstance(p, dict) and not p.get("code")]
+        if typed and not data.get("dropped_panels"):
+            data["dropped_panels"] = typed
+        return data
 
 
 class ApplianceCatalogOut(BaseModel):
@@ -309,7 +345,9 @@ class AssessmentSummary(BaseModel):
     has_results: bool
     results_stale: bool
     pricing_settings_changed: bool = False   # the pricing settings moved since this price was calculated (its own reason, apart from stale inputs)
-    stage: str = "assessed"
+    stage: str = "assessed"                  # the job stage the document keeps for the CRM and PM modules; no engineering screen shows it
+    status: EngineeringStatus = "draft"      # the engineering status, derived from the facts (round 4)
+    proposal_issued_at: Optional[datetime] = None
     contract_php: Optional[float] = None
     system_kwp: Optional[float] = None
     annual_kwh: Optional[float] = None
@@ -329,6 +367,8 @@ class AssessmentOut(BaseModel):
     results: Optional[dict[str, Any]] = None
     results_stale: bool = False
     pricing_settings_changed: bool = False   # see AssessmentSummary
+    status: EngineeringStatus = "draft"
+    proposal_issued_at: Optional[datetime] = None
 
 
 class LoginIn(BaseModel):

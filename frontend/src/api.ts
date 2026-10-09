@@ -20,8 +20,8 @@ let onUnauthorized: (() => void) | null = null
 /** Owner-facing labels for the field names pydantic puts in `loc`; list names get a 1-based number after them. */
 const FIELD_LABELS: Record<string, string> = {
   customer_name: 'Customer name', address: 'Address', notes: 'Notes', lat: 'Latitude', lon: 'Longitude', card_next_step: 'Next step printed on the card',
-  faces: 'Roof face', panels: 'Panel', reading_sets: 'Reading set', readings: 'Reading', walls: 'Wall', obstacles: 'Obstacle',
-  selected_panel_id: 'The panel ticked under Use', test_panel_rating_w: 'Test panel rating', test_panel_calibration: 'Calibration factor',
+  faces: 'Roof face', panel_code: 'Panel', reading_sets: 'Reading set', readings: 'Reading', walls: 'Wall', obstacles: 'Obstacle',
+  test_panel_rating_w: 'Test panel rating', test_panel_calibration: 'Calibration factor',
   setback_m: 'Edge setback', gap_m: 'Gap between panels',
   name: 'Name', shape: 'Shape', length_m: 'Length', width_m: 'Width', ridge_m: 'Ridge length', tilt_deg: 'Tilt', azimuth_deg: 'Facing',
   panels_left_out: 'Panels left out', panel_count_override: 'Panel count (override)', edge: 'Wall edge', height_m: 'Height above roof',
@@ -193,6 +193,8 @@ export const api = {
   categories: () => request<ApplianceCategory[]>('/api/appliances/categories'),
   searchAppliances: (q: string) => request<CatalogItem[]>(`/api/appliances?q=${encodeURIComponent(q)}&limit=8`),
   quotationUrl: (id: number) => `/api/assessments/${id}/quotation.pdf`,
+  /** "Reopen design": the proposal issued for the record is no longer the standing one; the status falls back to the facts and Calculate re-prices freely. */
+  reopenDesign: (id: number) => request<AssessmentOut>(`/api/assessments/${id}/reopen`, { method: 'POST' }),
   programUrl: (id: number) => `/api/assessments/${id}/program.pdf`,
   cardUrl: (id: number, nextStep = '') => `/api/assessments/${id}/card.png${nextStep ? `?next_step=${encodeURIComponent(nextStep)}` : ''}`,
   /** Fetch a generated document, so a 409 (stale results) or an outage becomes a message in the bar and never a raw JSON page. */

@@ -1,6 +1,7 @@
 """Turn an assessment document into results: layout, k, simulation, comparison."""
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
@@ -12,13 +13,19 @@ from .core import kfactor, layout, shade
 from .core.dataset import NasaReference, PvgisDataset
 from .core.sizing import BatterySpec, InverterRules, OffGridRules, plan_from_faces, size_system
 from .core.simulation import FaceSpec, ThermalModel, prepare_sky, simulate, typical_air_temperature
+from .pricing.catalog import Catalog
 from .pricing.config import PricingConfig
 from .pricing.job import PricingContext, price_assessment
 from .pricing.economics import build_economics
 from .pricing.program import build_program
-from .schemas import AssessmentDoc
+from .schemas import AssessmentDoc, CandidatePanel
+
+log = logging.getLogger("solarapp.compute")
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+NO_USABLE_PANEL = ("The materials list has no usable panel: an active item of category Solar Panel with its wattage, length and width. "
+                   "Add or complete one on the Materials page.")
 
 
 class ComputeError(ValueError):
@@ -29,13 +36,48 @@ def _warn(code: str, message: str) -> dict:
     return {"code": code, "message": message}
 
 
+def panel_candidates(catalog: Optional[Catalog]) -> list[tuple[CandidatePanel, float]]:
+    """The panels the layout tries (round 4): the usable panels of the materials list, each with its list price per watt
+    (the tie-breaker). The code is the candidate's id, so the results, the reports and the page name the panel by it."""
+    if catalog is None:
+        return []
+    out: list[tuple[CandidatePanel, float]] = []
+    for it in catalog.panel_candidates():
+        wp = float(it.rating or 0)
+        out.append((CandidatePanel(id=it.code, name=it.name, watt_peak=wp, length_m=float(it.panel_length_m), width_m=float(it.panel_width_m), code=it.code),
+                    float(it.list_price or 0) / wp if wp > 0 else 0.0))
+    return out
+
+
+def best_panel_index(panel_results: list[dict], price_per_w: list[float]) -> int:
+    """The owner's rule: the panel with the most kWp on this roof; two panels at the same kWp go to the lower list price
+    per watt, then to the list's order."""
+    return min(range(len(panel_results)), key=lambda i: (-panel_results[i]["system_kwp"], price_per_w[i], i))
+
+
+def choose_panel(doc: AssessmentDoc, cfg: PricingConfig, panel_results: list[dict], best_idx: int, warnings: list[dict]) -> tuple[int, str]:
+    """Which candidate the results use and why: the engineer's choice for this project (`doc.panel_code`), else the
+    panel the pricing settings name for every job (`sizing.panel_code`), else the automatic one. A code that is no
+    longer a usable panel in the list is said so and the automatic rule applies."""
+    codes = [pr["panel"]["code"] for pr in panel_results]
+    for code, rule, where in ((doc.panel_code, "project", "chosen for this project"), (cfg.sizing.panel_code, "setting", "set under Pricing settings › System design")):
+        code = (code or "").strip()
+        if not code:
+            continue
+        if code in codes:
+            return codes.index(code), rule
+        warnings.append(_warn("panel_choice_unavailable", f"The panel {where} ({code}) is not a usable panel in the materials list (active, category Solar Panel, with wattage, length and width); the automatic panel is used instead."))
+    return best_idx, "automatic"
+
+
 def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference, pricing: Optional[PricingContext] = None) -> dict:
     if doc.lat is None or doc.lon is None:
         raise ComputeError("Set the site location (map pin) first.")
     if not doc.faces:
         raise ComputeError("Add at least one roof face.")
-    if not doc.panels:
-        raise ComputeError("Add at least one candidate panel.")
+    candidates = panel_candidates(pricing.catalog if pricing is not None else None)
+    if not candidates:
+        raise ComputeError(NO_USABLE_PANEL)
     if not pvgis.available:
         raise ComputeError("Weather dataset not found. Run the one-time download first (see README).")
 
@@ -68,9 +110,12 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
             if w.whole_face:
                 warnings.append(_warn("wall_shades_face", f"{f.name}: the wall on the {w.edge} side shades the whole face at midday. Leave this face out, or check the wall height."))
 
-    # Panel candidates and layout
+    # Panel candidates and layout: every usable panel of the materials list is fitted; the chosen one is the engineer's
+    # for this project, else the settings' for every job, else the one with the most kWp (round 4)
+    cfg = pricing.config if pricing is not None else PricingConfig()
     panel_results = []
-    for p in doc.panels:
+    price_per_w = []
+    for p, ppw in candidates:
         faces = {}
         total = 0
         for f in doc.faces:
@@ -80,18 +125,23 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
             total += lr.count
         panel_results.append({
             "panel": p.model_dump(), "faces": faces, "total_count": total,
-            "system_kwp": total * p.watt_peak / 1000.0, "best": False,
+            "system_kwp": total * p.watt_peak / 1000.0, "best": False, "price_per_w": round(ppw, 2),
         })
-    best_idx = max(range(len(panel_results)), key=lambda i: panel_results[i]["system_kwp"])
+        price_per_w.append(ppw)
+    best_idx = best_panel_index(panel_results, price_per_w)
     panel_results[best_idx]["best"] = True
-    selected_idx = next((i for i, pr in enumerate(panel_results) if pr["panel"]["id"] == doc.selected_panel_id), best_idx)
+    selected_idx, rule = choose_panel(doc, cfg, panel_results, best_idx, warnings)
     selected = panel_results[selected_idx]
-    selected_panel = doc.panels[selected_idx]
+    selected_panel = candidates[selected_idx][0]
     if selected["total_count"] == 0:
         # a layout with no panels is an input error, not a result
         if panel_results[best_idx]["total_count"] == 0:
             raise ComputeError("No panel fits any roof face. Check the face sizes and the setback.")
-        raise ComputeError(f"The chosen panel ({selected_panel.name}) fits no roof face. Pick another panel under Panel options, or check the face sizes and the setback.")
+        raise ComputeError(f"The chosen panel ({selected_panel.name}) fits no roof face. Pick another panel under System design, or check the face sizes and the setback.")
+    if doc.dropped_panels:
+        typed = ", ".join(doc.dropped_panels)
+        warnings.append(_warn("panel_typed_by_hand_replaced", f"The panel typed by hand ({typed}) was replaced by {selected_panel.name} ({selected_panel.code}) from the materials list; the panel is chosen there now."))
+        log.info("panel typed by hand dropped: %s replaced by %s (%s rule)", typed, selected_panel.code, rule)
     for f in doc.faces:
         if selected["faces"][f.id]["gross"] == 0:
             warnings.append({**_warn("face_no_fit", f"{f.name}: no panel fits this face ({f.length_m:g} m along the eave × {f.width_m:g} m up the slope, setback {doc.setback_m:g} m). Check the size or reduce the setback."), "face_id": f.id})
@@ -160,7 +210,6 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         if fs.shade_loss_pct >= 5:
             warnings.append(_warn("shade_loss", f"{fs.name}: shade takes about {fs.shade_loss_pct:.0f}% of the direct sun over the year."))
 
-    cfg = pricing.config if pricing is not None else PricingConfig()
     audit_block, sizing_block = compute_audit_and_sizing(doc, measured, selected, selected_panel.watt_peak, cfg)
     mark_sized_panels(doc, geometry_block, sizing_block, pricing)
 
@@ -187,8 +236,13 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         "geometry": geometry_block,
         "selected_panel_id": selected_panel.id,
         "best_panel": {
-            "id": doc.panels[best_idx].id, "name": doc.panels[best_idx].name, "watt_peak": doc.panels[best_idx].watt_peak,
+            "id": candidates[best_idx][0].id, "name": candidates[best_idx][0].name, "watt_peak": candidates[best_idx][0].watt_peak,
             "count": panel_results[best_idx]["total_count"], "system_kwp": panel_results[best_idx]["system_kwp"],
+        },
+        # why this panel (round 4): the rule that picked it, how many panels of the list were tried, and the settings' choice if any
+        "panel_choice": {
+            "rule": rule, "code": selected_panel.code, "name": selected_panel.name, "watt_peak": selected_panel.watt_peak,
+            "candidates": len(candidates), "best_code": candidates[best_idx][0].code, "setting_code": (cfg.sizing.panel_code or "").strip() or None,
         },
         "k": {
             "sets": [set_to_dict(r, s) for r, s in zip(set_results, doc.reading_sets)],

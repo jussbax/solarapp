@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { BatteryAutonomy, PricedLine, PricingChoices, Results, SizingBlock, Warning } from '../types'
 import AuditResults, { KIND_LABEL } from './AuditResults'
 import { plural } from '../fmt'
@@ -16,16 +17,81 @@ const DESIGN_CODES = new Set([
 
 const gridFlag = (v: boolean | null | undefined) => (v === true ? 'grid-interactive (can export)' : v === false ? 'not grid-interactive (cannot export)' : 'grid-interactive status unknown')
 
+/** The panel the results use and why (round 4): the candidates are the usable panels of the materials list and the app
+ * picks the most kWp on this roof in the background, unless the pricing settings name one for every job or the engineer
+ * names one here. The choice is saved on the document (a code, or blank for automatic) and Calculate applies it. */
+export function PanelChoice({ results, panelCode, onPanelCode }: { results: Results; panelCode: string | null; onPanelCode: (code: string | null) => void }) {
+  const [open, setOpen] = useState(false)
+  const choice = results.panel_choice
+  const selected = results.panels.find((p) => p.panel.id === results.selected_panel_id)
+  if (!choice || !selected) return null
+  const best = results.panels.find((p) => p.best) ?? selected
+  const settingPanel = choice.setting_code ? results.panels.find((p) => p.panel.code === choice.setting_code) : null
+  const why =
+    choice.rule === 'project'
+      ? best.panel.code === choice.code
+        ? 'chosen for this project, also the most kWp'
+        : `chosen for this project; most kWp would be ${best.panel.name}`
+      : choice.rule === 'setting'
+        ? 'set for every job under Pricing settings › System design'
+        : `most kWp of the ${plural(choice.candidates, 'panel')} in the materials list`
+  return (
+    <div data-testid="panel-choice" style={{ marginTop: 8, marginBottom: 10 }}>
+      <b>Panel:</b> {selected.panel.name} ({selected.panel.watt_peak} W, {why}) ·{' '}
+      <button type="button" className="toggle link" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        {open ? 'Done' : 'Use a different panel'}
+      </button>
+      {open && (
+        <div style={{ marginTop: 6, maxWidth: 600 }}>
+          <select aria-label="Panel for this project" value={panelCode ?? ''} onChange={(e) => onPanelCode(e.target.value || null)}>
+            <option value="">
+              {settingPanel
+                ? `Automatic: ${settingPanel.panel.name} (set for every job under Pricing settings)`
+                : `Automatic (most kWp): ${best.panel.name}, ${plural(best.total_count, 'panel')}, ${best.system_kwp.toFixed(2)} kWp`}
+            </option>
+            {results.panels.map((p) => (
+              <option key={p.panel.id} value={p.panel.code ?? p.panel.id}>
+                {p.panel.name} · {p.panel.watt_peak} W · fits {p.total_count} · {p.system_kwp.toFixed(2)} kWp{p.best ? ' · most kWp' : ''}
+              </option>
+            ))}
+          </select>
+          <div className="muted" style={{ marginTop: 4 }}>
+            Every active panel in the materials list with its wattage, length and width. The choice is saved with the project; Calculate applies it.
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** System design: the inverter with its certificate and grid-interactive status, the battery (nominal and usable),
  * autonomy and loss of load, strings, cable gauges with their voltage drop, breakers and surge protectors, the panels per
  * face, and the energy balance the sizing rests on. Everything comes from the sizing block and the BOQ meta that already
- * exist; nothing is computed here. */
-export default function SystemDesign({ results, panelName, panelWp }: { results: Results; panelName: string; panelWp: number }) {
+ * exist; nothing is computed here. The panel line at the top is the one place the engineer can pick another panel. */
+export default function SystemDesign({
+  results,
+  panelName,
+  panelWp,
+  panelCode,
+  onPanelCode,
+}: {
+  results: Results
+  panelName: string
+  panelWp: number
+  panelCode: string | null
+  onPanelCode: (code: string | null) => void
+}) {
   const sizing = results.sizing
   const pricing = results.pricing
   const audit = results.audit
+  const panelLine = <PanelChoice results={results} panelCode={panelCode} onPanelCode={onPanelCode} />
   if (!audit || !sizing) {
-    return <div className="muted">The system design follows the energy audit: fill in the appliances and the bill, then Calculate.</div>
+    return (
+      <div>
+        {panelLine}
+        <div className="muted">The system design follows the energy audit: fill in the appliances and the bill, then Calculate.</div>
+      </div>
+    )
   }
   const priced = !!pricing?.available
   const ch = priced ? ((pricing!.choices ?? {}) as PricingChoices) : null
@@ -68,6 +134,7 @@ export default function SystemDesign({ results, panelName, panelWp }: { results:
           {w.message}
         </div>
       ))}
+      {panelLine}
 
       <div className="kpis">
         <div className="kpi">

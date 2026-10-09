@@ -156,6 +156,16 @@ class Catalog:
     def by_category(self, category: str) -> list[Item]:
         return [i for i in self.items.values() if i.category == category and i.active]
 
+    def panel_candidates(self) -> list[Item]:
+        """The panels the app may put on a roof (round 4): every active item of category Solar Panel that carries a
+        wattage (rating in W) and its length and width, in code order. A panel without its size cannot be fitted to a
+        face; the owner types it on the Materials page."""
+        return sorted(
+            (i for i in self.by_category("Solar Panel")
+             if i.rating and i.rating > 0 and (i.rating_unit or "W").upper() in ("W", "WP") and i.panel_length_m and i.panel_width_m),
+            key=lambda i: i.code,
+        )
+
 
 PANEL_DIMS_RE = re.compile(r"(\d{4})\s*[x×]\s*(\d{3,4})\s*[x×]\s*\d{2,3}\s*mm", re.I)
 

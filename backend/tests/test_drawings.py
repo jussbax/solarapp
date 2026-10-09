@@ -42,7 +42,7 @@ PILA_DOC = {
         {"id": "f2", "name": "Kitchen roof (east)", "shape": "hip", "length_m": 7.0, "width_m": 4.0, "ridge_m": 3.0, "tilt_deg": 15, "azimuth_deg": 90,
          "walls": [{"id": "w1", "edge": "left", "height_m": 1.5, "gap_m": 0}]},
     ],
-    "panels": [{"id": "p1", "name": "Blue Carbon 585W", "watt_peak": 585, "length_m": 2.278, "width_m": 1.134, "code": "BC-PNL-001"}],
+    "panel_code": "BC-PNL-001",   # the engineer's panel for this project (round 4); blank would take the most kWp of the materials list
     "reading_sets": [
         {"id": "s1", "face_id": "f1", "measured_at": "2026-10-03T11:30:00", "ambient_temp_c": 33, "sky_condition": "clear",
          "readings": [{"irradiance_wm2": 903, "power_w": 36.1, "module_temp_c": 57}, {"irradiance_wm2": 910, "power_w": 36.4, "module_temp_c": 58}, {"irradiance_wm2": 896, "power_w": 35.8, "module_temp_c": 57}]},
