@@ -1,12 +1,11 @@
 import { useState, type ReactNode } from 'react'
-import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { PaymentMilestone, PaymentPlan, PricingConfig, ProgramBlock, ProgramJob } from '../types'
 import NumberInput from './NumberInput'
 import Field from './Field'
 import { Gantt } from './Gantt'
 import { useElementWidth } from './responsive'
-import { fillWeeks, kTick, roundTo, usePricingDefaults } from './shared'
-import { fmtDate, fmtDateShort, php0 } from '../fmt'
+import { roundTo, usePricingDefaults } from './shared'
+import { fmtDate, php0 } from '../fmt'
 
 const d = fmtDate
 const EVENTS: { id: string; label: string; on: string }[] = [
@@ -14,9 +13,6 @@ const EVENTS: { id: string; label: string; on: string }[] = [
   { id: 'commissioning', label: 'Switch-on', on: 'switch-on' }, { id: 'cfei', label: 'Final inspection certificate', on: 'the final inspection' }, { id: 'meter_installed', label: 'Meter installed', on: 'the meter' },
 ]
 // colours validated for colour-blind separation and contrast on the light surface; as text the gold is --gold-text (4.9:1)
-const C_IN = '#C9A227'
-const C_OUT = '#c84f2b'
-const C_BAL = '#2f5fd8'
 const GOLD_TEXT = 'var(--gold-text)'
 
 const same = (a: number | null | undefined, b: number | null | undefined) => a != null && b != null && Math.abs(a - b) < 1e-9
@@ -95,49 +91,6 @@ export function AdjustFold({ changed, children, testId = 'adjust' }: { changed: 
       </summary>
       {children}
     </details>
-  )
-}
-
-/** "50% on signing, 40% on delivery, 10% on switch-on; then 6 payments of 10% every 30 days". */
-function describePlan(p: PaymentPlan): string {
-  const parts = p.milestones.map((m) => `${roundTo(m.share * 100, 1)}% on ${EVENTS.find((e) => e.id === m.event)?.on ?? m.event}${m.offset_days ? ` + ${m.offset_days} days` : ''}`)
-  const text = parts.join(', ')
-  if (p.installments > 0) return `${text}; then ${p.installments} payments of ${roundTo((p.installment_share / p.installments) * 100, 1)}% every ${p.installment_interval_days} days`
-  return text
-}
-
-/** The payment terms as one line ("Company terms: 50% on signing, ...") with Change; the editor opens only on Change. */
-export function PaymentTermsLine({ plan, defaults, onChange }: { plan: PaymentPlan | null; defaults: PaymentPlan | undefined; onChange: (p: PaymentPlan | null) => void }) {
-  const [editing, setEditing] = useState(false)
-  const shown = plan ?? defaults
-  if (editing) {
-    return (
-      <div className="terms-editor" data-testid="payment-terms">
-        <PaymentPlanEditor plan={plan} defaults={defaults} onChange={onChange} />
-        <div style={{ marginTop: 4 }}>
-          <button type="button" className="toggle link" onClick={() => setEditing(false)}>
-            Done
-          </button>
-        </div>
-      </div>
-    )
-  }
-  return (
-    <div className="terms-line" data-testid="payment-terms">
-      <b>Payment terms</b>
-      <span>
-        {plan ? 'This job: ' : 'Company terms: '}
-        {shown ? describePlan(shown) : 'shown after the first calculation'}
-      </span>
-      <button type="button" className="toggle link" onClick={() => setEditing(true)}>
-        Change
-      </button>
-      {plan && (
-        <button type="button" className="toggle link" onClick={() => onChange(null)}>
-          Use company terms
-        </button>
-      )}
-    </div>
   )
 }
 
@@ -271,7 +224,7 @@ const localToday = () => {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
-/** Schedule and cashflow inputs. The job stage is a pill in the page head, not an input here. */
+/** Schedule inputs. The payment terms are the company's (Settings › Program of works) and the cashflow is the finance module's, not the engineer's. */
 export function ProgramInputs({ job, program, onChange }: { job: ProgramJob; program: ProgramBlock | null; onChange: (j: ProgramJob) => void }) {
   const set = (p: Partial<ProgramJob>) => onChange({ ...job, ...p })
   const cfg = usePricingDefaults()
@@ -306,7 +259,6 @@ export function ProgramInputs({ job, program, onChange }: { job: ProgramJob; pro
           <DefaultNum label="Inspection and net metering meter" unit="days" value={job.netmeter_meter_days} fallback={pc.netmeter_meter_days} onChange={(v) => set({ netmeter_meter_days: v })} min={0} decimals={0} help="After switch-on" />
         </div>
       </AdjustFold>
-      <PaymentTermsLine plan={job.payment} defaults={program?.payment_plan ?? cfg?.program?.payment} onChange={(payment) => set({ payment })} />
     </div>
   )
 }
@@ -445,76 +397,6 @@ export function ProgramResults({ program }: { program: ProgramBlock }) {
             </tbody>
           </table>
         )}
-      </div>
-    </div>
-  )
-}
-
-/** Cashflow: the weekly chart, the flow table and what stays in the company as allocations. */
-export function CashflowResults({ program }: { program: ProgramBlock }) {
-  if (!program.available) return <div className="banner warn">{program.reason}</div>
-  const cf = program.cashflow!
-  const chart = fillWeeks(cf.weekly).map((w) => ({ week: fmtDateShort(w.week), In: Math.round(w.inflow), Out: Math.round(w.outflow), Balance: Math.round(w.balance) }))
-  return (
-    <div>
-      <div className="kpis">
-        <div className="kpi">
-          <div className="label">Cash margin</div>
-          <div className="value">{php0(cf.cash_margin)}</div>
-          <div className="sub">
-            in {php0(cf.total_in)}, out {php0(cf.total_out)}
-          </div>
-        </div>
-        <div className="kpi">
-          <div className="label">Lowest balance</div>
-          <div className="value" style={{ color: cf.lowest_balance < 0 ? C_OUT : undefined }}>{php0(cf.lowest_balance)}</div>
-          <div className="sub">on {d(cf.lowest_balance_date)}; most cash out at one time</div>
-        </div>
-      </div>
-      <div style={{ width: '100%', height: 260 }}>
-        <ResponsiveContainer>
-          <ComposedChart data={chart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e3e8e8" vertical={false} />
-            <XAxis dataKey="week" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={24} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={kTick} />
-            <Tooltip formatter={(v) => php0(Number(v))} />
-            <Legend />
-            <Bar dataKey="In" fill={C_IN} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Out" fill={C_OUT} radius={[4, 4, 0, 0]} />
-            <Line type="stepAfter" dataKey="Balance" stroke={C_BAL} strokeWidth={2} dot={{ r: 3 }} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="muted" style={{ margin: '0 0 8px' }}>
-        One bar group per week from the first flow to the last; an empty week carries the balance.
-      </div>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Item</th>
-              <th className="num">In</th>
-              <th className="num">Out</th>
-              <th className="num">Balance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cf.flows.map((f, i) => (
-              <tr key={f.key + i}>
-                <td style={{ whiteSpace: 'nowrap' }}>{d(f.date)}</td>
-                <td>{f.label}</td>
-                <td className="num" style={{ color: GOLD_TEXT, fontWeight: 600 }}>{f.inflow ? php0(f.inflow) : ''}</td>
-                <td className="num" style={{ color: C_OUT }}>{f.outflow ? php0(f.outflow) : ''}</td>
-                <td className="num" style={{ fontWeight: 600, color: f.balance < 0 ? C_OUT : undefined }}>{php0(f.balance)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="muted" style={{ marginTop: 6 }}>
-        Kept in the company as allocations rather than cash: handling, wastage and storage {php0(cf.noncash.handling_wastage_storage)}, truck ownership and maintenance{' '}
-        {php0(cf.noncash.truck_ownership_maintenance)}, tools {php0(cf.noncash.tools)}. Commission is 5% of the direct cost, paid after the job. VAT is shown as a remittance after completion.
       </div>
     </div>
   )

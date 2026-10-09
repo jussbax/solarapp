@@ -1463,3 +1463,15 @@ background and the section remove in data entry" and, of the stage pill,
   without either does the settings' figure apply, with a warning on a
   grid job. The Pricing step and the proposal say where the figure came
   from ("From bill 2026-09" / "the generation charge on your bill").
+
+## The cashflow and the installment structure are finance, not engineering
+
+- The owner (9 October): "move the cashflow to the finance module, along
+  with the installment structure if there will be any rather than giving
+  it to the engineer." The Cashflow card is gone from Design and outputs,
+  the cashflow pages from the program-of-works PDF, and the per-project
+  payment-terms editor from the Pricing step. The proposal prints the
+  company's payment terms from Settings › Program of works (the owner's
+  page); a project saved with its own terms keeps them until the finance
+  module takes them over. The cashflow engine stays in the results behind
+  the API for that module; no engineering screen reads it.

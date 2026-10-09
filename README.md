@@ -61,10 +61,11 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
 8. Program of works: from the signing date, the schedule of permits, net
    metering steps, the pickup run, installation days with activities by
    the hour for the roof pairs and the ground crew, commissioning and the
-   meter change; customer payments on milestones or in instalments; a
-   cashflow with the running balance and the lowest point the company has
-   to carry. The quotation PDF carries the milestone schedule and payment
-   terms; an internal PDF carries the full program and cashflow. Each
+   meter change; the customer's payments on the company's milestones. The
+   proposal PDF carries the milestone schedule and payment terms; an
+   internal PDF carries the full program and the pickup list. The cashflow
+   projection and any installment structure belong to the finance module
+   (the engine still computes them behind the API for it). Each
    project shows an engineering status read from its facts (draft,
    surveyed, designed, proposal issued) on its head and in the project
    list; generating the proposal PDF marks it issued and locks the price
@@ -411,7 +412,7 @@ backend/solarapp/pricing/catalog.py   the materials list as the engine reads it 
 backend/solarapp/pricing/config.py    every pricing, program and economics setting with its default and its version
 backend/solarapp/pricing/job.py       prices an assessment: BOM, manual edits, extra km from the map pin
 backend/solarapp/pricing/store.py     materials tables and pricing settings in SQLite, workbook import
-backend/solarapp/pricing/program.py   program of works: schedule, hourly installation plan, cashflow
+backend/solarapp/pricing/program.py   program of works: schedule, hourly installation plan; the cashflow engine the finance module will read
 backend/solarapp/pricing/economics.py customer economics: bill before and after, payback, NPV, IRR
 backend/data_seed/                    bundled materials workbook, loaded on first start
 backend/solarapp/compute.py           turns an assessment into results

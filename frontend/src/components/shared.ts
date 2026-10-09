@@ -59,36 +59,6 @@ export function usePricingDefaults(): PricingConfig | null {
   return cfg
 }
 
-type Week = { week: string; inflow: number; outflow: number; balance: number }
-const dayIndex = (iso: string) => {
-  const [y, m, dd] = iso.slice(0, 10).split('-').map(Number)
-  return Math.floor(Date.UTC(y, m - 1, dd) / 86400000)
-}
-const isoDay = (i: number) => new Date(i * 86400000).toISOString().slice(0, 10)
-
-/** Every week from the first flow to the last, so the cashflow chart is to scale: a week with no flow carries the balance. */
-export function fillWeeks(weekly: Week[]): Week[] {
-  if (weekly.length < 2) return weekly
-  const sorted = [...weekly].sort((a, b) => a.week.localeCompare(b.week))
-  const byDay = new Map(sorted.map((w) => [dayIndex(w.week), w]))
-  const first = dayIndex(sorted[0].week)
-  const last = dayIndex(sorted[sorted.length - 1].week)
-  const out: Week[] = []
-  let balance = 0
-  const seen = new Set<number>()
-  for (let i = first; i <= last; i += 7) {
-    const w = byDay.get(i)
-    if (w) {
-      balance = w.balance
-      seen.add(i)
-      out.push(w)
-    } else out.push({ week: isoDay(i), inflow: 0, outflow: 0, balance })
-  }
-  // a week off the seven-day grid (never in the server's buckets, kept for safety) goes in by date
-  for (const w of sorted) if (!seen.has(dayIndex(w.week))) out.push(w)
-  return out.sort((a, b) => a.week.localeCompare(b.week))
-}
-
 const positive = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null)
 
 /** The battery the customer is sold, in nominal kWh as the proposal prints it: the BOM's battery (the server's own

@@ -1,4 +1,4 @@
-"""Internal program of works: schedule, installation days by the hour, cashflow."""
+"""Internal program of works: schedule, installation days by the hour, the pickup list. The cashflow is the finance module's."""
 from __future__ import annotations
 
 import io
@@ -86,19 +86,5 @@ def build_program_pdf(doc: AssessmentDoc, results: dict, company: dict) -> bytes
     t.setStyle(grid)
     story.append(t)
 
-    story.append(PageBreak())
-    cf = prog["cashflow"]
-    story.append(Paragraph("Cashflow", h2))
-    story.append(Paragraph(f"Cash in PHP {php(cf['total_in'])}, cash out PHP {php(cf['total_out'])}, cash margin PHP {php(cf['cash_margin'])}. "
-                           f"Lowest balance PHP {php(cf['lowest_balance'])} on {_d(cf['lowest_balance_date'])}. "
-                           f"Kept in the company as allocations (not cash): handling, wastage and storage PHP {php(cf['noncash']['handling_wastage_storage'])}, "
-                           f"truck ownership and maintenance PHP {php(cf['noncash']['truck_ownership_maintenance'])}, tools PHP {php(cf['noncash']['tools'])}.", body))
-    rows = [["Date", "Item", "In", "Out", "Balance"]]
-    for f in cf["flows"]:
-        rows.append([_d(f["date"]), Paragraph(f["label"], cell), php(f["inflow"]) if f["inflow"] else "", php(f["outflow"]) if f["outflow"] else "", php(f["balance"])])
-    t = Table(rows, colWidths=[24 * mm, 150 * mm, 28 * mm, 28 * mm, 30 * mm], repeatRows=1)
-    t.setStyle(grid)
-    t.setStyle(TableStyle([("ALIGN", (2, 1), (-1, -1), "RIGHT")]))
-    story.append(t)
     pdf.build(story)
     return buf.getvalue()

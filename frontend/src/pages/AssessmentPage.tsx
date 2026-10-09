@@ -14,7 +14,7 @@ import DocumentsCard, { documentState } from '../components/DocumentsCard'
 import ErrorBoundary from '../components/ErrorBoundary'
 import Field from '../components/Field'
 import { PricingInputs, PricingResults } from '../components/PricingSection'
-import { CashflowResults, ProgramInputs, ProgramResults } from '../components/ProgramSection'
+import { ProgramInputs, ProgramResults } from '../components/ProgramSection'
 import { EconomicsInputs, EconomicsResults } from '../components/EconomicsSection'
 import { emptyDoc, emptyEconomicsJob, emptyPricingJob, emptyProgramJob, ENGINEERING_STATUSES, NEW_DRAFT_ID, statusLabel } from '../types'
 import { clearDraft, readDraft, writeDraft, type Draft } from '../draft'
@@ -31,13 +31,12 @@ const STEPS: { id: Step; label: string; short: string }[] = [
 const CARD_STEP: Record<string, Step> = { 'card-site': 'site', 'card-faces': 'site', 'card-readings': 'site', 'card-audit': 'audit' }
 
 /** The seven cards of Design and outputs, in order; the in-step index jumps to them. */
-type DesignCardId = 'design-roof' | 'design-system' | 'design-quantities' | 'design-program' | 'design-cashflow' | 'design-savings' | 'design-documents'
+type DesignCardId = 'design-roof' | 'design-system' | 'design-quantities' | 'design-program' | 'design-savings' | 'design-documents'
 const DESIGN_CARDS: { id: DesignCardId; label: string; short: string }[] = [
   { id: 'design-roof', label: 'Roof and production', short: 'Roof' },
   { id: 'design-system', label: 'System design', short: 'System' },
   { id: 'design-quantities', label: 'Quantities', short: 'Quantities' },
   { id: 'design-program', label: 'Program', short: 'Program' },
-  { id: 'design-cashflow', label: 'Cashflow', short: 'Cashflow' },
   { id: 'design-savings', label: 'Savings for the customer', short: 'Savings' },
   { id: 'design-documents', label: 'Documents', short: 'Documents' },
 ]
@@ -569,7 +568,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             <EconomicsInputs job={doc.economics ?? emptyEconomicsJob()} eco={results?.economics ?? null} onChange={(economics) => patch({ economics })} />
           </div>
           <div className="card" id="card-program-inputs">
-            <h2>Schedule and cashflow inputs</h2>
+            <h2>Schedule inputs</h2>
             <ProgramInputs job={doc.program ?? emptyProgramJob()} program={results?.program ?? null} onChange={(program) => patch({ program })} />
           </div>
         </>
@@ -650,7 +649,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 </button>
               ))}
             </nav>
-            {auditPending && <div className="subtabs-note muted">System design, quantities, the program, cashflow and savings follow the energy audit.</div>}
+            {auditPending && <div className="subtabs-note muted">System design, quantities, the program and savings follow the energy audit.</div>}
 
             <div className="card design-card" id="design-roof">
               <h2>Roof and production</h2>
@@ -671,7 +670,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 >
                   Energy audit
                 </a>
-                , then Calculate. <span className="muted">System design, quantities, the program of works, cashflow and savings follow the sizing.</span>
+                , then Calculate. <span className="muted">System design, quantities, the program of works and savings follow the sizing.</span>
                 <PanelChoice results={results} panelCode={doc.panel_code ?? null} onPanelCode={(panel_code) => patch({ panel_code })} />
               </div>
             ) : (
@@ -709,12 +708,6 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                   <h2>Program of works</h2>
                   <ErrorBoundary title="The program of works" onRecalculate={compute}>
                     {results.program ? <ProgramResults program={results.program} /> : <div className="muted">The program follows the pricing. Press Calculate.</div>}
-                  </ErrorBoundary>
-                </div>
-                <div className="card design-card" id="design-cashflow">
-                  <h2>Cashflow</h2>
-                  <ErrorBoundary title="The cashflow" onRecalculate={compute}>
-                    {results.program ? <CashflowResults program={results.program} /> : <div className="muted">The cashflow follows the pricing. Press Calculate.</div>}
                   </ErrorBoundary>
                 </div>
                 <div className="card design-card" id="design-savings">

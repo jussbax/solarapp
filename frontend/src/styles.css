@@ -280,8 +280,6 @@ table.payments td.cell-main { width: 40%; min-width: 220px; }
 .switch-row .switch-label { font-weight: 600; color: var(--ink); }
 .switch-row .switch-state { color: var(--muted); }
 /* the project's payment terms as one line, the editor only on Change */
-.terms-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: var(--control-h); font-size: var(--fs-base); margin-top: 4px; }
-.terms-line b { color: var(--ink); }
 details.more.adjust { margin-top: 2px; }
 details.more.adjust > summary { margin-top: 0; margin-bottom: 6px; min-height: 36px; display: flex; align-items: center; }
 table.matrix th { text-transform: none; letter-spacing: 0; font-size: 12px; }
@@ -609,5 +607,4 @@ table.settings th.settings-key { width: 260px; text-align: left; vertical-align:
   .settings-section { scroll-margin-top: 10px; }
   .settings-list .settings-title { margin-bottom: 8px; }
   .field, .setting-block { scroll-margin-top: 66px; }
-  .terms-line { font-size: var(--fs-body); }
 }

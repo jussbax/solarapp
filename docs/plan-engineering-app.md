@@ -68,7 +68,7 @@ B a bank, O the owner internally.
 | 22 | Pickup list per supplier with cash | O | Exists |
 | 23 | Program of works and Gantt chart: dated tasks and milestones with dependencies; the customer's schedule | C, W, O | Partial: schedule, hourly plan with duration floors and a Gantt chart; dependencies and the DU sequence still to do |
 | 24 | Crew day plan, method statement and safety plan | W | Partial (hour plan); safety content missing |
-| 25 | Cashflow and payment schedule | O, B | Exists |
+| 25 | Cashflow and payment schedule | O, B | Finance module (the engine exists behind the API; no engineering screen since 9 Oct) |
 | 26 | Site diary, progress, change orders | O | PM module, out of scope |
 
 ### Commissioning and handover
@@ -168,7 +168,12 @@ funnel, statuses and notes; the funnel card and the lead badges on the
 list; the stages lead and contacted; preferred time, callback promise and
 the privacy line (website settings); the estimate page link in the nav.
 What stays: the card's next step as a saved field, the hour-by-hour crew
-plan, the pickup list and the cashflow projection (plans, not tracking).
+plan and the pickup list. The cashflow projection and the installment
+structure left the engineering screens on 9 October ("move the cashflow
+to the finance module, along with the installment structure, rather than
+giving it to the engineer"): the engine still computes them behind the
+API for the finance module, the proposal prints the company's payment
+terms from Settings, and the engineer edits none of it.
 The job stage (assessed to closed) stays on the record for the CRM and PM
 modules but has no screen since round 4: the project head and the list
 show the engineering status read from the facts (draft, surveyed,
