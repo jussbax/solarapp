@@ -211,7 +211,7 @@ def lead(body: QuickLead, request: Request, tasks: BackgroundTasks, session: Ses
     session.refresh(row)
     log.info("lead created id=%s ip=%s source=%s", row.id, client_ip(request), _source_label(body.source))
     if smtp_configured(settings):
-        link = f"{settings.public_url.rstrip('/')}/leads/{row.id}" if settings.public_url else f"lead #{row.id}"
+        link = f"{settings.public_url.rstrip('/')}/?booking={row.id}" if settings.public_url else f"booking #{row.id}"
         promise = (company_profile(session, settings).get("callback_promise") or "").strip() or "within one working day"
         subject, text = lead_notice(
             name=row.name, contact=row.contact, preferred_time=body.preferred_time, wants=wants, uses=PATTERN_LABEL[body.pattern],

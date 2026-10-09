@@ -481,7 +481,7 @@ export interface AssessmentSummary {
   lead_id: number | null
 }
 
-/** The leads inbox: website bookings. A future CRM module takes these over; the project keeps only lead_id. */
+/** Website bookings: the CRM's data, served by /api/leads. The engineering app lists the open ones to start a project; the project keeps only lead_id. */
 export type LeadStatus = 'new' | 'contacted' | 'visit_booked' | 'converted' | 'closed'
 export const LEAD_STATUSES: { id: LeadStatus; label: string }[] = [
   { id: 'new', label: 'New' }, { id: 'contacted', label: 'Contacted' }, { id: 'visit_booked', label: 'Visit booked' }, { id: 'converted', label: 'Converted' }, { id: 'closed', label: 'Closed' },
@@ -536,16 +536,6 @@ export interface Lead {
   anonymised: boolean
 }
 
-export interface LeadFunnel {
-  days: number
-  estimates: number
-  leads: number
-  visits_booked: number
-  converted: number
-  quoted: number
-  signed: number
-  estimates_by_source: Record<string, number>
-}
 
 export interface Warning {
   code: string

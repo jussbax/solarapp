@@ -5,16 +5,14 @@ import type { DataStatus } from './types'
 import LoginPage from './pages/LoginPage'
 import AssessmentListPage from './pages/AssessmentListPage'
 import AssessmentPage from './pages/AssessmentPage'
-import LeadsPage from './pages/LeadsPage'
 import SettingsPage from './pages/SettingsPage'
 import MaterialsPage from './pages/MaterialsPage'
 import DataBanner from './components/DataBanner'
 import ChangePassword from './components/ChangePassword'
 
-/** The four places in the back office. The estimate page is a website preview and lives under Settings › Website. */
+/** The three places in the back office. The estimate page is a website preview and lives under Settings › Website; website bookings are the CRM's and only start projects here. */
 const NAV: { to: string; label: string; match: (path: string) => boolean }[] = [
   { to: '/', label: 'Projects', match: (p) => p === '/' || p.startsWith('/assessments') },
-  { to: '/leads', label: 'Leads', match: (p) => p.startsWith('/leads') },
   { to: '/materials', label: 'Materials', match: (p) => p.startsWith('/materials') },
   { to: '/settings', label: 'Settings', match: (p) => p.startsWith('/settings') },
 ]
@@ -108,8 +106,6 @@ export default function App() {
           <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage onLogin={setUser} />} />
           <Route path="/" element={user ? <AssessmentListPage /> : <Navigate to="/login" />} />
           <Route path="/assessments/:id" element={user ? <AssessmentPage status={status} /> : <Navigate to="/login" />} />
-          <Route path="/leads" element={user ? <LeadsPage /> : <Navigate to="/login" />} />
-          <Route path="/leads/:id" element={user ? <LeadsPage /> : <Navigate to="/login" />} />
           <Route path="/materials" element={user ? <MaterialsPage user={user} /> : <Navigate to="/login" />} />
           <Route path="/settings" element={user ? <SettingsPage user={user} onUser={setUser} status={status} onRefresh={refreshStatus} /> : <Navigate to="/login" />} />
           <Route

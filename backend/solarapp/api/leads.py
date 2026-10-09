@@ -1,10 +1,11 @@
-"""The leads inbox: website bookings, kept apart from the project list.
+"""Website bookings: the CRM's data, kept apart from the project list.
 
-A lead is not a project. "Start assessment" (convert) creates the engineering
-project from it with the customer reference, the pin or town and the bill,
-and leaves ``lead_id`` on the project as the only link. The funnel counters
-live here too. A future CRM module takes this router and the ``leads`` table
-over; nothing in the engineering screens depends on them.
+A booking (lead) is not a project. The engineering app shows only the open
+ones on its Projects page and starts a project from one (convert): the
+customer reference, the pin or town and the bill are copied, and ``lead_id``
+on the project is the only link. The statuses, notes, closing reasons and
+the funnel counters served here are for the CRM, which takes this router
+and the ``leads`` table over; no engineering screen depends on them.
 """
 from __future__ import annotations
 

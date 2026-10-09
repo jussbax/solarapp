@@ -397,7 +397,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         <div className="page-head-main">
           <div className="page-head-row">
             <h1 className="page-title">{doc.customer_name || (isNew ? 'New project' : 'Unnamed project')}</h1>
-            {/* the job's own stage, saved with the record; lead and contacted live on the Leads page */}
+            {/* the job's own stage, saved with the record; a booking's own status (new, contacted, visit booked) is the CRM's, not this app's */}
             <select className="stage-pill" aria-label="Job stage" title="Job stage" value={stageValue} onChange={(e) => setStage(e.target.value as JobStage)} data-testid="stage-pill">
               {JOB_STAGES.map((s) => (
                 <option key={s.id} value={s.id}>

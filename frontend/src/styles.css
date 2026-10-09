@@ -407,3 +407,4 @@ table.categories td { padding: 4px 6px; }
   table.payments td input, table.payments td select, table.categories td input { width: 100% !important; }
 }
 .topbar .right .who { font-weight: 500; color: rgba(255,255,255,0.85); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-item.focus { background: var(--gold-bg); box-shadow: inset 3px 0 0 var(--gold); padding-left: 8px; }

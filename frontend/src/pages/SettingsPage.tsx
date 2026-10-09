@@ -77,7 +77,7 @@ export default function SettingsPage({ user, onUser, status, onRefresh }: { user
             {field('payment_details', 'Where to pay', 'Bank or GCash details printed in the proposal acceptance block.', true)}
             <h3 id="website">Website</h3>
             <div className="muted" style={{ marginBottom: 8 }}>
-              What visitors see on the estimate page and the booking form. Bookings land in Leads.{' '}
+              What visitors see on the estimate page and the booking form. A booking is kept for the CRM and can start a project from the Projects page.{' '}
               <a href="/estimate" target="_blank" rel="noreferrer">
                 Open the estimate page
               </a>

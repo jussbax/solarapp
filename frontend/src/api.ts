@@ -1,5 +1,5 @@
 import type {
-  ApplianceCategory, AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, CatalogItem, DataStatus, ImportReport, Lead, LeadFunnel, LeadStatus, MaterialItem,
+  ApplianceCategory, AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, CatalogItem, DataStatus, ImportReport, Lead, MaterialItem,
   MaterialSupplier, PricingConfig, PricingStatus,
 } from './types'
 
@@ -237,21 +237,11 @@ export const api = {
     return (await res.json()) as ImportReport
   },
   importSeed: (keepConfig: boolean) => request<ImportReport>(`/api/pricing/import-seed?keep_config=${keepConfig}`, { method: 'POST' }),
-  // the leads inbox (website bookings); a future CRM module takes these over
-  listLeads: (params: { status?: LeadStatus; q?: string } = {}) => {
-    const qs = new URLSearchParams()
-    if (params.status) qs.set('status', params.status)
-    if (params.q) qs.set('q', params.q)
-    const s = qs.toString()
-    return request<Lead[]>(`/api/leads${s ? `?${s}` : ''}`)
-  },
-  getLead: (id: number) => request<Lead>(`/api/leads/${id}`),
-  updateLead: (id: number, patch: { status?: LeadStatus; notes?: string; closed_reason?: string }) =>
-    request<Lead>(`/api/leads/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-  deleteLead: (id: number) => request<void>(`/api/leads/${id}`, { method: 'DELETE' }),
-  /** Start assessment: creates the project from the lead and returns its id. */
+  // website bookings are the CRM's data (the inbox, statuses, notes and funnel live behind /api/leads for it);
+  // the engineering app only lists them and starts a project from one
+  bookings: () => request<Lead[]>('/api/leads'),
+  /** Start a project from a booking: the customer reference, the pin or town and the bill are copied; the booking stays with the website's records. */
   convertLead: (id: number) => request<{ project_id: number; lead: Lead }>(`/api/leads/${id}/convert`, { method: 'POST' }),
-  leadFunnel: (days = 30) => request<LeadFunnel>(`/api/leads/funnel?days=${days}`),
   /** Bill of materials export (the generated list with the owner's edits); fetch through fetchDocument so a stale record shows its message. */
   bomCsvUrl: (id: number) => `/api/assessments/${id}/bom.csv`,
   bomXlsxUrl: (id: number) => `/api/assessments/${id}/bom.xlsx`,

@@ -156,16 +156,21 @@ and documents to the other two and never stores their state.
 
 The website keeps three calls: status, estimate and lead. The estimate keeps
 using the engineering engines so the website figure and the later proposal
-agree. Until the CRM exists, the lead endpoint writes to a leads inbox in the
-back office, separate from the project list; the funnel counters move there.
+agree. The lead endpoint writes to the bookings table, which is the CRM's
+data: its statuses, notes and funnel counters are served by `/api/leads`
+and have no screen in the engineering app (the owner's decision, round 3:
+"the leads tab should not be in the solar engineering app"). The
+engineering app keeps one hand-off, Projects › "From a website booking",
+which lists the open bookings and starts a project from one.
 
-What moves out of the engineering screens now: the funnel card and the lead
-badges on the list; the stages lead and contacted; preferred time, callback
-promise and the privacy line (website settings); the estimate page link in
-the nav. What stays: the job stage as a status pill on the project head
-(assessed to closed, until the PM module takes the later ones), the card's
-next step as a saved field, the hour-by-hour crew plan, the pickup list and
-the cashflow projection (plans, not tracking).
+What has moved out of the engineering screens: the Leads page with its
+funnel, statuses and notes; the funnel card and the lead badges on the
+list; the stages lead and contacted; preferred time, callback promise and
+the privacy line (website settings); the estimate page link in the nav.
+What stays: the job stage as a status pill on the project head (assessed
+to closed, until the PM module takes the later ones), the card's next step
+as a saved field, the hour-by-hour crew plan, the pickup list and the
+cashflow projection (plans, not tracking).
 
 ## 6. Findings from the four audits, and what happens to each
 

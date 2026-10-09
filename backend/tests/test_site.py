@@ -86,7 +86,7 @@ def test_lead_notice_reads_line_by_line():
     subject, body = lead_notice(
         name="Maria Santos", contact="0917 555 1234", preferred_time="Evening", wants="a lower bill, no battery", uses="spread through the day",
         kwh=333, monthly_php=4000, estimate=est, place="Pila, Laguna", pin_placed=False, address="", source="fb/audit",
-        link="https://solar.pldevinc.com/leads/1", promise="within one working day",
+        link="https://solar.pldevinc.com/?booking=1", promise="within one working day",
     )
     assert subject == "New lead: Maria Santos, 0917 555 1234, Pila (evening)"
     assert body.splitlines() == [
@@ -98,7 +98,7 @@ def test_lead_notice_reads_line_by_line():
         "Saw on the website: 5 panels, 2.92 kWp, ₱161,000, bill ₱4,002 → about ₱516, pays for itself in 3.8 years",
         "Location: Pila, Laguna",
         "Source: fb/audit",
-        "Open: https://solar.pldevinc.com/leads/1",
+        "Open: https://solar.pldevinc.com/?booking=1",
         "The thank-you page promised a message or call within one working day.",
     ]
     # a battery, a pin, an address, no preferred time, no estimate seen
@@ -106,7 +106,7 @@ def test_lead_notice_reads_line_by_line():
     subject, body = lead_notice(
         name="Jose", contact="jose.fb", preferred_time="", wants="a lower bill and backup in brownouts", uses="mostly in the evening",
         kwh=120, monthly_php=None, estimate=est2, place="near Pila, Laguna", pin_placed=True, address="Brgy. Labuin, beside the chapel",
-        source="direct", link="lead #2", promise="the same day",
+        source="direct", link="booking #2", promise="the same day",
     )
     assert subject == "New lead: Jose, jose.fb, near Pila"
     lines = body.splitlines()
@@ -146,8 +146,8 @@ def test_lead_route_sends_the_line_by_line_notice(client, monkeypatch):
     assert subject == "New lead: Maria Santos, 0917 555 1234, Pila (evening)"
     assert "Wants: a lower bill, no battery\nUses power: spread through the day\nBill: about 333 kWh (₱4,000)\n" in body
     assert "Saw on the website: 5 panels, 2.92 kWp, ₱161,000, bill ₱4,002 → about ₱516, pays for itself in 3.8 years\n" in body
-    # the link opens the lead in the back office's inbox, not a project
-    assert f"Source: fb/audit\nOpen: https://solar.pldevinc.com/leads/{r.json()['id']}\n" in body
+    # the link opens the booking under Projects (the hand-off), not a project of its own
+    assert f"Source: fb/audit\nOpen: https://solar.pldevinc.com/?booking={r.json()['id']}\n" in body
     assert body.endswith("The thank-you page promised a message or call within one working day.\n")
     client.post("/api/auth/login", json={"username": "u", "password": "p"})
     assert client.get(f"/api/leads/{r.json()['id']}").json()["name"] == "Maria Santos"
