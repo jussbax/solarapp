@@ -1,20 +1,85 @@
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import type { AssessmentDoc, Results } from '../types'
+import type { AssessmentDoc, FaceGeometry, Results } from '../types'
 import { compassLabel } from './compass'
 import { fmtDateTime, n0, plural } from '../fmt'
+import { Dialog } from './Dialog'
 import { PlanDrawing } from './PlanDrawing'
 import MonthTable, { type MonthRow } from './MonthTable'
-import { useNarrow } from './responsive'
+import { useElementWidth, useNarrow } from './responsive'
 
 const n1 = (v: number) => v.toFixed(1)
 const n2 = (v: number) => v.toFixed(2)
 const n3 = (v: number) => v.toFixed(3)
 const pct = (v: number | null | undefined) => (v == null ? '-' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`)
+/** The card's drawing uses the card's width, up to this; a tall face keeps its scale up to PLAN_MAX_H. */
+const PLAN_MAX_W = 900
+const PLAN_MAX_H = 600
+
+/** The caption under a face's plan: facing, tilt, panels used of possible, kWp. */
+function faceCaption(g: FaceGeometry, wattPeak: number): string {
+  const count = (g.panels ?? []).length
+  const n = g.used ?? count
+  const kwp = (n * wattPeak) / 1000
+  const panelsTxt = g.used != null ? `${g.used} of ${count} panels` : `${plural(count, 'panel')} fit`
+  return `looks ${g.compass || compassLabel(g.azimuth_deg)} (${g.azimuth_deg}°) · tilt ${g.tilt_deg}° · ${panelsTxt}${g.left_out > 0 ? `, ${g.left_out} left out for vents` : ''} · ${n2(kwp)} kWp`
+}
+
+/** The viewport height, kept current as the window resizes (the dialog's drawing fits what is on screen). */
+function useViewportHeight(): number {
+  const [h, setH] = useState(() => (typeof window === 'undefined' ? 800 : window.innerHeight))
+  useEffect(() => {
+    const on = () => setH(window.innerHeight)
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
+  return h
+}
+
+/** The same drawing at the largest size that fits the screen, inside the one Dialog. The dialog kit sizes itself for
+ * questions (460 px wide, under the page's sticky bars); for a drawing the box takes the viewport and sits above the
+ * step tabs and the action bar, set on the dialog elements from inside it and undone on close. */
+function PlanLarge({ face, wattPeak, narrow }: { face: FaceGeometry; wattPeak: number; narrow: boolean }) {
+  const [ref, width] = useElementWidth<HTMLDivElement>()
+  const vh = useViewportHeight()
+  const [chrome, setChrome] = useState(230) // the head, the footer, the caption and the paddings, measured once mounted
+  // the legend under the drawing: one line per shade source and wall, the dashed note and the dimensions note
+  const legendLines = (face.obstacles ?? []).length + 2
+  useLayoutEffect(() => {
+    const el = ref.current
+    const dlg = el?.closest<HTMLElement>('.dlg')
+    if (!el || !dlg) return
+    const backdrop = dlg.parentElement
+    const before = { maxWidth: dlg.style.maxWidth, width: dlg.style.width, z: backdrop?.style.zIndex ?? '' }
+    dlg.style.maxWidth = narrow ? '' : 'calc(100vw - 32px)'
+    dlg.style.width = '100%'
+    if (backdrop) backdrop.style.zIndex = '1300'
+    const h = (sel: string) => dlg.querySelector<HTMLElement>(sel)?.offsetHeight ?? 0
+    const caption = el.querySelector<HTMLElement>('.plan-caption')?.offsetHeight ?? 0
+    setChrome(h('.dlg-head') + h('.dlg-foot') + caption + legendLines * 17 + (narrow ? 0 : 32) + 30)
+    return () => {
+      dlg.style.maxWidth = before.maxWidth
+      dlg.style.width = before.width
+      if (backdrop) backdrop.style.zIndex = before.z
+    }
+  }, [ref, narrow, legendLines])
+  const maxH = Math.max(240, vh - chrome)
+  return (
+    <div ref={ref} data-testid="plan-large" style={{ width: '100%' }}>
+      <div className="muted plan-caption" style={{ marginBottom: 8 }}>
+        {faceCaption(face, wattPeak)}
+      </div>
+      {width > 0 && <PlanDrawing face={face} selected={face.used} width={width} maxHeight={maxH} />}
+    </div>
+  )
+}
 
 /** Roof and production: the production figures (at the panels beside at the meter), one plan drawing per face that
  * holds panels with the sized system's panels highlighted, the month table, and the internal details. */
 export default function ResultsView({ doc, results }: { doc: AssessmentDoc; results: Results }) {
   const narrow = useNarrow()
+  const [plansRef, plansWidth] = useElementWidth<HTMLDivElement>()
+  const [large, setLarge] = useState<FaceGeometry | null>(null)
   const prod = results.production
   const ref = results.reference
   const selected = results.panels.find((p) => p.panel.id === results.selected_panel_id)
@@ -117,20 +182,41 @@ export default function ResultsView({ doc, results }: { doc: AssessmentDoc; resu
               ? 'Solid panels are the ones the sized system uses (best face first); dashed positions are the rest of what the roof can hold.'
               : 'Every position the roof can hold; the sized system is marked once the energy audit is calculated.'}
           </div>
-          <div className="plans">
+          {/* one face per row, the drawing as wide as the card (up to 900 px; the full 344 px on the phone) so a tall face stays legible */}
+          <div className="plans" ref={plansRef} style={{ gridTemplateColumns: '1fr' }}>
             {geometry.map((g) => (
               <div key={g.face_id} className="plan" data-testid="plan-drawing">
-                <div className="plan-title">
-                  <b>{g.name}</b>{' '}
-                  <span className="muted">
-                    {g.used != null ? `${g.used} of ${g.count} positions used` : `${plural(g.count, 'panel')} fit`}
-                    {g.left_out > 0 && `, ${g.left_out} left out for vents`} · {n1(g.eave_m)} × {n1(g.slope_m)} m
+                <div className="plan-title" style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ flex: '1 1 auto', minWidth: 0 }}>
+                    <b>{g.name}</b>{' '}
+                    <span className="muted">
+                      {g.used != null ? `${g.used} of ${g.count} positions used` : `${plural(g.count, 'panel')} fit`}
+                      {g.left_out > 0 && `, ${g.left_out} left out for vents`} · {n1(g.eave_m)} × {n1(g.slope_m)} m
+                    </span>
                   </span>
+                  <button type="button" onClick={() => setLarge(g)} data-testid="plan-view-larger" aria-label={`View ${g.name} larger`}>
+                    View larger
+                  </button>
                 </div>
-                <PlanDrawing face={g} selected={g.used} width={narrow ? 344 : 440} />
+                <PlanDrawing face={g} selected={g.used} width={narrow ? 344 : Math.min(PLAN_MAX_W, plansWidth || 440)} maxHeight={PLAN_MAX_H} />
               </div>
             ))}
           </div>
+          <Dialog
+            open={large != null}
+            title={large?.name ?? ''}
+            onClose={() => setLarge(null)}
+            tall
+            wide
+            testId="plan-dialog"
+            footer={
+              <button type="button" className="primary" onClick={() => setLarge(null)} data-autofocus>
+                Close
+              </button>
+            }
+          >
+            {large && <PlanLarge face={large} wattPeak={selected.panel.watt_peak} narrow={narrow} />}
+          </Dialog>
         </>
       )}
 

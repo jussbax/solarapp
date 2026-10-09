@@ -267,7 +267,12 @@ rule; the VAT invoice in the cashflow waits on the accountant. Items 3, 6,
    table. One to two days.
 3. Plans data pack: array layout drawing and single-line diagram as SVG,
    schedule of loads and the design analysis in one PDF for the PEE's title
-   sheet and seal. Three to four days.
+   sheet and seal. Three to four days. (Built on 9 October as "Plans for
+   the PEE": an A3 landscape PDF with a title block and signature block on
+   every sheet, the cover and general notes, one layout sheet per face at
+   a stated standard scale, the equipment and circuit schedule from the
+   BOM, and the audit's schedule of loads; the single-line diagram and the
+   string table wait on the datasheets, and the last sheet says so.)
 4. Numbers the customer will later compare with the bill: system losses
    after the panels (inverter, wiring, soiling, about ten percent in total,
    editable), the battery balanced over the hourly year with days of

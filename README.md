@@ -65,7 +65,15 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    proposal PDF carries the milestone schedule and payment terms; an
    internal PDF carries the full program and the pickup list. The cashflow
    projection and any installment structure belong to the finance module
-   (the engine still computes them behind the API for it). Each
+   (the engine still computes them behind the API for it). "Plans
+   for the PEE" is an internal A3 landscape drawing set for the signing
+   engineer: a title block and signature block on every sheet (the PEE's
+   name and PRC number from the company profile, blank lines otherwise),
+   the cover and general notes, one array layout per roof face at a stated
+   standard scale with dimension lines, strings and a north arrow, the
+   equipment and circuit schedule from the BOM, and a last sheet that says
+   what still waits on the datasheets (the single-line diagram, the string
+   table) with the audit's schedule of loads. Each
    project shows an engineering status read from its facts (draft,
    surveyed, designed, proposal issued) on its head and in the project
    list; generating the proposal PDF marks it issued and locks the price
@@ -417,7 +425,7 @@ backend/solarapp/pricing/economics.py customer economics: bill before and after,
 backend/data_seed/                    bundled materials workbook, loaded on first start
 backend/solarapp/compute.py           turns an assessment into results
 backend/solarapp/data_download/       one-time PVGIS and NASA download
-backend/solarapp/reports/             roof check PDF, client card PNG, proposal PDF, program of works PDF, plan and Gantt drawings
+backend/solarapp/reports/             roof check PDF, client card PNG, proposal PDF, program of works PDF, plans for the PEE (A3), plan and Gantt drawings
 backend/solarapp/api/                 FastAPI routes (assessments, pricing, settings, bookings, auth, people)
 backend/solarapp/auth.py, users.py    accounts: passwords, sessions, roles; the server-side people command
 backend/solarapp/passkeys.py, twofactor.py  security keys and the authenticator app, per person

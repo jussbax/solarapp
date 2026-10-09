@@ -5,6 +5,7 @@ from typing import Optional
 import logging
 import re
 import unicodedata
+from dataclasses import asdict
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -21,6 +22,7 @@ from ..pricing.job import PricingContext
 from ..pricing.store import load_catalog, load_config
 from ..reports.card import build_client_card
 from ..reports.customer_pdf import build_customer_pdf
+from ..reports.plans_pdf import build_plans_pdf
 from ..reports.program_pdf import build_program_pdf
 from ..reports.quotation_pdf import build_quotation_pdf, customer_battery_kwh
 from ..schemas import JOB_STAGES, AssessmentDoc, AssessmentOut, AssessmentSummary
@@ -308,6 +310,27 @@ def program_of_works(
     company = company_settings(session, settings)
     pdf = build_program_pdf(AssessmentDoc.model_validate(a.doc), results, company)
     return Response(pdf, media_type="application/pdf", headers=_download_name("program-of-works", a, "pdf"))
+
+
+@router.get("/{assessment_id}/plans.pdf")
+def plans_for_the_pee(
+    assessment_id: int,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    """The plans for the PEE (round 4): the A3 drawing set the signing engineer seals, built from the geometry, the
+    BOM and the settings of the current calculation. Internal, so it prints on test weather like the program of works;
+    refused on stale or design-blocked results the way the proposal is, and without pricing (no BOM, no circuits)."""
+    a = _get(session, assessment_id)
+    results = _customer_results(a)
+    if not (results.get("pricing") or {}).get("available"):
+        raise HTTPException(status_code=409, detail="Calculate first. Pricing needs the panel linked to the materials list.")
+    company = company_settings(session, settings)
+    catalog = load_catalog(session, include_inactive=True)
+    items = {code: asdict(item) for code, item in catalog.items.items()}
+    pdf = build_plans_pdf(AssessmentDoc.model_validate(a.doc), results, company, items=items, config=load_config(session).model_dump(mode="json"),
+                          project_no=f"P-{a.created_at.year}-{a.id:04d}")
+    return Response(pdf, media_type="application/pdf", headers=_download_name("plans", a, "pdf"))
 
 
 @router.get("/{assessment_id}/card.png")
