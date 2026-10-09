@@ -111,6 +111,7 @@ class BillEntry(BaseModel):
     days: Optional[int] = Field(default=None, ge=20, le=40)
     amount_php: Optional[float] = Field(default=None, ge=0)
     utility: str = ""
+    generation_rate_php_per_kwh: Optional[float] = Field(default=None, ge=0)   # the generation charge per kWh on the bill: the DU credits exports at this rate
 
 
 class SystemSettings(BaseModel):

@@ -93,6 +93,7 @@ export interface BillEntry {
   days: number | null
   amount_php: number | null
   utility: string
+  generation_rate_php_per_kwh?: number | null   // the generation charge per kWh on the bill: the export credit under net metering
 }
 
 export type SystemKind = 'off_grid' | 'net_metering' | 'combination'
@@ -179,7 +180,7 @@ export interface EconomicsBlock {
   reason?: string
   warnings: Warning[]
   assumptions?: {
-    tariff_php_per_kwh: number; tariff_source: string; export_rate_php_per_kwh: number; tariff_escalation: number; degradation: number; analysis_years: number
+    tariff_php_per_kwh: number; tariff_source: string; export_rate_php_per_kwh: number; export_rate_source: string; tariff_escalation: number; degradation: number; analysis_years: number
     discount_rate: number; battery_life_years: number; inverter_life_years: number; om_per_year: number; battery_replacement_cost: number; inverter_replacement_cost: number; co2_kg_per_kwh: number
   }
   contract?: number
@@ -894,7 +895,7 @@ export function newWindow(): UsageWindow {
 export function newBill(): BillEntry {
   const d = new Date()
   d.setMonth(d.getMonth() - 1)
-  return { id: newId(), billing_month: d.toISOString().slice(0, 7), kwh: 0, days: null, amount_php: null, utility: '' }
+  return { id: newId(), billing_month: d.toISOString().slice(0, 7), kwh: 0, days: null, amount_php: null, utility: '', generation_rate_php_per_kwh: null }
 }
 
 export function windowHours(w: UsageWindow): number {

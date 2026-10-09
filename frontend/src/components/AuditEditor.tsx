@@ -224,6 +224,7 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
               <th className="num">kWh</th>
               <th className="num">Days in period</th>
               <th className="num">Amount (₱)</th>
+              <th className="num">Generation charge (₱/kWh)</th>
               <th>Electric company</th>
               <th></th>
             </tr>
@@ -243,6 +244,9 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
                 <td data-label="Amount (₱)">
                   <NumberInput value={b.amount_php} onChange={(v) => updateBill(i, { amount_php: v })} allowEmpty min={0} placeholder="optional" />
                 </td>
+                <td data-label="Generation charge (₱/kWh)">
+                  <NumberInput value={b.generation_rate_php_per_kwh ?? null} onChange={(v) => updateBill(i, { generation_rate_php_per_kwh: v })} allowEmpty min={0} step={0.01} decimals={2} placeholder="from the bill" />
+                </td>
                 <td data-label="Electric company">
                   <input value={b.utility} onChange={(e) => updateBill(i, { utility: e.target.value })} placeholder="Meralco, BATELEC II..." />
                 </td>
@@ -257,6 +261,10 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
         </table>
       </div>
       {audit.bills.length === 0 && <div className="muted" style={{ marginTop: 6 }}>No bill yet. Add the latest bill: month, kWh and amount.</div>}
+      <div className="hint" style={{ marginTop: 6 }}>
+        Generation charge: the per-kWh generation rate in the bill's breakdown. Under net metering the electric company credits exported power at this rate, so
+        the savings use it as the export credit; blank uses the figure in Settings › Customer savings.
+      </div>
       <div className="row" style={{ marginTop: 8 }}>
         <div className="narrow">
           <button type="button" onClick={() => setBills([...audit.bills, newBill()])}>

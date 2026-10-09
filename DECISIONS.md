@@ -1452,3 +1452,14 @@ background and the section remove in data entry" and, of the stage pill,
   "…" 25 → 0, duplicated headings 1 → 0, off-grid lines 4 → 0. The scanner
   still lists a "?" or an override tag as a cell's first button; measured
   on the controls alone the lines are on one edge.
+
+## The export credit is the bill's generation charge
+
+- The owner's rule (9 October): the assessor types the DU's generation
+  charge per kWh from the customer's bill, so the net metering credit is
+  the electric company's own rate. The field sits on each bill under
+  Energy audit › Electricity bill; the savings take the latest bill's
+  figure, a per-job entry on the Pricing step still wins, and only
+  without either does the settings' figure apply, with a warning on a
+  grid job. The Pricing step and the proposal say where the figure came
+  from ("From bill 2026-09" / "the generation charge on your bill").

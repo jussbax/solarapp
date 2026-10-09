@@ -626,7 +626,8 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         line = (f"Savings are estimates. They assume PHP {a['tariff_php_per_kwh']:.2f} per kWh ({src}) rising {a['tariff_escalation'] * 100:.0f}% a year, "
                 f"panels losing {a['degradation'] * 100:.1f}% of output a year")
         if eco["kind"] != "off_grid":
-            line += f", a net metering credit of PHP {a['export_rate_php_per_kwh']:.2f} per kWh for power sent to the grid"
+            credit_src = "the generation charge on your bill" if str(a.get("export_rate_source", "")).startswith("bill") else "our usual figure; your electric company's generation charge may differ"
+            line += f", a net metering credit of PHP {a['export_rate_php_per_kwh']:.2f} per kWh for power sent to the grid ({credit_src})"
         line += f", upkeep of about PHP {a['om_per_year']:,.0f} a year"
         if a["battery_replacement_cost"] > 0:
             line += f", a new battery after {a['battery_life_years']} years"

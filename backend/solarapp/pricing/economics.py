@@ -73,7 +73,15 @@ def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig, profi
         tariff_source = f"bill {b.billing_month}"
     if j.tariff_php_per_kwh:
         tariff, tariff_source = j.tariff_php_per_kwh, "entered"
-    export_rate = j.export_rate_php_per_kwh if j.export_rate_php_per_kwh is not None else e.export_rate_php_per_kwh
+    # export credit: the job's own figure, else the generation charge the assessor read off the latest bill (the DU credits
+    # exported energy at its generation rate, not the retail rate), else the settings' figure
+    export_rate, export_source = e.export_rate_php_per_kwh, "setting"
+    gen_bills = [b for b in doc.audit.bills if b.generation_rate_php_per_kwh]
+    if gen_bills:
+        gb = sorted(gen_bills, key=lambda x: x.billing_month)[-1]
+        export_rate, export_source = float(gb.generation_rate_php_per_kwh), f"bill {gb.billing_month}"
+    if j.export_rate_php_per_kwh is not None:
+        export_rate, export_source = j.export_rate_php_per_kwh, "entered"
     esc = j.tariff_escalation if j.tariff_escalation is not None else e.tariff_escalation
     deg = j.degradation if j.degradation is not None else e.degradation
     years = j.analysis_years or e.analysis_years
@@ -96,6 +104,10 @@ def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig, profi
     contract = float(pricing["totals"]["contract_rounded"])
     om = j.om_per_year if j.om_per_year is not None else contract * e.om_share_per_year
     off_grid = sizing["kind"] == "off_grid"
+    if not off_grid and export_source == "setting":
+        warnings.append({"code": "export_rate_default", "message": (
+            f"The export credit uses the settings' figure of ₱{export_rate:.2f} per kWh. Type the generation charge from the customer's bill "
+            "(Energy audit › Electricity bill) so the net metering credit is the electric company's own rate.")})
     if off_grid:
         export_rate = 0.0
 
@@ -178,7 +190,7 @@ def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig, profi
         "available": True,
         "warnings": warnings,
         "assumptions": {
-            "tariff_php_per_kwh": tariff, "tariff_source": tariff_source, "export_rate_php_per_kwh": export_rate, "tariff_escalation": esc,
+            "tariff_php_per_kwh": tariff, "tariff_source": tariff_source, "export_rate_php_per_kwh": export_rate, "export_rate_source": export_source, "tariff_escalation": esc,
             "degradation": deg, "analysis_years": years, "discount_rate": disc, "battery_life_years": bat_life, "battery_life_source": bat_life_source,
             "inverter_life_years": inv_life, "om_per_year": om, "battery_replacement_cost": battery_cost, "inverter_replacement_cost": inverter_cost,
             "replacement_labor_php": repl_labor, "replacement_vat": vat, "co2_kg_per_kwh": e.co2_kg_per_kwh,

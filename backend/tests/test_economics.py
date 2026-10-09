@@ -114,3 +114,31 @@ def test_battery_life_follows_the_warranty_and_replacements_carry_vat():
     assert blank["assumptions"]["battery_life_years"] == 5 and blank["assumptions"]["battery_life_source"] == "assumed"
     assert any(w["code"] == "battery_life_verify" for w in blank["warnings"])
     assert build_economics(AssessmentDoc(), _results(), PricingConfig())["assumptions"]["battery_life_source"] == "assumed"
+
+
+def test_export_credit_from_the_bills_generation_charge():
+    """The assessor types the generation charge off the bill; the DU credits exports at that rate, not the settings' figure."""
+    doc = AssessmentDoc()
+    doc.audit.bills = [
+        {"id": "b1", "billing_month": "2026-07", "kwh": 330, "amount_php": 3900.0, "utility": "BATELEC II", "generation_rate_php_per_kwh": 6.12},
+        {"id": "b2", "billing_month": "2026-08", "kwh": 338, "amount_php": 3987.17, "utility": "BATELEC II", "generation_rate_php_per_kwh": 5.98},
+    ]
+    doc = AssessmentDoc.model_validate(doc.model_dump())
+    cfg = PricingConfig()
+    eco = build_economics(doc, _results(), cfg)
+    a = eco["assumptions"]
+    assert a["export_rate_php_per_kwh"] == pytest.approx(5.98) and a["export_rate_source"] == "bill 2026-08"   # the latest bill's rate
+    assert eco["monthly"][0]["bill_after"] == pytest.approx(max(80 * a["tariff_php_per_kwh"] - 120 * 5.98, 0))
+    assert not [w for w in eco["warnings"] if w["code"] == "export_rate_default"]
+    # the job's own figure wins over the bill
+    doc.economics.export_rate_php_per_kwh = 7.0
+    a2 = build_economics(doc, _results(), cfg)["assumptions"]
+    assert a2["export_rate_php_per_kwh"] == 7.0 and a2["export_rate_source"] == "entered"
+    # no generation charge typed: the settings' figure, and a warning on a grid job but not on a no-export one
+    plain = AssessmentDoc()
+    plain.audit.bills = [{"id": "b1", "billing_month": "2026-08", "kwh": 338, "amount_php": 3987.17, "utility": ""}]
+    plain = AssessmentDoc.model_validate(plain.model_dump())
+    eco3 = build_economics(plain, _results(), cfg)
+    assert eco3["assumptions"]["export_rate_php_per_kwh"] == 6.5 and eco3["assumptions"]["export_rate_source"] == "setting"
+    assert any(w["code"] == "export_rate_default" for w in eco3["warnings"])
+    assert not any(w["code"] == "export_rate_default" for w in build_economics(plain, _results(kind="off_grid"), cfg)["warnings"])
