@@ -26,7 +26,7 @@ from ..config import Settings, get_settings
 from ..db import get_session
 from ..models import User
 from ..schemas import LoginIn, PasskeyLoginIn, PasskeyRegisterIn, PasswordChangeIn, StepUpIn, TotpCodeIn
-from .quick_routes import _bucket_ok, _hits, client_ip
+from .quick_routes import _bucket_ok, _hits, _lock as _hits_lock, client_ip
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 log = logging.getLogger("solarapp.audit")
@@ -77,9 +77,10 @@ OPTIONS_PER_HOUR = 60   # anonymous passkey challenges per address; a key sign-i
 
 
 def _options_allowed(request: Request) -> None:
+    """The estimate limiter's dictionary under the estimate limiter's lock: one lock per shared structure."""
     key = "pk:" + client_ip(request)
     now = time.time()
-    with _lock:
+    with _hits_lock:
         if not _bucket_ok(key, OPTIONS_PER_HOUR, now):
             raise HTTPException(status_code=429, detail="Too many attempts. Try again later.", headers={"Retry-After": "600"})
         _hits.setdefault(key, deque()).append(now)
@@ -153,7 +154,7 @@ def change_password(body: PasswordChangeIn, request: Request, response: Response
     if problem:
         raise HTTPException(status_code=422, detail=problem)
     if body.new_password == body.current_password:
-        raise HTTPException(status_code=422, detail="Choose a password you have not used here before.")
+        raise HTTPException(status_code=422, detail="Choose a password different from your current one.")
     user.password_hash = hash_password(body.new_password)
     user.must_change_password = False
     user.session_generation = new_generation()

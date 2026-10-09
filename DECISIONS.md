@@ -631,9 +631,11 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
 
 - The session cookie's generation is an HMAC of the password and a server
   nonce under the secret key, so a stolen cookie no longer carries a
-  crackable fingerprint of the password. The nonce lives in
-  `data/session.key`; "Sign out everywhere" rotates it and ends every
-  session at once (logout stays per device).
+  crackable fingerprint of the password. The nonce lived in
+  `data/session.key` until accounts arrived; it is now each person's
+  session generation in the database (see "Accounts"), and "Sign out
+  everywhere" rotates that one person's generation (logout stays per
+  device).
 - Managing security keys is a step-up action: the password (and a fresh
   code) must be entered again. A stolen cookie alone cannot add a key or
   remove the owner's, which would otherwise have outlived a password
