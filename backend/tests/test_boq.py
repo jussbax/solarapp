@@ -28,7 +28,9 @@ def test_mounting_matches_sample_job(imported):
     assert q["rail"] == 8 and q["l_foot"] == 24 and q["end_clamp"] == 8 and q["mid_clamp"] == 12 and q["splice"] == 4
     assert q["panel"] == 8
     assert res.choices["strings"] == 1 and q["dc_breaker"] == 1 and q["mc4_pair"] == 2
-    assert q["ac_breaker"] == 4 and q["ac_spd"] == 4 and q["enclosure"] == 2 and q["ground_rod"] == 1 and q["earth_lug"] == 4
+    # round 3: one breaker per AC circuit (1 inverter side + 2 grid side), one SPD per board, one box per inverter, and the
+    # bonding lugs (one per panel, one per rail line) on the earth-lug line beside the four at the boxes and the rod
+    assert q["ac_breaker"] == 3 and q["ac_spd"] == 1 and q["enclosure"] == 1 and q["ground_rod"] == 1 and q["earth_lug"] == 4 + 8 + 4
 
 
 def test_default_inverter_in_parallel(imported):
@@ -40,12 +42,20 @@ def test_default_inverter_in_parallel(imported):
     assert inv.code == "FS-INV-008" and inv.qty == 1 and "grid-interactive: yes" in inv.note
     off = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6, kind="off_grid"), cat, cfg)
     assert next(l for l in off.lines if l.role == "inverter").code == "FS-INV-008"   # Felicity 6 kW eco-hybrid off the grid
+    # round 3 (E-01): 7.4 kW is 23% over the 6 kW default, beyond the tolerance, so one larger unit comes before two in parallel:
+    # off the grid the brand's next rating (the Felicity 8 kW off-grid unit, the cheapest that fits), with the warning that names the parallel price
     big = generate_boq(BoqRequest("BC-PNL-001", 20, rows_for(20, 10, 1.134), inverter_kw=8, inverter_required_kw=7.4, battery_kwh=10, kind="off_grid"), cat, cfg)
     inv2 = next(l for l in big.lines if l.role == "inverter")
-    assert inv2.code == "FS-INV-008" and inv2.qty == 2 and "parallel" in inv2.note
-    assert next(l for l in big.lines if l.role == "thhn").qty == 2 * 35 and next(l for l in big.lines if l.role == "ac_breaker").qty == 8
+    assert inv2.code == "FS-INV-006" and inv2.qty == 1 and cat.get(inv2.code).rating == 8 and cat.get(inv2.code).supplier == "Felicity Solar"
+    assert "parallel" in next(w for w in big.warnings if w["code"] == "inverter_stepped_up")["message"]
+    # the owner's own per-job pick is kept and goes parallel, warned; every per-inverter count follows (3 breakers, 110 m THHN each)
+    fixed = generate_boq(BoqRequest("BC-PNL-001", 20, rows_for(20, 10, 1.134), inverter_kw=8, inverter_required_kw=7.4, battery_kwh=10, kind="off_grid", inverter_code="FS-INV-008"), cat, cfg)
+    inv3 = next(l for l in fixed.lines if l.role == "inverter")
+    assert inv3.code == "FS-INV-008" and inv3.qty == 2 and "parallel" in inv3.note and any(w["code"] == "inverter_parallel" for w in fixed.warnings)
+    assert next(l for l in fixed.lines if l.role == "thhn").qty == 2 * 110 and next(l for l in fixed.lines if l.role == "ac_breaker").qty == 6
     big_grid = generate_boq(BoqRequest("BC-PNL-001", 20, rows_for(20, 10, 1.134), inverter_kw=8, inverter_required_kw=7.4, battery_kwh=10), cat, cfg)
-    assert next(l for l in big_grid.lines if l.role == "inverter").qty == 2
+    inv4 = next(l for l in big_grid.lines if l.role == "inverter")
+    assert inv4.qty == 1 and cat.get(inv4.code).rating >= 7.4 and cat.get(inv4.code).grid_interactive is True
     over = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6, inverter_code="BC-INV-002", kind="off_grid"), cat, cfg)
     assert next(l for l in over.lines if l.role == "inverter").code == "BC-INV-002"
     cfg2 = cfg.model_copy(deep=True)
@@ -92,7 +102,7 @@ def test_tanauan_like_job_prices(imported):
     assert tot["kwp"] == pytest.approx(9 * 585 / 1000)
     assert tot["contract_rounded"] % 100 == 0 and tot["contract_rounded"] > 200000
     assert priced["labor"]["pairs"] >= 1 and priced["freight"]["trips"] == 1
-    assert not priced["missing_codes"]
+    assert all(c.startswith("NO-ITEM-") for c in priced["missing_codes"])   # roles without an item yet (fasteners, monitoring, placards) carry no price
     # a battery-less net-metering job has no battery lines
     res2 = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=0), cat, cfg)
     assert not {"battery", "battery_cable", "battery_breaker"} & {l.role for l in res2.lines}

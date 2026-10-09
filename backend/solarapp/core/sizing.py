@@ -31,9 +31,19 @@ metering with a battery.
   and the result reports the hours the grid steps in, on how many days, and
   the kWh it supplies (every kind with a battery). Month totals and the
   typical-day charts then come from that run.
-* Inverter: smallest catalogue size that covers the nameplate coincident
-  peak, the surge of the largest motor at the stated surge factor, and the
-  PV array at the allowed PV-to-inverter ratio. Parallel units if needed.
+* Inverter: for the battery kinds, the smallest catalogue size that covers
+  the nameplate coincident peak, the surge of the largest motor at the
+  stated surge factor, and the PV array at the allowed PV-to-inverter ratio
+  (in backup mode the inverter carries the house). For net metering without
+  a battery there is no backup mode: the grid carries the house peak and the
+  inverter only has to carry the array, so the requirement is the PV rule
+  alone; the house peak is reported for the pass-through check the BOQ makes
+  against the chosen unit's AC input rating. Parallel units if needed.
+* Battery figures: `usable_kwh` is what the balance may draw (at the depth
+  of discharge); `installed_kwh` (also `sized_nominal_kwh`) is the nominal
+  capacity that must be installed for it. The priced battery bank's nominal
+  kWh is a different figure (the catalogue units) and lives in
+  `pricing.choices.battery_nominal_kwh`.
 """
 from __future__ import annotations
 
@@ -449,11 +459,16 @@ def size_system(
     # --- inverter
     surge_req = (peak_load_kw + largest_motor_kw * (largest_motor_multiplier - 1.0)) / inverter.surge_factor if inverter.surge_factor > 0 else peak_load_kw
     pv_req = kwp / inverter.pv_ratio_max if inverter.pv_ratio_max > 0 else kwp
-    required = max(peak_load_kw, surge_req, pv_req)
+    if kind == "net_metering":
+        # no battery, no backup mode: the grid carries the house peak, the inverter carries the array (round 3, E-01)
+        required, binding = pv_req, "PV array"
+    else:
+        required = max(peak_load_kw, surge_req, pv_req)
+        binding = "peak load" if required == peak_load_kw else ("motor surge" if required == surge_req else "PV array")
     inv_kw, inv_units = pick_inverter(required, inverter) if required > 0 else (min(inverter.sizes_kw), 1)
     if inv_units > 1:
-        warnings.append({"code": "inverter_parallel", "message": f"The load needs {required:.1f} kW, more than the largest inverter in the list, so {inv_units} × {inv_kw:g} kW in parallel are used."})
-    binding = "peak load" if required == peak_load_kw else ("motor surge" if required == surge_req else "PV array")
+        what = "The array" if binding == "PV array" else "The load"
+        warnings.append({"code": "inverter_parallel", "message": f"{what} needs {required:.1f} kW, more than the largest inverter in the list, so {inv_units} × {inv_kw:g} kW in parallel are used."})
 
     return {
         "kind": kind,
@@ -482,11 +497,15 @@ def size_system(
         "offgrid": {"pv_margin": offgrid.pv_margin} if off_grid else None,
         "battery": {
             "usable_kwh": usable, "installed_kwh": installed, "power_kw": battery_power,
+            # the same two figures under names that say which is which (round 3, E-12): the usable kWh the balance
+            # draws and the nominal kWh the sizing asks to install; the priced bank's nominal kWh is in the pricing block
+            "sized_usable_kwh": usable, "sized_nominal_kwh": installed,
             "depth_of_discharge": battery.depth_of_discharge, "round_trip_efficiency": battery.round_trip_efficiency,
             "days_of_autonomy": autonomy if with_battery else None,
         },
         "inverter": {
             "size_kw": inv_kw, "units": inv_units, "required_kw": required, "binding": binding,
+            "rule": "array" if kind == "net_metering" else "peak",   # array: the PV rule alone (no backup mode); peak: peak, surge and PV
             "peak_load_kw": peak_load_kw, "surge_requirement_kw": surge_req, "pv_requirement_kw": pv_req,
             "largest_motor_kw": largest_motor_kw, "largest_motor_multiplier": largest_motor_multiplier,
             "surge_factor": inverter.surge_factor, "pv_ratio_max": inverter.pv_ratio_max, "sizes_kw": inverter.sizes_kw,

@@ -984,6 +984,7 @@ export interface MaterialItem {
   mppt_max_a?: number | null
   ac_input_a?: number | null
   battery_max_a?: number | null
+  has_transfer_switch?: boolean | null
   continuous_a?: number | null
   voc_v?: number | null
   vmp_v?: number | null

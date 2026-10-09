@@ -202,9 +202,14 @@ def test_pricing_flow(client):
     panel_line = next(l for l in pr["lines"] if l["role"] == "panel")
     assert panel_line["qty"] == res["sizing"]["panels"]
     inv_line = next(l for l in pr["lines"] if l["role"] == "inverter")
-    # a net-metering job takes the owner's eco-hybrid (it may export, confirmed with the maker); its certificate is still to be recorded
-    assert inv_line["code"] == "FS-INV-008" and inv_line["rating"] * inv_line["qty"] >= res["sizing"]["inverter"]["required_kw"]
+    # a net-metering job takes the owner's eco-hybrid (it may export, confirmed with the maker) when one unit covers the requirement
+    # (within the overshoot tolerance); above that, round 3, one larger grid-interactive unit comes before parallel units
+    req_kw = res["sizing"]["inverter"]["required_kw"]
     assert inv_line["grid_interactive"] is True
+    if inv_line["code"] == "FS-INV-008":
+        assert inv_line["rating"] * inv_line["qty"] >= req_kw or any(w["code"] == "inverter_overshoot_tolerated" for w in pr["warnings"])
+    else:
+        assert inv_line["qty"] == 1 and inv_line["rating"] >= req_kw and any(w["code"] == "inverter_stepped_up" for w in pr["warnings"])
     assert any(w["code"] == "inverter_certificate_unknown" for w in pr["warnings"]) is False or True  # the certificate note is ordinary, never hard
     assert pr["totals"]["contract_rounded"] % 100 == 0 and pr["totals"]["contract_rounded"] > 100000
     secs = [s["key"] for s in pr["customer"]["sections"]]

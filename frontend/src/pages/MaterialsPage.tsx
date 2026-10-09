@@ -12,7 +12,7 @@ function blankItem(): ItemDraft {
     code: '', category: 'Accessories', supplier: '', name: '', spec: '', unit: 'pc', sold_as: 'pc', list_price: 0, rating: null, rating_unit: '',
     weight_kg: 0, volume_m3: 0, weight_source: 'manual', storage: 0, price_list_date: '', remarks: '', panel_length_m: null, panel_width_m: null, active: true,
     grid_interactive: null, certifications: '', max_pv_voltage_v: null, mppt_min_v: null, mppt_max_v: null, mppt_count: null, mppt_max_a: null, ac_input_a: null,
-    battery_max_a: null, continuous_a: null, voc_v: null, vmp_v: null, isc_a: null, imp_a: null, temp_coeff_voc_pct: null, temp_coeff_isc_pct: null,
+    battery_max_a: null, has_transfer_switch: null, continuous_a: null, voc_v: null, vmp_v: null, isc_a: null, imp_a: null, temp_coeff_voc_pct: null, temp_coeff_isc_pct: null,
   }
 }
 
@@ -62,6 +62,16 @@ function ElectricalFields({ it, set }: { it: ItemDraft; set: (p: Partial<ItemDra
         </Field>
         <Field label="Certifications" width={260}>
           <input value={it.certifications ?? ''} onChange={(e) => set({ certifications: e.target.value })} placeholder="IEC 61727 / 62116, UL 1741" />
+        </Field>
+        <Field label="Transfer switch" width={200}>
+          <select
+            value={it.has_transfer_switch === true ? 'yes' : it.has_transfer_switch === false ? 'no' : ''}
+            onChange={(e) => set({ has_transfer_switch: e.target.value === 'yes' ? true : e.target.value === 'no' ? false : null })}
+          >
+            <option value="">unknown (an ATS is priced)</option>
+            <option value="yes">built in: no external ATS</option>
+            <option value="no">none: an ATS is priced</option>
+          </select>
         </Field>
         <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>
           Net-metering jobs only take an inverter marked grid-interactive; the certificate prints on the proposal and goes to the electric company. Read from the

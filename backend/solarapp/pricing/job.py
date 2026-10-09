@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ..schemas import AssessmentDoc, CandidatePanel
-from .boq import BoqRequest, RoofRow, generate_boq
+from .boq import NO_ITEM_PREFIX, BoqRequest, RoofRow, generate_boq
 from .catalog import Catalog, Item
 from .config import PricingConfig
 from .engine import BomLine, JobInputs, landed_cost, price_job
@@ -141,6 +141,7 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
         inverter_kw=float(inv["size_kw"]), inverter_units=int(inv["units"]), inverter_required_kw=float(inv.get("required_kw") or 0) or None, battery_kwh=bat_kwh,
         strings_override=pj.strings_override, inverter_code=pj.inverter_code, battery_code=pj.battery_code,
         pv_run_m=pj.pv_run_m, ac_run_m=pj.ac_run_m, grounding_run_m=pj.grounding_run_m, conduit_m=pj.conduit_m,
+        peak_load_kw=float(inv.get("peak_load_kw") or 0) or None,
     )
     boq = generate_boq(req, catalog, cfg_job)
     warnings += boq.warnings
@@ -169,6 +170,9 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
             continue
         lc = landed_cost(it, catalog, cfg_job)
         cash_by_supplier[it.supplier] = cash_by_supplier.get(it.supplier, 0.0) + (lc.net_price + lc.payment_fee) * l.qty
+    # a role without an item (code NO-ITEM-...) is a BOM line by design, warned once by the generator, not a missing code
+    missing = [c for c in priced["missing_codes"] if not str(c).startswith(NO_ITEM_PREFIX)]
+    all_warnings = warnings + [{"code": "missing_item", "message": f"Code {c} is not in the materials list."} for c in missing]
     priced.update({
         "cash_by_supplier": cash_by_supplier,
         "available": True,
@@ -176,7 +180,11 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
         "generated_bom": generated,
         "choices": boq.choices,
         "pin_distance": pin,
-        "warnings": warnings + [{"code": "missing_item", "message": f"Code {c} is not in the materials list."} for c in priced["missing_codes"]],
+        "warnings": all_warnings,
+        # round 3: a failed circuit coordination refuses the customer documents on the server (like the stale rule);
+        # the codes say which rule failed. The certificate text prints on the proposal, blank until it is on file.
+        "design_blocked": [w["code"] for w in all_warnings if w.get("blocks_documents")],
+        "inverter_certificate": str(boq.choices.get("inverter_certifications") or ""),
         "quotation_validity_days": cfg.job.quotation_validity_days,
     })
     return priced

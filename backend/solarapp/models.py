@@ -145,6 +145,7 @@ class MaterialItem(SQLModel, table=True):
     mppt_max_a: Optional[float] = None          # inverters: maximum current per MPPT
     ac_input_a: Optional[float] = None          # inverters: maximum AC input (grid pass-through) current
     battery_max_a: Optional[float] = None       # inverters: maximum battery charge/discharge current
+    has_transfer_switch: Optional[bool] = None  # inverters: carries its own transfer switch, so no external ATS; None = unknown
     continuous_a: Optional[float] = None        # batteries: continuous discharge current
     voc_v: Optional[float] = None               # panels: open-circuit voltage at STC
     vmp_v: Optional[float] = None               # panels: voltage at maximum power

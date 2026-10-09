@@ -186,24 +186,31 @@ def test_bom_export_both_ways(client):
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
     assert r.headers["content-disposition"].startswith('attachment; filename="bom-Maria_Santos.csv"')
     rows = r.content.decode("utf-8-sig").splitlines()
-    assert rows[0] == "code,item,supplier,qty,unit,role,note" and len(rows) == len(lines) + 1
-    panel = next(l for l in rows[1:] if l.startswith("BC-PNL-001,"))
-    assert ",Blue Carbon," in panel and ",pc,panel," in panel
+    # round 3 (E-14): a header block, then the columns with the spec and the pack rounding, the lines grouped by category
+    assert rows[0] == "Bill of materials" and rows[1].startswith("Customer,Maria Santos") and rows[2].startswith(f"Project,#{aid} P-") and rows[4].startswith("System,")
+    columns = "category,code,item,spec / model,supplier,qty,unit,packs,role,note"
+    head = rows.index(columns)
+    body = [l for l in rows[head + 1:] if not l.startswith("— ")]
+    groups = [l for l in rows[head + 1:] if l.startswith("— ")]
+    assert len(body) == len(lines) and groups[0] == "— Solar Panel —" and len(groups) == len({l["category"] or "" for l in lines if l.get("found", True)} | {c for c in ("(no item yet)",) if any(not l.get("found", True) for l in lines)})
+    panel = next(l for l in body if l.startswith("Solar Panel,BC-PNL-001,"))
+    assert ",Blue Carbon," in panel and ",pc,,panel," in panel
     x = client.get(f"/api/assessments/{aid}/bom.xlsx")
     assert x.status_code == 200 and x.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert x.headers["content-disposition"].startswith('attachment; filename="bom-Maria_Santos.xlsx"')
     ws = load_workbook(io.BytesIO(x.content))["BOM"]
-    assert [c.value for c in ws[1]] == ["code", "item", "supplier", "qty", "unit", "role", "note"] and ws.max_row == len(lines) + 1
-    assert ws.freeze_panes == "A2" and ws["A1"].font.bold
-    codes = {ws.cell(row=i, column=1).value: ws.cell(row=i, column=4).value for i in range(2, ws.max_row + 1)}
-    assert codes["BC-PNL-001"] == next(l["qty"] for l in lines if l["code"] == "BC-PNL-001")
+    assert ws["A1"].value == "Bill of materials" and ws["A1"].font.bold
+    head_row = next(i for i in range(1, ws.max_row + 1) if ws.cell(row=i, column=1).value == "category")
+    assert [c.value for c in ws[head_row]] == columns.split(",") and ws.freeze_panes == f"A{head_row + 1}"
+    codes = {ws.cell(row=i, column=2).value: ws.cell(row=i, column=6).value for i in range(head_row + 1, ws.max_row + 1) if ws.cell(row=i, column=2).value}
+    assert len(codes) == len(lines) and codes["BC-PNL-001"] == next(l["qty"] for l in lines if l["code"] == "BC-PNL-001")
     # the owner's edits travel with the export
     doc = deepcopy(out["doc"])
     doc["pricing"]["bom_edits"] = [{"code": "BC-PNL-001", "qty": 5, "note": ""}]
     r2 = client.post(f"/api/assessments/{aid}/compute", json=doc)
     assert r2.status_code == 200
     rows = client.get(f"/api/assessments/{aid}/bom.csv").content.decode("utf-8-sig").splitlines()
-    assert any(l.startswith("BC-PNL-001,") and ",5,pc,panel," in l and "(edited)" in l for l in rows)
+    assert any(l.startswith("Solar Panel,BC-PNL-001,") and ",5,pc,,panel," in l and "(edited)" in l for l in rows)
     # the one stale rule, and a record without pricing
     doc["notes"] = "changed"
     assert client.put(f"/api/assessments/{aid}", json=doc).json()["results_stale"] is True

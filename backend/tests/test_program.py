@@ -27,6 +27,8 @@ def priced():
     cash = {}
     for l in boq.lines:
         it = cat.get(l.code)
+        if it is None:   # a role without an item yet (round 3) carries no price and no supplier cash
+            continue
         lc = landed_cost(it, cat, cfg)
         cash[it.supplier] = cash.get(it.supplier, 0.0) + (lc.net_price + lc.payment_fee) * l.qty
     pr["available"] = True
@@ -156,7 +158,8 @@ def test_two_day_job_hourly_plan(priced):
     cfg, _ = priced
     imp = read_workbook(WB)
     cat = imp.catalog
-    req = BoqRequest("BC-PNL-001", 40, rows_for(40, 10, 1.134), inverter_kw=12, battery_kwh=10)
+    # the owner's own pick of the eco-hybrid: two in parallel (round 3 would otherwise take one 12 kW unit), the two-day job the plan is checked on
+    req = BoqRequest("BC-PNL-001", 40, rows_for(40, 10, 1.134), inverter_kw=12, battery_kwh=10, inverter_code="FS-INV-008")
     boq = generate_boq(req, cat, cfg)
     pr = price_job(boq.lines, cat, cfg, JobInputs(net_metering=True, max_pairs=1, roof_closed_days=2))
     pr["available"] = True

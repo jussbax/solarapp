@@ -156,27 +156,32 @@ def test_grid_job_takes_a_grid_interactive_inverter_and_warns_on_an_off_grid_def
 
 # ---------------------------------------------------------------- E6: the battery against the inverter's current
 def test_battery_current_and_breaker_checks(imported):
+    """Round 3 (E-03): the bank's continuous current against the inverter's battery current is a hard rule that
+    holds the customer documents; the breaker sits at 1.25 x that current and the cable's ampacity at or above the breaker."""
     cat, cfg = imported.catalog, imported.config
-    bat, inv = cat.get("FS-BAT-002"), cat.get("FS-INV-001")        # 120 A continuous against 135 A maximum, 117 A rated
-    units, w = battery_current_check(bat, 1, inv, 1, 117.2, 135.0)
-    assert units == 1 and [x["code"] for x in w] == ["battery_current"] and "117 A" in w[0]["message"]
+    bat, inv = cat.get("FS-BAT-002"), cat.get("FS-INV-001")        # 120 A continuous against the inverter's 135 A maximum
+    units, w = battery_current_check(bat, 1, inv, 1, 135.0)
+    assert units == 1 and [x["code"] for x in w] == ["battery_current"] and w[0]["hard"] and w[0]["blocks_documents"] and "135 A" in w[0]["message"]
     weak = dataclasses.replace(bat, continuous_a=50.0)
-    units, w = battery_current_check(weak, 1, inv, 1, 117.2, 135.0)
-    assert units == 1 and w[0]["code"] == "battery_current_units" and "3 units in parallel" in w[0]["message"]   # ceil(117.2 / 50): the owner's call, not an automatic doubling
-    units, w = battery_current_check(weak, 3, inv, 1, 117.2, 135.0)
+    units, w = battery_current_check(weak, 1, inv, 1, 135.0)
+    assert units == 1 and w[0]["code"] == "battery_current" and "3 units in parallel" in w[0]["message"]   # ceil(135 / 50): the owner's call, never a silent extra pack
+    units, w = battery_current_check(weak, 3, inv, 1, 135.0)
     assert w == []                                                     # 150 A over three units covers the inverter's maximum
     unknown = dataclasses.replace(bat, continuous_a=None)
-    assert battery_current_check(unknown, 1, inv, 1, 117.2, 135.0)[1][0]["code"] == "battery_current_unknown"
-    assert battery_current_check(unknown, 1, dataclasses.replace(inv, battery_max_a=None), 1, 117.2, 117.2)[1] == []
-    # in the BOQ: the breaker sits at or above 1.25 x the inverter's battery current and the battery's rating bounds it
+    assert battery_current_check(unknown, 1, inv, 1, 135.0)[1][0]["code"] == "battery_current_unknown"
+    # in the BOQ: the owner's per-job pick that falls short is the hard warning; the breaker at or above 1.25 x the inverter's
+    # battery current, the lug pair's ampacity at or above the breaker (250 A breaker: the 270 A pair, never the 170 A one)
     res = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=10, battery_code="FS-BAT-002", kind="combination"), cat, cfg)
     bb = next(l for l in res.lines if l.role == "battery_breaker")
     assert res.choices["battery_current_a"] == 135 and res.choices["battery_breaker_min_a"] == pytest.approx(168.75)
-    assert cat.get(bb.code).amps_in_name() >= 168.75 and "1.25 × 135 A" in bb.note and "battery rated 120 A" in bb.note
-    assert {w["code"] for w in res.warnings} >= {"battery_current", "battery_breaker"}
-    assert "35 mm2" in next(l for l in res.lines if l.role == "battery_cable").note
+    assert cat.get(bb.code).amps_in_name() >= 168.75 and "1.25 × 135 A" in bb.note
+    hard = next(w for w in res.warnings if w["code"] == "battery_current")
+    assert hard["hard"] and hard["blocks_documents"]
+    circuit = res.choices["battery_circuit"]
+    assert circuit["ok"] and circuit["cable_ampacity_a"] >= circuit["breaker_a"] >= circuit["breaker_min_a"] == pytest.approx(168.75)
+    assert "70 mm2" in next(l for l in res.lines if l.role == "battery_cable").note
     big = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=10, battery_code="FS-BAT-004", kind="combination"), cat, cfg)
-    assert not {w["code"] for w in big.warnings} & {"battery_current", "battery_current_units", "battery_breaker"}   # 250 A continuous: the window holds
+    assert not {w["code"] for w in big.warnings} & {"battery_current", "battery_circuit"}   # 250 A continuous: the bank holds
     bb2 = next(l for l in big.lines if l.role == "battery_breaker")
     assert 168.75 <= cat.get(bb2.code).amps_in_name() <= 250
 
@@ -310,7 +315,9 @@ def test_results_carry_the_meter_figures_faces_and_the_hourly_year(client):
     pdf = client.get(f"/api/assessments/{aid}/quotation.pdf")
     assert pdf.status_code == 200
     text_ = _pdf_text(pdf.content)
-    assert "kWh a year at your meter" in text_ and "Inverter certificate" not in text_   # the eco-hybrid's certificate is not recorded yet
+    # the eco-hybrid's certificate is not recorded yet: round 3 (E-05) prints that it is to be confirmed rather than nothing
+    assert "kWh a year at your meter" in text_ and "to be confirmed with the maker before the net metering application" in text_
+    assert pr["inverter_certificate"] == "" and any(w["code"] == "inverter_certificate_missing" for w in pr["warnings"])
     assert "Designed to carry 1 evening without sun; in the rainy season the grid covers the rest." in " ".join(text_.split())
     assert inverter_certificate(pr) == ""
     # the roof check prints the meter figures (built directly: the API refuses customer PDFs on test weather)

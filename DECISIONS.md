@@ -882,3 +882,95 @@ chart, and the engineering build order in the plan.
   arrange the visit) and "Start project" creates the project from one, as
   "Start assessment" did. The e-mail notice links there. Nothing else about
   a booking can be changed from the engineering app.
+
+## Round 3, batch 1: hardware that is wrong (E-01, E-03, E-04, E-05, E-06)
+
+- The net-metering inverter rule (E-01): a job with no battery has no backup
+  mode, so the grid carries the house peak and the inverter only has to
+  carry the array. For kind `net_metering` the requirement is the PV rule
+  alone (array kWp over the PV-to-inverter ratio, default 1.3); the peak
+  and surge rule stays for the battery kinds. The house peak is still
+  reported and the BOQ checks it against the chosen unit's AC input
+  (grid pass-through) rating when the item carries one; blank or exceeded
+  is an ordinary warning ("verify the inverter's grid pass-through
+  rating"). The owner referred to "the first app" as sizing net metering
+  correctly: neither earlier repository holds an inverter rule, so this is
+  the array rule the engineer recommended, marked for the owner to confirm
+  (verify).
+- The parallel rule (E-01): one unit when it covers the requirement; when
+  the requirement overshoots the owner's unit by no more than the tolerance
+  (Pricing settings › BOM item roles, default 10 %, 0 = never) one unit is
+  kept with a warning that names the overload question; above that, unless
+  the owner picked the unit per job, the cheapest single unit that fits the
+  kind (the default's brand on ties) replaces it with a warning that names
+  the parallel alternative's price; only when no single unit fits do
+  parallel units go on the BOM, warned. The Santo Tomas case therefore gets
+  one eco-hybrid, not two (contract ₱273,600 → ₱236,800).
+- Battery selection (E-03): the inverter's battery current (its
+  `battery_max_a` when on file, else the rated output over 51.2 V) must be
+  at or below the bank's continuous discharge current; the cheapest kWh is
+  chosen among the units that deliver it, then among the ones whose rating
+  is blank (unknown, warned), and a unit that falls short is never picked
+  by the generator. A per-job pick that falls short is a hard warning.
+  The Pila case moves from BC-BAT-004 (15.36 kWh, 100 A) to FS-BAT-003
+  (15 kWh, 160 A).
+- The battery circuit (E-03): breaker at or above 1.25 × the inverter's
+  battery current, cable ampacity at or above the breaker, so the breaker
+  protects the conductor (135 A → 250 A breaker → 70 mm² lug pairs at
+  270 A, not 35 mm² at 170 A). The earlier "breaker within the battery's
+  rating" warning is withdrawn: the BMS protects the battery, the selection
+  rule above covers it, and the breaker's job is the conductor.
+- Hard warnings that block the documents: a battery bank below the
+  inverter's current, a battery circuit or an AC circuit that cannot be
+  coordinated with the items and tables on file carry `blocks_documents`;
+  `pricing.design_blocked` lists their codes and the proposal, roof check
+  and card are refused on the server with "design_blocked: …" the way the
+  stale rule refuses them. The program of works and the BOM export still
+  print (the owner needs them to fix the list). The other hard warnings
+  (an inverter that cannot export, autonomy) stay red banners only.
+- The AC side (E-04): per inverter, one inverter-side circuit (the output
+  to the loads) and two grid-side circuits (the grid to the inverter's AC
+  input and the maintenance bypass), each with its breaker at 1.25 × the
+  circuit current rounded up to the next standard size (a settable list);
+  the conductor of each side is sized from its breaker (ampacity at or
+  above it) with the drop checked over the run; line and neutral per
+  circuit (settable), the ground on the grounding run. The grid side is
+  sized on the inverter's AC input rating when the item carries it, else on
+  its output with a warning. A 6 kW unit gets 40 A breakers on 8.0 mm²
+  THHN (40 A), as on the sample job, and 110 m of THHN instead of 35. The
+  THHN table's 3.5 mm² entry is 20 A (the 60 °C column; verify the table
+  edition). When the breaker item is not listed in the size the circuit
+  needs (IAN-PRT-027 comes in 32 and 63 A, the circuit needs 40 A) the BOM
+  warns the owner to add that size.
+- The certificate (E-05): an inverter marked grid-interactive with nothing
+  under Certifications gets an ordinary warning on every grid job ("no
+  certificate on file; confirm the listing with the maker before the DU
+  application"); `pricing.inverter_certificate` carries the text (blank
+  until it is on file) and the proposal prints "Inverter certificate: to be
+  confirmed with the maker before the net metering application" rather
+  than nothing.
+- BOM counts (E-06): one AC SPD per board, one DC SPD per MPPT input in
+  use (the strings on the inverter's MPPT count; one per inverter when the
+  count is not on file), one enclosure per inverter, no ATS on an inverter
+  whose item says it carries its own transfer switch (a new item flag,
+  blank = unknown: the ATS is priced with a warning). A config saved
+  before this round carried the sample job's 4 breakers, 4 SPDs and 2
+  enclosures per inverter; it takes the new counts once.
+- Roles the BOM omitted (E-06): array bonding (the grounding conductor
+  along the rail lines plus jumpers, lugs per panel and per rail line on the
+  earth-lug line), L-foot fasteners (per foot), placards and labels, a
+  visible lockable AC disconnect for the DU (the 63 A isolator in the
+  list), monitoring (one dongle per inverter, brand-specific), and on
+  net-metering jobs an export limiter as an optional role with a warning
+  while no item is set. A role without an item in the materials list still
+  puts its line on the BOM (code `NO-ITEM-…`) with the quantity and no
+  price, and one warning says to add the item: the crew and the PEE see
+  what the design needs, the customer price never carries an invented
+  figure. Gauges, counts and fastener numbers are the owner's to verify.
+- Results name the battery figures unambiguously (E-12):
+  `sizing.battery.sized_usable_kwh` and `sized_nominal_kwh` (the sizing),
+  `pricing.choices.battery_nominal_kwh` (the priced bank); the glance strip
+  should print the priced figure when there is one. The BOM export (E-14)
+  carries a header block (customer, project, date, system), the spec or
+  model per line, the lines grouped by category and the pack rounding where
+  an item is sold by the roll or box.

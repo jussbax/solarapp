@@ -194,9 +194,13 @@ class WiringRules(BaseModel):
     panel_vmp_v: float = 42         # typical for 580-630 W modules
     copper_resistivity: float = 0.0172  # ohm mm2 / m
     continuous_factor: float = 1.25
-    thhn_ampacity: dict[str, float] = Field(default_factory=lambda: {"3.5": 25, "5.5": 30, "8.0": 40, "14": 55, "22": 70, "30": 85})  # PEC 60 C column
+    thhn_ampacity: dict[str, float] = Field(default_factory=lambda: {"3.5": 20, "5.5": 30, "8.0": 40, "14": 55, "22": 70, "30": 85})  # PEC 60 C column (3.5 mm2 = 20 A, round 3; verify the table edition)
     battery_cable_ampacity: dict[str, float] = Field(default_factory=lambda: {"16": 100, "25": 140, "35": 170, "50": 210, "70": 270})
     pv_cable_ampacity: dict[str, float] = Field(default_factory=lambda: {"4": 40, "6": 55})
+    # AC circuits (round 3, E-04): one breaker per circuit at 1.25 x the circuit current rounded up to the next standard
+    # size in this list; the conductor of each side is then sized from its breaker (ampacity at or above it).
+    ac_breaker_sizes_a: list[float] = Field(default_factory=lambda: [16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250])
+    ac_conductors_per_circuit: int = 2      # line and neutral per circuit; the ground is the grounding run
 
 
 class BoqRoles(BaseModel):
@@ -222,11 +226,11 @@ class BoqRoles(BaseModel):
     ats_amps: float = 63
     ac_breaker: str = "IAN-PRT-027"
     ac_breaker_amps: float = 63
-    ac_breakers_per_inverter: int = 4
+    ac_breakers_per_inverter: int = 1          # inverter side: the output circuit to the loads (round 3, E-04; was 4 for every circuit and the disconnect)
     ac_spd: str = "IAN-PRT-035"
-    ac_spds_per_inverter: int = 4
+    ac_spds_per_inverter: int = 1              # one Type 2 SPD per AC board (round 3, E-06; was 4, one per breaker)
     enclosure: str = "OP-ENC-007"
-    enclosures: int = 2
+    enclosures: int = 1                        # one box per inverter, AC and DC protection together (round 3, E-06; was 2)
     cable_tray: str = "OP-ENC-009"
     cable_trays: int = 1
     conduit: str = "IAN-ENC-011"
@@ -244,17 +248,42 @@ class BoqRoles(BaseModel):
     default_inverter_code_offgrid: str = "FS-INV-008"   # Felicity 6 kW eco-hybrid, an off-grid type
     inverter_exclude_words: list[str] = Field(default_factory=lambda: ["3P", "3-phase", "high-voltage", "HV"])
     battery_exclude_words: list[str] = Field(default_factory=lambda: ["rack", "controller module", "slave", "per kWh", "12V", "24V", "25.6V", "12 V", "24 V"])
+    # ---- round 3 (E-01, E-04, E-06): the parallel rule, the grid-side circuits and the roles the BOM used to omit.
+    # A role whose code is blank still puts its line on the BOM, with the quantity and no price, and a warning to add
+    # the item on the Materials page: the crew and the PEE see what the design needs, the customer price never
+    # carries an invented figure.
+    inverter_parallel_tolerance_pct: float = 10   # a requirement this far above one unit's kW keeps one unit (with a warning) rather than two in parallel; 0 = never
+    ac_grid_breakers_per_inverter: int = 2        # grid side: the grid-to-inverter feed and the maintenance bypass, sized on the inverter's AC input rating
+    ac_disconnect: str = "IAN-PRT-030"            # the visible, lockable AC disconnect for the electric company at the service (verify the DU's requirement)
+    ac_disconnects: int = 1
+    placard: str = ""                             # PV system labels and placards (service, disconnect, inverter, DC box); blank = no item yet
+    placard_sets: int = 1
+    monitoring: str = ""                          # the inverter's monitoring dongle, one per inverter; it must match the inverter's brand; blank = no item yet
+    export_limiter: str = ""                      # optional: the export limiter or CT for the weeks between switch-on and the two-way meter (verify with the DU)
+    array_bonding_wire: str = "IAN-WIR-029"       # the equipment grounding conductor along the array (bare copper where the LGU asks; verify the gauge with the PEE)
+    bonding_extra_m_per_row: float = 2            # jumpers between the rail lines of a row and to the next row, on top of the row's length
+    bonding_lugs_per_panel: int = 1               # panel frame to rail (unless the clamps are listed as bonding clamps)
+    bonding_lugs_per_rail_line: int = 1           # each rail line to the grounding conductor (two lines per row)
+    l_foot_fastener: str = ""                     # screws or bolts for the L-feet into the purlins; BC-MNT-006 lists none; blank = no item yet
+    fasteners_per_l_foot: int = 2                 # verify with the rail maker's manual and the roof sheet
 
     @model_validator(mode="before")
     @classmethod
     def _migrate_single_default(cls, data: Any) -> Any:
         """A config saved before the per-kind defaults carried one `default_inverter_code` (an off-grid unit on
-        every job); it moves into the off-grid slot and the grid slot takes the class default."""
+        every job); it moves into the off-grid slot and the grid slot takes the class default. A config saved
+        before the AC circuit split (round 3) carried the sample job's counts per inverter (4 breakers, 4 SPDs,
+        2 enclosures), which the audit showed over-counted; they take the new defaults once, the first time the
+        grid-side count is missing."""
         if isinstance(data, dict) and "default_inverter_code" in data:
             data = dict(data)
             old = data.pop("default_inverter_code")
             if "default_inverter_code_offgrid" not in data:
                 data["default_inverter_code_offgrid"] = old or ""
+        if isinstance(data, dict) and "ac_grid_breakers_per_inverter" not in data:
+            data = dict(data)
+            for key in ("ac_breakers_per_inverter", "ac_spds_per_inverter", "enclosures"):
+                data.pop(key, None)
         return data
 
     def default_inverter_for(self, kind: str) -> str:
