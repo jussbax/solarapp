@@ -92,3 +92,30 @@ fields the website still waits for.
    largest piece and the one a reviewing PEE reads first. Needs the datasheet values.
 6. Later, with the PM module: close-out actuals, roof construction and uplift, the DU
    checklist and lead times, fixed charges.
+
+## Status after the fix batches (9 October 2026)
+
+Merged, tested and pushed, in this order: money (Fin 1, 2, 4, 5, 6, 8, 9, 14), the
+customer's story (Mkt C1, C2, C3, M1–M6, M8, M10, M11 and the minors), the clean UI
+(UX 2–16 and the owner's directive on Settings), the hardware rules (Eng E-01, E-03,
+E-04, E-05, E-06, E-12, E-14), plus the security lows (Sec 1, 2, 3) by hand. The
+decisions the owner gave on 9 October are in DECISIONS.md: "Money, round three",
+"The customer's story on paper", "The clean form", "Round 3, batch 1".
+
+Still open:
+
+- Eng E-02 and E-08 (string design and the installation drawing): wait for the panel
+  and inverter datasheets the owner will upload.
+- Eng E-07 and E-10 (roof construction and uplift; the DU checklist and lead times):
+  owner inputs.
+- Fin 3 (the VAT invoice in the cashflow) and Fin 10 (VAT and commission on
+  pass-through fees): the owner and the accountant.
+- Mkt M9 (typhoon rating, battery life, "what if it makes less"): the mounting wind
+  rating.
+- The owner's own entries on the Materials page: the eco-hybrid's pass-through rating,
+  transfer switch and certificate; the batteries' continuous currents; items for the
+  roles that have none (L-foot fasteners, placards, monitoring, a 40 A AC breaker, an
+  export limiter if the DU asks); the installation-day outage length under Settings.
+- The net-metering inverter rule (array only, pass-through checked, 10 % overshoot
+  tolerance) is marked for the owner to confirm: neither earlier repository holds the
+  rule the owner remembers as correct.
