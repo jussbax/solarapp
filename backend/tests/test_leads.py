@@ -124,7 +124,7 @@ def test_start_assessment_creates_the_project_from_the_lead(client, caplog):
     doc = a["doc"]
     assert doc["customer_name"] == "Maria Santos" and doc["address"] == "Tanauan, Batangas"
     assert doc["lat"] == pytest.approx(14.0944) and doc["lon"] == pytest.approx(121.0988)  # the town's centroid, since the visitor gave no pin
-    assert doc["audit"]["bills"] == [{"id": "lead", "billing_month": datetime.now(timezone.utc).strftime("%Y-%m"), "kwh": 333.0, "days": None, "amount_php": 4000.0, "utility": ""}]
+    assert doc["audit"]["bills"] == [{"id": "lead", "billing_month": datetime.now(timezone.utc).strftime("%Y-%m"), "kwh": 333.0, "days": None, "amount_php": 4000.0, "utility": "", "generation_rate_php_per_kwh": None}]
     assert doc["audit"]["system"]["kind"] == "net_metering" and doc["program"]["stage"] == "assessed" and doc["lead_id"] == lid
     assert doc["notes"] == "From the website estimate. Visit Saturday 9am."
     # the project keeps only the estimate the visitor saw (for the proposal's sentence), not the contact or the source
