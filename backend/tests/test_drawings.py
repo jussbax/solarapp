@@ -159,7 +159,7 @@ def test_documents_carry_the_drawings(client):
     text = _pdf_text(q.content)
     assert "YOUR ROOF, AS THE PANELS WILL SIT" in text and "Main roof (south)" in text and "Eave (lower edge)" in text
     assert "room for" in text and "Hatched: wall on the left side" in text
-    assert _pages(text) <= 3   # the reference record prints on three pages
+    assert _pages(text) <= 4   # the reference record prints on four pages: the In short and installation-day blocks fill three, the acceptance block is kept together on the last
     p = client.get(f"/api/assessments/{aid}/program.pdf")
     assert p.status_code == 200
     ptext = _pdf_text(p.content)
