@@ -655,3 +655,56 @@ def test_new_project_is_not_a_record_until_the_first_save(client):
     row = next(a for a in after if a["id"] == created["id"])
     assert row["customer_name"] == "Draft Only" and row["stage"] == "quoted" and row["has_results"] is False
     assert client.delete(f"/api/assessments/{created['id']}").status_code == 204
+
+
+def test_warranty_defaults_and_the_pricing_settings_version_rule(client):
+    """The owner's warranty terms are the profile's defaults and feed the savings; a pricing-settings change flags every
+    priced project in the list and on its page, and a job from stage quoted onward is re-priced only with confirmation
+    (finance 1). An assessed job re-prices freely."""
+    client.post("/api/auth/login", json={"username": "u", "password": "p"})
+    prof = client.get("/api/settings").json()
+    assert (prof["warranty_panels_product_years"], prof["warranty_battery_years"], prof["warranty_inverter_years"], prof["warranty_workmanship_years"]) == ("12", "5", "5", "2")
+    assert prof["warranty_panels_performance_years"] == ""
+    doc = dict(DOC)
+    doc["panels"] = [{"id": "p1", "name": "Blue Carbon 585W", "watt_peak": 585, "length_m": 2.278, "width_m": 1.134, "code": "BC-PNL-001"}]
+    doc["audit"] = dict(TANAUAN_AUDIT, system={"kind": "combination"})
+    aid = client.post("/api/assessments", json=doc).json()["id"]
+    out = client.post(f"/api/assessments/{aid}/compute").json()
+    pr = out["results"]["pricing"]
+    version = client.get("/api/pricing/status").json()["settings_version"]
+    assert pr["available"] and pr["settings_version"] == version and out["pricing_settings_changed"] is False
+    eco = out["results"]["economics"]["assumptions"]
+    assert eco["battery_life_years"] == 5 and eco["battery_life_source"] == "battery warranty" and eco["inverter_life_years"] == 12
+    battery_line = next(i for s in pr["customer"]["sections"] for i in s["items"] if i["key"] == "Battery")
+    assert eco["battery_replacement_cost"] == pytest.approx(battery_line["amount"] * 1.12)
+    assert pr["customer"]["vat"] == pytest.approx(pr["customer"]["total"] * 0.12 / 1.12) and pr["customer"]["vat_label"] == "VAT (12%)"
+    was = pr["totals"]["contract_rounded"]
+    # the owner moves a markup: the project is flagged in the list and on its page, its price untouched
+    cfg = client.get("/api/pricing/config").json()
+    assert "battery_life_years" not in cfg["economics"] and cfg["economics"]["battery_life_years_override"] == 0
+    cfg["job"]["services_markup"] = 0.35
+    assert client.put("/api/pricing/config", json=cfg).status_code == 200
+    assert client.get("/api/pricing/status").json()["settings_version"] != version
+    row = next(r for r in client.get("/api/assessments").json() if r["id"] == aid)
+    assert row["pricing_settings_changed"] is True and row["results_stale"] is False and row["contract_php"] == was
+    full = client.get(f"/api/assessments/{aid}").json()
+    assert full["pricing_settings_changed"] is True and full["results_stale"] is False
+    # from stage quoted onward Calculate refuses without confirmation, and the stored price stays as quoted
+    quoted = dict(full["doc"])
+    quoted["program"] = {**full["doc"]["program"], "stage": "quoted"}
+    r = client.post(f"/api/assessments/{aid}/compute", json=quoted)
+    assert r.status_code == 409 and r.json()["detail"].startswith(f"Pricing settings changed since this price was quoted (was ₱{was:,.0f})")
+    assert client.get(f"/api/assessments/{aid}").json()["results"]["pricing"]["totals"]["contract_rounded"] == was
+    r = client.post(f"/api/assessments/{aid}/compute", json=quoted, params={"confirm_reprice": "true"})
+    assert r.status_code == 200
+    repriced = r.json()
+    assert repriced["pricing_settings_changed"] is False and repriced["results"]["pricing"]["totals"]["contract_rounded"] > was
+    assert repriced["results"]["pricing"]["settings_version"] == client.get("/api/pricing/status").json()["settings_version"]
+    # the settings go back: the project is flagged again; as an assessed job it re-prices without the flag, back to the quoted figure
+    cfg["job"]["services_markup"] = 0.30
+    assert client.put("/api/pricing/config", json=cfg).status_code == 200
+    assert client.get(f"/api/assessments/{aid}").json()["pricing_settings_changed"] is True
+    assessed = dict(quoted)
+    assessed["program"] = {**quoted["program"], "stage": "assessed"}
+    r = client.post(f"/api/assessments/{aid}/compute", json=assessed)
+    assert r.status_code == 200 and r.json()["results"]["pricing"]["totals"]["contract_rounded"] == was and r.json()["pricing_settings_changed"] is False

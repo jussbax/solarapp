@@ -104,6 +104,13 @@ def _priced_battery_kwh(boq, catalog, required_kwh: float) -> float:
     return float(units * item.rating)
 
 
+def battery_part_for(priced: dict, vat: float) -> float:
+    """The battery's share of the price as the proposal prints it: the customer's battery line (its freight and
+    commission shares inside) plus VAT. One figure for the website hero, the "add a battery" line and the proposal."""
+    items = [i for s in priced["customer"]["sections"] for i in s.get("items", []) if i.get("key") == "Battery"]
+    return sum(float(i["amount"]) for i in items) * (1 + vat)
+
+
 def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, lat: float, lon: float, pvgis: PvgisDataset, ctx: PricingContext) -> dict:
     """Size, price and value one system kind. Returns the customer-facing block for that kind."""
     cfg, catalog = ctx.config, ctx.catalog
@@ -143,13 +150,12 @@ def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, l
     today = date.today()
     doc = AssessmentDoc(audit=EnergyAudit(bills=[BillEntry(id="q", billing_month=today.strftime("%Y-%m"), kwh=monthly_kwh, amount_php=monthly_kwh * tariff)]))
     daily = [monthly_kwh / 30.4] * 12
-    eco = build_economics(doc, {"sizing": s, "pricing": priced, "audit": {"future_daily_kwh": 0.0, "daily_kwh_by_month": daily}}, cfg)
+    eco = build_economics(doc, {"sizing": s, "pricing": priced, "audit": {"future_daily_kwh": 0.0, "daily_kwh_by_month": daily}}, cfg, ctx.profile)
     cust = priced["customer"]
     sections = {x["key"]: x["amount"] for x in cust["sections"]}
     total = float(cust["total"])
     rounded = float(np.ceil(total / q.price_round_to) * q.price_round_to) if q.price_round_to > 0 else total
-    battery_line = sum(float(l.get("selling") or 0) for l in priced["lines"] if (l.get("category") or "").lower().startswith("batter"))
-    battery_share = battery_line * (1 + cfg.job.vat) if battery_line else 0.0
+    battery_share = battery_part_for(priced, cfg.job.vat)   # the proposal's own battery figure, not rounded here
     return {
         "goal": goal, "goal_label": GOAL_LABEL[goal],
         "location": {"distance_km": loc["distance_km"], "sun_kwh_per_kwp_year": loc["annual_kwh_per_kwp"], "road_km": pin["road_km"] if pin else None},
@@ -168,7 +174,7 @@ def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, l
         },
         "price": {"total": rounded, "materials": sections.get("materials", 0.0), "labor": sections.get("labor", 0.0),
                   "equipment": sections.get("equipment", 0.0), "tax": sections.get("tax", 0.0), "price_per_wp": rounded / (float(s["kwp"]) * 1000.0),
-                  "battery_part": round(battery_share, -2)},
+                  "battery_part": battery_share},
         "economics": {
             "bill_before_monthly": eco["bill_before_monthly"], "bill_after_monthly": eco["bill_after_monthly"], "savings_monthly": eco["savings_monthly"],
             "savings_year1": eco["year1"]["savings"], "payback_years": eco["payback_years"], "lifetime_net": eco["lifetime_net"],

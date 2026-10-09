@@ -186,8 +186,9 @@ export const api = {
   updateAssessment: (id: number, doc: AssessmentDoc) =>
     request<AssessmentOut>(`/api/assessments/${id}`, { method: 'PUT', body: JSON.stringify(doc) }),
   deleteAssessment: (id: number) => request<void>(`/api/assessments/${id}`, { method: 'DELETE' }),
-  computeAssessment: (id: number, doc: AssessmentDoc) =>
-    request<AssessmentOut>(`/api/assessments/${id}/compute`, { method: 'POST', body: JSON.stringify(doc) }),
+  /** `confirmReprice` re-prices a quoted job after the pricing settings changed; without it the server answers 409. */
+  computeAssessment: (id: number, doc: AssessmentDoc, confirmReprice = false) =>
+    request<AssessmentOut>(`/api/assessments/${id}/compute${confirmReprice ? '?confirm_reprice=true' : ''}`, { method: 'POST', body: JSON.stringify(doc) }),
   reportUrl: (id: number) => `/api/assessments/${id}/report.pdf`,
   categories: () => request<ApplianceCategory[]>('/api/appliances/categories'),
   searchAppliances: (q: string) => request<CatalogItem[]>(`/api/appliances?q=${encodeURIComponent(q)}&limit=8`),

@@ -260,7 +260,8 @@ def labor_for(t: Takeoff, cfg: PricingConfig, job: JobInputs) -> LaborResult:
     handoff = 2.0 if t.panels > 0 else 0.0  # hand-off: 1 h x 2 persons
     total = roof_mh + ground_mh + handoff
     prod = cfg.productive_hours
-    min_pairs_roof = max(1, int(math.ceil(roof_mh / (2 * prod * job.roof_closed_days) - 1e-12))) if roof_mh > 0 else 0
+    closed_days = max(1, int(job.roof_closed_days or 0))  # the roof closes in at least a day; 0 (the workbook's #DIV/0!) reads as 1
+    min_pairs_roof = max(1, int(math.ceil(roof_mh / (2 * prod * closed_days) - 1e-12))) if roof_mh > 0 else 0
     min_pairs_carry = max(0, int(math.ceil((carry - 2) / 2 - 1e-12))) if carry > 0 else 0
     min_pairs = max(min_pairs_roof, min_pairs_carry)
     unit = lr.pay_unit_days
@@ -322,6 +323,11 @@ _RATING_UNITS = {"w": "W", "kw": "kW", "kwh": "kWh"}
 
 def _n(q: float) -> str:
     return f"{int(q)}" if float(q).is_integer() else f"{q:g}"
+
+
+def _pct(rate: float) -> str:
+    """A rate from the settings as the customer reads it: 0.12 -> "12%", 0.125 -> "12.5%"."""
+    return f"{rate * 100:g}%"
 
 
 def customer_item_name(cat: str, cat_lines: list[PricedLine]) -> str:
@@ -436,16 +442,20 @@ def price_job(bom: list[BomLine], catalog: Catalog, cfg: PricingConfig, job: Job
     labor_sec = sum(i["amount"] for i in labor_items)
     equipment = sum(i["amount"] for i in equip_items)
     subtotal = materials + labor_sec + equipment
-    tax = subtotal * j.vat
-    rounding = rounded - (subtotal + tax)
+    # VAT on the contract as the customer pays it: the rounded total is VAT-inclusive, so VAT = total x rate / (1 + rate)
+    # and the base is the rest; the rounding pesos (the base less the ex-VAT sum) sit on the crew line, so
+    # "VAT, 12% of the amounts above" is true to the peso and a VAT worked back from the total gives the same figure.
+    tax = rounded * j.vat / (1 + j.vat)
+    rounding = (rounded - tax) - subtotal
     labor_sec += rounding
     if labor_items:
         labor_items[0]["amount"] += rounding
+    vat_pct = _pct(j.vat)
     sections = [
         {"key": "materials", "label": "Materials", "amount": materials, "items": mat_items},
         {"key": "labor", "label": "Installation and permits", "amount": labor_sec, "items": labor_items},
         {"key": "equipment", "label": "Installation tools", "amount": equipment, "items": equip_items},
-        {"key": "tax", "label": "VAT (12%)", "amount": tax, "items": [{"key": "vat", "name": "VAT, 12% of the amounts above", "qty": 1, "unit": "lot", "amount": tax}]},
+        {"key": "tax", "label": f"VAT ({vat_pct})", "amount": tax, "items": [{"key": "vat", "name": f"VAT, {vat_pct} of the amounts above", "qty": 1, "unit": "lot", "amount": tax}]},
     ]
 
     return {
@@ -461,6 +471,9 @@ def price_job(bom: list[BomLine], catalog: Catalog, cfg: PricingConfig, job: Job
             "ocm": ocm, "op": markup - ocm, "kwp": kwp, "price_per_wp": (rounded / (kwp * 1000)) if kwp > 0 else None,
             "materials_landed": mat_direct, "materials_selling": mat_direct + mat_markup,
         },
-        "customer": {"sections": sections, "total": rounded, "subtotal_ex_vat": subtotal + rounding, "vat": tax},
+        # The three figures the proposal prints as its own rows (the owner's decision: a before-VAT and an after-VAT
+        # price on every proposal): the contract price before VAT, the VAT at the settings' rate, and the total.
+        # Commission is inside every line at the settings' rate on every job; nothing of it reaches this block.
+        "customer": {"sections": sections, "total": rounded, "subtotal_ex_vat": rounded - tax, "vat": tax, "vat_rate": j.vat, "vat_label": f"VAT ({vat_pct})"},
         "job_inputs": job.__dict__.copy(),
     }

@@ -249,6 +249,35 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
     }
   }
 
+  /**
+   * A price calculated under other pricing settings is re-priced only when the owner says so: the page asks first when
+   * the record carries the flag, and again when the server refuses (409) because the settings moved after the page
+   * loaded. Null means the owner kept the price.
+   */
+  const REPRICE = /^Pricing settings changed since this price/
+  const repriceQuestion = (was: number | null | undefined) => {
+    const stageIndex = (s: JobStage) => JOB_STAGES.findIndex((x) => x.id === s)
+    const quoted = stageIndex(doc.program?.stage ?? 'assessed') >= stageIndex('quoted')
+    return `Pricing settings changed since this price was ${quoted ? 'quoted' : 'calculated'}${was != null ? ` (was ${php0(was)})` : ''}. Re-price now?`
+  }
+  const computeWithRepriceCheck = async (target: number): Promise<AssessmentOut | null> => {
+    let confirmReprice = false
+    if (a?.pricing_settings_changed) {
+      if (!window.confirm(repriceQuestion(results?.pricing?.totals?.contract_rounded))) return null
+      confirmReprice = true
+    }
+    try {
+      return await api.computeAssessment(target, doc, confirmReprice)
+    } catch (e) {
+      const msg = (e as Error).message
+      if ((e as ApiError).status === 409 && REPRICE.test(msg)) {
+        if (!window.confirm(`${msg.split('. ')[0]}. Re-price now?`)) return null
+        return api.computeAssessment(target, doc, true)
+      }
+      throw e
+    }
+  }
+
   const compute = async () => {
     setBusy('Calculating...')
     setError(null)
@@ -264,7 +293,8 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         clearDraft(aid)
         setDraft(null)
       }
-      const r = await api.computeAssessment(target, doc)
+      const r = await computeWithRepriceCheck(target)
+      if (!r) return // the owner kept the quoted price
       heldId.current = r.id
       setA(r)
       setDoc(withLocalFields(r.doc, doc))
@@ -541,6 +571,12 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
               <button type="button" className="small primary" onClick={compute} disabled={!!busy || !status?.pvgis.available}>
                 Calculate
               </button>
+            </div>
+          )}
+          {a?.pricing_settings_changed && (
+            <div className="banner warn" data-testid="settings-changed">
+              Pricing settings changed since this price{results.pricing?.totals ? ` (was ${php0(results.pricing.totals.contract_rounded)})` : ''}. Calculate asks before
+              re-pricing a quoted job.
             </div>
           )}
           <div className={stale ? 'stale' : ''}>

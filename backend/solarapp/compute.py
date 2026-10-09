@@ -231,7 +231,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         except Exception as e:  # noqa: BLE001
             results["program"] = {"available": False, "reason": f"Program of works failed: {e}", "warnings": []}
         try:
-            results["economics"] = build_economics(doc, results, pricing.config)
+            results["economics"] = build_economics(doc, results, pricing.config, pricing.profile)
         except Exception as e:  # noqa: BLE001
             results["economics"] = {"available": False, "reason": f"Economics failed: {e}", "warnings": []}
     return results

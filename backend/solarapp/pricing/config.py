@@ -4,6 +4,7 @@ role defaults. Stored as one JSON document in the app; seeded from the workbook
 by the importer and editable in the app (the app is the master)."""
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -337,8 +338,13 @@ class EconomicsConfig(BaseModel):
     degradation: float = 0.005                # panel output loss per year
     analysis_years: int = 25
     discount_rate: float = 0.08
-    battery_life_years: int = 10
-    inverter_life_years: int = 12
+    # Battery life for the replacement schedule: 0 = the battery warranty years in the company profile (5 today: the
+    # battery datasheets give 5 years, though the supplier price list says 10 for the Felicity FLB line; verify).
+    # A number here overrides the warranty. Replaces the fixed 10-year `battery_life_years` of earlier configs, which
+    # is dropped on load so the warranty rule applies to every database.
+    battery_life_years_override: int = 0
+    inverter_life_years: int = 12             # not the warranty (5 years from the maker): the years before the economics replace the inverter
+    replacement_labor_php: float = 0          # labor added to each battery or inverter replacement, pesos including VAT; 0 = none (verify)
     om_share_per_year: float = 0.005          # cleaning and checks, share of the contract price per year
     co2_kg_per_kwh: float = 0.71              # Philippine grid emission factor
 
@@ -390,3 +396,14 @@ class PricingConfig(BaseModel):
     @property
     def productive_hours(self) -> float:
         return self.labor.paid_hours - self.labor.nonproductive_hours - 2 * self.mobdemob.one_way_travel_hours
+
+
+# Settings that never move a price or a customer document: the website estimate's own knobs and the import stamp.
+VERSION_EXCLUDES = {"quick", "imported_from", "imported_at", "company_base"}
+
+
+def settings_version(cfg: PricingConfig) -> str:
+    """A short fingerprint of every setting that moves a price, the program or the savings. It is stored with a
+    priced project's results; when it no longer matches the current settings the project is flagged and a job
+    from stage quoted onward is re-priced only on an explicit confirmation."""
+    return hashlib.sha256(cfg.model_dump_json(exclude=VERSION_EXCLUDES).encode()).hexdigest()[:16]

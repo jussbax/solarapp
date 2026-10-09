@@ -71,3 +71,46 @@ def test_economics_overrides_and_off_grid():
     # unavailable without pricing
     r = _results(); r["pricing"] = {"available": False}
     assert not build_economics(AssessmentDoc(), r, cfg)["available"]
+
+
+def test_battery_life_follows_the_warranty_and_replacements_carry_vat():
+    """Finance 2 and 5, the owner's decision 3: the battery warranty in the company profile (5 years) is the battery life
+    unless a setting or the job overrides it; the inverter life stays the 12-year setting (a service life, not its 5-year
+    warranty); replacements cost the proposal's line plus VAT plus the replacement-labor setting (0 by default)."""
+    doc = AssessmentDoc()
+    cfg = PricingConfig()
+    assert cfg.economics.battery_life_years_override == 0 and cfg.economics.inverter_life_years == 12 and cfg.economics.replacement_labor_php == 0
+    profile = {"warranty_battery_years": "5", "warranty_inverter_years": "5"}
+    eco = build_economics(doc, _results(), cfg, profile)
+    a = eco["assumptions"]
+    assert a["battery_life_years"] == 5 and a["battery_life_source"] == "battery warranty" and a["inverter_life_years"] == 12
+    assert a["battery_replacement_cost"] == pytest.approx(91205.0 * 1.12)
+    assert a["inverter_replacement_cost"] == pytest.approx(29806.0 * 1.12)
+    assert a["replacement_labor_php"] == 0 and a["replacement_vat"] == 0.12
+    notes = {r["year"]: r["note"] for r in eco["years"]}
+    assert [y for y, n in notes.items() if "battery replacement" in n] == [5, 10, 15, 20]   # four in 25 years, never in the last
+    assert [y for y, n in notes.items() if "inverter replacement" in n] == [12, 24]
+    assert eco["years"][4]["costs"] == pytest.approx(266900 * 0.005 * 1.03 ** 4 + 91205.0 * 1.12)
+    assert not any(w["code"] == "battery_life_verify" for w in eco["warnings"])
+    # a stored config from before this rule still carries battery_life_years = 10: it is dropped, the warranty rule applies
+    old = PricingConfig.model_validate({"economics": {"battery_life_years": 10}})
+    assert old.economics.battery_life_years_override == 0 and not hasattr(old.economics, "battery_life_years")
+    assert build_economics(doc, _results(), old, profile)["assumptions"]["battery_life_years"] == 5
+    # two more replacements than the old 10-year life: the 25-year net is lower, never silently higher
+    ten = PricingConfig()
+    ten.economics.battery_life_years_override = 10
+    assert eco["lifetime_net"] < build_economics(doc, _results(), ten, profile)["lifetime_net"]
+    # the settings override wins over the warranty, the job's own figure over both; labor rides on every replacement
+    cfg.economics.battery_life_years_override = 8
+    cfg.economics.replacement_labor_php = 2500
+    eco8 = build_economics(doc, _results(), cfg, profile)
+    assert eco8["assumptions"]["battery_life_years"] == 8 and eco8["assumptions"]["battery_life_source"] == "setting"
+    assert eco8["assumptions"]["battery_replacement_cost"] == pytest.approx(91205.0 * 1.12 + 2500)
+    assert eco8["assumptions"]["inverter_replacement_cost"] == pytest.approx(29806.0 * 1.12 + 2500)
+    doc.economics.battery_life_years = 7
+    assert build_economics(doc, _results(), cfg, profile)["assumptions"]["battery_life_source"] == "entered"
+    # a blank warranty: the profile's default with a verify warning, never a silent number; no profile at all reads the same
+    blank = build_economics(AssessmentDoc(), _results(), PricingConfig(), {"warranty_battery_years": ""})
+    assert blank["assumptions"]["battery_life_years"] == 5 and blank["assumptions"]["battery_life_source"] == "assumed"
+    assert any(w["code"] == "battery_life_verify" for w in blank["warnings"])
+    assert build_economics(AssessmentDoc(), _results(), PricingConfig())["assumptions"]["battery_life_source"] == "assumed"
