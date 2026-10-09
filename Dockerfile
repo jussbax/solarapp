@@ -18,7 +18,8 @@ COPY --from=web /web/dist ./frontend/dist
 COPY frontend/public/brand ./frontend/public/brand
 COPY frontend/public/favicon.png frontend/public/apple-touch-icon.png ./frontend/public/
 COPY site/ ./site/
-RUN python site/build.py
+ARG SITE_BASE_URL=https://pldevinc.com
+RUN python site/build.py --base-url "$SITE_BASE_URL"
 # an unprivileged user; the data volume must be owned by it (chown -R 10001:10001 data on the host)
 RUN useradd -r -u 10001 -d /tmp -s /usr/sbin/nologin app && mkdir -p /app/data && chown -R app:app /app/data
 ENV SOLARAPP_DATA_DIR=/app/data \

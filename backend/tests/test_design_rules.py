@@ -372,3 +372,18 @@ def test_grid_flag_reads_the_name_first_and_the_owner_confirmed_the_eco_hybrid()
     assert infer_grid_interactive("6 kW hybrid inverter", "cannot export; island mode only") is False
     assert infer_grid_interactive("Off-grid inverter 5 kW") is False
     assert infer_grid_interactive("6 kW inverter", "grid-tie listed") is True
+
+
+def test_an_unflagged_catalogue_still_prices_an_inverter_on_a_grid_job(imported):
+    """A database imported before the grid flag existed: nothing is marked, so the default is kept with the
+    certificate note; only a unit marked unable to export is skipped."""
+    cat = deepcopy(imported.catalog)
+    for i in cat.items.values():
+        if i.category == "Inverter":
+            i.grid_interactive = None
+    res = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=10, kind="combination"), cat, imported.config)
+    inv = next(l for l in res.lines if l.role == "inverter")
+    assert inv.code == imported.config.roles.default_inverter_code_grid
+    codes = {w["code"] for w in res.warnings}
+    assert "inverter_certificate_unknown" in codes and "no_inverter" not in codes and "default_inverter_not_grid" not in codes
+    assert all(o["grid_interactive"] is None for o in res.choices["inverter_options"])

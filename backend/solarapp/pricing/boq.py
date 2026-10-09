@@ -86,16 +86,20 @@ def _cheapest(items: list[Item], catalog: Catalog, cfg: PricingConfig, units_fn=
 
 
 def select_inverter(kw: float, catalog: Catalog, cfg: PricingConfig, kind: str = "combination") -> list[tuple[Item, int, float]]:
-    """Hybrid inverters at or above kw, cheapest first. Anything with net metering (every kind but off_grid) needs
-    a unit marked grid-interactive: an off-grid type cannot export and the DU asks for the anti-islanding listing."""
+    """Hybrid inverters at or above kw, cheapest first. Anything with net metering (every kind but off_grid) wants a
+    unit marked grid-interactive; a unit marked unable to export is never offered there. When nothing in the list
+    is marked yet (a database imported before the flag existed), the unmarked units are offered with the
+    certificate note, so a job is never priced without an inverter."""
     grid = kind != "off_grid"
-    cands = [
+    fits = [
         i for i in catalog.by_category("Inverter")
         if i.is_hybrid_inverter and (i.rating_unit or "").lower() == "kw" and i.rating and i.rating >= kw - 1e-9
         and not _excluded(i, cfg.roles.inverter_exclude_words)
-        and (not grid or i.grid_interactive is True)
     ]
-    return _cheapest(cands, catalog, cfg)
+    if grid:
+        marked = [i for i in fits if i.grid_interactive is True]
+        fits = marked or [i for i in fits if i.grid_interactive is None]
+    return _cheapest(fits, catalog, cfg)
 
 
 def _grid_flag(item: Item) -> str:
@@ -193,10 +197,9 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         cand = catalog.get(default_code)
         if cand is None:
             warnings.append({"code": "default_inverter", "message": f"Default inverter {default_code} is not in the materials list; the cheapest that fits is used."})
-        elif grid_job and cand.grid_interactive is not True:
-            why = "is an off-grid type" if cand.grid_interactive is False else "is not marked grid-interactive"
+        elif grid_job and cand.grid_interactive is False:
             warnings.append({"code": "default_inverter_not_grid", "message": (
-                f"The default inverter {cand.code} {cand.name} {why}, so it is skipped on this net-metering job and the cheapest grid-interactive "
+                f"The default inverter {cand.code} {cand.name} is an off-grid type, so it is skipped on this net-metering job and the cheapest grid-interactive "
                 f"inverter that fits is used. Set a grid default under Pricing settings › BOM item roles, or mark the inverter grid-interactive on the Materials page.")})
         else:
             inverter = cand

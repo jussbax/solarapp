@@ -252,14 +252,75 @@ boot; `sudo journalctl -u cloudflared -f` shows its log.
 Consider putting Cloudflare Access in front of the hostname as a second
 login layer; the app itself has one password-protected user.
 
-### Update
+### Update a running server
 
-```bash
-git pull && docker compose build && docker compose up -d
-```
+Every update is the same five steps; the first update after the website,
+the tunnels and the sign-in changes needs the extra ones marked "first time".
 
-Backups: copy `./data/solarapp.db` (assessments) and, optionally, `./data/`
-as a whole (weather dataset, re-downloadable).
+1. Back up first, from the repository folder on the server:
+
+   ```bash
+   mkdir -p data/backup
+   docker compose exec -T solarapp python -c "import sqlite3,datetime; s=sqlite3.connect('/app/data/solarapp.db'); d=sqlite3.connect(f'/app/data/backup/solarapp-{datetime.date.today()}.db'); s.backup(d); d.close()"
+   cp .env .env.bak
+   ```
+
+2. Pull the code. The work lives on the branch named below until it is
+   merged; check it out explicitly:
+
+   ```bash
+   git fetch origin
+   git checkout claude/wonderful-maxwell-wawb8t
+   git pull
+   ```
+
+3. Bring `.env` up to date against `.env.example` (first time: the
+   variables under "Website estimate" and "Website and tunnels" are new).
+   Required now: `SOLARAPP_INTERNAL_TOKEN` (`openssl rand -hex 24`), a real
+   `SOLARAPP_APP_PASSWORD` (the app refuses `change-me`),
+   `SOLARAPP_PUBLIC_ORIGINS`, `SOLARAPP_PUBLIC_URL`, `SOLARAPP_WEBSITE_URL`,
+   `SOLARAPP_OFFICE_HOST`, `SOLARAPP_COOKIE_SECURE=true`, the two tunnel
+   tokens and `COMPOSE_PROFILES=tunnels`. `SOLARAPP_SECRET_KEY` may stay
+   blank: the app keeps one in `data/secret.key`.
+
+4. First time only: the containers run as an unprivileged user, so the data
+   folder must be theirs, and the two tunnels must exist in Cloudflare (see
+   "Set it up: two tunnels as containers" above):
+
+   ```bash
+   sudo chown -R 10001:10001 data
+   ```
+
+5. Rebuild and restart (the build compiles the frontend and the site; a few
+   minutes the first time):
+
+   ```bash
+   docker compose --profile tunnels up -d --build
+   docker compose ps
+   docker compose logs --since 5m solarapp | grep -E "migration|audit|Error"
+   ```
+
+   The app updates its own database on start: new tables and columns are
+   added, and website leads that were saved as records move to the Leads
+   inbox (the log says how many).
+
+After the first update, in the browser:
+
+- Materials: import the workbook again with "keep settings" ticked, so each
+  inverter gets its grid-interactive flag and the electrical data the new
+  checks use (until then the checks note that the flag is unknown).
+- Settings: fill the company profile (contact details, the PEE, warranties,
+  where to pay, the callback promise); they print on every document and on
+  the website.
+- Sign in: `docker compose exec solarapp python -m solarapp.twofactor setup`,
+  scan the QR code, keep the backup codes; then add your security key under
+  Settings › Sign-in security.
+- Check `https://solar.pldevinc.com` (login), `https://pldevinc.com` (site),
+  run the estimate and a test booking, and see it land under Leads.
+
+Backups: `data/solarapp.db` holds everything the app knows; `data/` as a
+whole adds the weather dataset (re-downloadable) and the secrets
+(`secret.key`, `session.key`, `twofactor.json`), which are worth keeping.
 
 ## Without Docker (plain Ubuntu)
 

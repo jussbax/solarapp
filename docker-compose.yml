@@ -20,7 +20,10 @@ services:
   # Cloudflare Access) and from the public process over the internal network.
   solarapp:
     <<: *hardened
-    build: .
+    build:
+      context: .
+      args:
+        SITE_BASE_URL: ${SOLARAPP_WEBSITE_URL:-https://pldevinc.com}
     image: solarapp:latest
     env_file: .env
     environment:
