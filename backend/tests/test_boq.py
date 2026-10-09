@@ -32,12 +32,12 @@ def test_mounting_matches_sample_job(imported):
 
 
 def test_default_inverter_in_parallel(imported):
-    """One default per system kind: the grid-interactive FS-INV-001 on anything with net metering, the off-grid
-    FS-INV-008 on off-grid jobs; parallel units when the sizing needs more kW; a per-job override wins."""
+    """One default per system kind, both the owner's eco-hybrid today (it may export, confirmed with the maker);
+    parallel units when the sizing needs more kW; a per-job override wins."""
     cat, cfg = imported.catalog, imported.config
     res = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6), cat, cfg)   # kind defaults to combination
     inv = next(l for l in res.lines if l.role == "inverter")
-    assert inv.code == "FS-INV-001" and inv.qty == 1 and "grid-interactive: yes" in inv.note
+    assert inv.code == "FS-INV-008" and inv.qty == 1 and "grid-interactive: yes" in inv.note
     off = generate_boq(BoqRequest("BC-PNL-001", 9, rows_for(9, 8, 1.134), inverter_kw=6, battery_kwh=9.6, kind="off_grid"), cat, cfg)
     assert next(l for l in off.lines if l.role == "inverter").code == "FS-INV-008"   # Felicity 6 kW eco-hybrid off the grid
     big = generate_boq(BoqRequest("BC-PNL-001", 20, rows_for(20, 10, 1.134), inverter_kw=8, inverter_required_kw=7.4, battery_kwh=10, kind="off_grid"), cat, cfg)

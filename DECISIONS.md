@@ -801,3 +801,27 @@ chart, and the engineering build order in the plan.
   no default, by the owner's rule that the roof is measured, not assumed.
   The proposal is refused on test weather on the server as well, like the
   roof check and the card.
+
+## The owner's corrections after the engineering batch
+
+- "Off-grid" in this company's vocabulary means NO EXPORT, not no grid:
+  the panels and the battery carry the house first, the grid steps in
+  only when both fall short, and nothing is sold back. The sizing keeps
+  the design-margin rule on the worst month and stops there; it no longer
+  fills the roof to chase a dark week, because the grid is there for it.
+  Every kind with a battery reports "hours the grid steps in"; the
+  economics bill those hours at the tariff and give no export credit; the
+  documents and the website say so in those words. The internal key stays
+  `off_grid` for old records.
+- The Felicity eco-hybrid can export: the owner confirmed the selling
+  option with the maker. Any "hybrid" is therefore grid-interactive unless
+  its remark says it cannot export, the eco-hybrid is the owner's default
+  on every job again (the grid-tie model stays available), and the
+  certificate question is an ordinary warning: confirm the anti-islanding
+  listing with the maker before the net-metering application, then record
+  it on the Materials page.
+- A crew stays late rather than come back for an hour: the last priced day
+  may run up to a late-finish allowance (default two hours) past its usual
+  end before the plan adds a day. The task floors stay; the six-panel
+  hybrid is a one-day job that finishes about an hour and a half late,
+  which the program says in a warning.

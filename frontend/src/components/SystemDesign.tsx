@@ -14,7 +14,7 @@ const DESIGN_CODES = new Set([
   'battery_current_unknown', 'battery_current_units', 'battery_current', 'battery_breaker', 'battery_cable', 'pv_cable', 'ac_cable', 'ac_breaker', 'ats',
 ])
 
-const gridFlag = (v: boolean | null | undefined) => (v === true ? 'grid-interactive' : v === false ? 'off-grid type (cannot export)' : 'grid-interactive status unknown')
+const gridFlag = (v: boolean | null | undefined) => (v === true ? 'grid-interactive (can export)' : v === false ? 'not grid-interactive (cannot export)' : 'grid-interactive status unknown')
 
 /** System design: the inverter with its certificate and grid-interactive status, the battery (nominal and usable),
  * autonomy and loss of load, strings, cable gauges with their voltage drop, breakers and surge protectors, the panels per
@@ -126,7 +126,7 @@ export default function SystemDesign({ results, panelName, panelWp }: { results:
         )}
         {hy?.available && sizing.kind !== 'net_metering' && (
           <div className="kpi">
-            <div className="label">{offGrid ? 'Hours without power' : 'Hours the grid steps in'}</div>
+            <div className="label">Hours the grid steps in</div>
             <div className="value">{n0(hy.loss_of_load_hours ?? 0)} h</div>
             <div className="sub">
               on {plural(hy.loss_of_load_days ?? 0, 'day')} over a real year of weather ({n0(hy.unserved_kwh ?? 0)} kWh)

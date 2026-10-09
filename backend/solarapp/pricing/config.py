@@ -240,7 +240,7 @@ class BoqRoles(BaseModel):
     # One default inverter per system kind, in parallel units when more is needed; blank = the cheapest that fits.
     # Grid jobs (net metering, with or without a battery) need a grid-interactive unit the DU accepts; the importer
     # sets the grid default to the first grid-interactive hybrid in the workbook (FS-INV-001 in the bundled one).
-    default_inverter_code_grid: str = "FS-INV-001"
+    default_inverter_code_grid: str = "FS-INV-008"   # the owner's eco-hybrid on every job; it may export (confirmed with the maker)
     default_inverter_code_offgrid: str = "FS-INV-008"   # Felicity 6 kW eco-hybrid, an off-grid type
     inverter_exclude_words: list[str] = Field(default_factory=lambda: ["3P", "3-phase", "high-voltage", "HV"])
     battery_exclude_words: list[str] = Field(default_factory=lambda: ["rack", "controller module", "slave", "per kWh", "12V", "24V", "25.6V", "12 V", "24 V"])
@@ -303,6 +303,7 @@ class ProgramConfig(BaseModel):
     # Floors for the hour-by-hour plan only (minutes of wall-clock time per task); the labour price is not changed.
     # Today's rates give a ten-minute commissioning, which no PEE or DU inspector accepts.
     min_task_minutes: dict[str, int] = Field(default_factory=lambda: {"commissioning": 120, "battery": 60, "inverter": 60})
+    late_finish_max_minutes: int = 120   # the last priced day may run this long past the usual end before a new day is added
     payment: PaymentPlan = Field(default_factory=PaymentPlan)
 
 

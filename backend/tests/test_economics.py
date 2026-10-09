@@ -63,10 +63,11 @@ def test_economics_overrides_and_off_grid():
     assert eco2["assumptions"]["tariff_source"] == "entered" and len(eco2["years"]) == 10
     assert eco2["monthly"][0]["bill_after"] == pytest.approx(80 * 15.0)
     assert all(r["costs"] == 0 for r in eco2["years"])  # no O&M, no replacement within 10 years
-    # off-grid: no grid bill at all, export credit ignored
+    # no export: the grid bills what it still supplies at the tariff, and the surplus earns nothing
     off = build_economics(AssessmentDoc(), _results(kind="off_grid"), cfg)
-    assert off["bill_after_monthly"] == 0 and off["assumptions"]["export_rate_php_per_kwh"] == 0
-    assert off["year1"]["savings"] == pytest.approx(12 * 338 * 12.0)
+    assert off["assumptions"]["export_rate_php_per_kwh"] == 0 and off["year1"]["export_credit"] == 0
+    assert off["bill_after_monthly"] == pytest.approx(off["year1"]["import_kwh"] / 12 * 12.0)
+    assert off["year1"]["savings"] == pytest.approx(12 * 338 * 12.0 - off["year1"]["import_kwh"] * 12.0)
     # unavailable without pricing
     r = _results(); r["pricing"] = {"available": False}
     assert not build_economics(AssessmentDoc(), r, cfg)["available"]

@@ -211,9 +211,9 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
                 f"{inverter.code} {inverter.name} is an off-grid type: it cannot export and the electric company will not accept it for net metering. "
                 f"Choose a grid-interactive inverter under Pricing inputs, or mark this one on the Materials page if its datasheet says otherwise.")})
         elif grid_job and inverter.grid_interactive is None:
-            warnings.append({"code": "inverter_certificate_unknown", "hard": True, "message": (
-                f"{inverter.code} {inverter.name} is not marked grid-interactive: confirm the inverter's anti-islanding certificate before the net-metering application, "
-                f"then set Grid-interactive and its certifications on the Materials page.")})
+            warnings.append({"code": "inverter_certificate_unknown", "message": (
+                f"{inverter.code} {inverter.name} is not marked grid-interactive: confirm its anti-islanding certificate (IEC 62116 or UL 1741; verify what the electric company asks for) "
+                f"with the maker before the net-metering application, then set Grid-interactive and its certifications on the Materials page.")})
         if inverter.rating and (inverter.rating_unit or "").lower() == "kw":
             units = max(units, int(math.ceil(required / inverter.rating - 1e-9)))
         note = f"{inverter.rating:g} kW hybrid" + (f", {units} in parallel for {required:g} kW" if units > 1 else "")

@@ -1,7 +1,9 @@
 """System sizing from the reconciled load profile and the roof's production profile.
 
-All systems are hybrid inverters. The owner chooses off-grid (full battery,
-no grid import; surplus beyond the battery is lost), net metering, or net
+All systems are hybrid inverters. The owner chooses one of three kinds, in
+the owner's own meaning: "off_grid" is solar and a battery with NO EXPORT (the
+grid stays connected and only steps in when the panels and the battery fall
+short; surplus beyond the battery is lost), net metering (no battery), or net
 metering with a battery.
 
 * Production is taken at the meter: the caller applies the system losses
@@ -14,10 +16,10 @@ metering with a battery.
 * PV, grid modes: the smallest whole number of panels whose annual production
   at the meter covers the annual consumption (net-zero annual energy), capped
   by the roof.
-* PV, off-grid: the worst month's typical day must produce the day's
-  consumption times a design margin; more panels are added until the balance
-  leaves nothing unserved, first over the typical days and then over the real
-  hourly year, up to what the roof holds.
+* PV, no-export ("off_grid"): the worst month's typical day must produce the
+  day's consumption times a design margin, on the faces the panels occupy,
+  up to what the roof holds. The grid covers the rest; nothing is added to
+  chase a dark week, because the grid is there for it.
 * Battery: usable capacity equal to the energy it must deliver on the typical
   day with the largest unmet load (hours where solar is short), divided by the
   one-way efficiency, over the twelve months, times the days of autonomy (the
@@ -26,8 +28,8 @@ metering with a battery.
   rounding.
 * The hourly year: with the real 8,760-hour production series the balance is
   run over the whole year with the battery state carried from hour to hour,
-  and the result reports the loss-of-load hours and days and the unserved
-  kWh (off-grid) or the hours the grid steps in (hybrid). Month totals and the
+  and the result reports the hours the grid steps in, on how many days, and
+  the kWh it supplies (every kind with a battery). Month totals and the
   typical-day charts then come from that run.
 * Inverter: smallest catalogue size that covers the nameplate coincident
   peak, the surge of the largest motor at the stated surge factor, and the
@@ -359,8 +361,8 @@ def size_system(
                     "consumption_kwh": sums["consumption"], "production_kwh": sums["production"],
                     "direct_kwh": sums["direct"], "battery_kwh": sums["discharge"],
                     "export_kwh": sums["export"], "curtailed_kwh": sums["curtailed"],
-                    "import_kwh": 0.0 if off_grid else _clean(sums["imported"]),
-                    "unserved_kwh": _clean(sums["imported"]) if off_grid else 0.0,
+                    "import_kwh": _clean(sums["imported"]),   # the grid steps in for every kind; "off_grid" only means no export
+                    "unserved_kwh": 0.0,
                 }
                 monthly_.append(row)
                 for k in tot_:
@@ -378,7 +380,7 @@ def size_system(
             hourly_block = {
                 "available": True, "hours": int(len(load_year)),
                 "loss_of_load_hours": hours, "loss_of_load_days": days_short, "unserved_kwh": _clean(float(b["imported"][short].sum())),
-                "meaning": "unserved" if off_grid else "grid_covered", "worst_month": worst["month"] if worst else None, "months": by_month,
+                "meaning": "grid_covered", "worst_month": worst["month"] if worst else None, "months": by_month,
             }
         else:
             for m in range(12):
@@ -388,8 +390,8 @@ def size_system(
                     "consumption_kwh": float(b.load.sum() * days[m]), "production_kwh": float(b.production.sum() * days[m]),
                     "direct_kwh": float(b.direct.sum() * days[m]), "battery_kwh": float(b.discharge.sum() * days[m]),
                     "export_kwh": float(b.export.sum() * days[m]), "curtailed_kwh": float(b.curtailed.sum() * days[m]),
-                    "import_kwh": 0.0 if off_grid else _clean(float(b.imported.sum() * days[m])),
-                    "unserved_kwh": _clean(float(b.imported.sum() * days[m])) if off_grid else 0.0,
+                    "import_kwh": _clean(float(b.imported.sum() * days[m])),
+                    "unserved_kwh": 0.0,
                 }
                 monthly_.append(row)
                 for k, key in (("consumption", "consumption_kwh"), ("production", "production_kwh"), ("direct", "direct_kwh"), ("discharge", "battery_kwh"), ("export", "export_kwh"), ("curtailed", "curtailed_kwh")):
@@ -404,45 +406,25 @@ def size_system(
         return {"kwp": kwp_, "usable": usable_, "installed": installed_, "power": power_, "monthly": monthly_, "profiles": profiles_, "tot": tot_, "hourly_year": hourly_block}
 
     r = run(panels, year=False)
-    autonomy_met = True
     if off_grid:
-        # add panels until the typical days leave nothing unserved, within the roof
-        while r["tot"]["imported"] > 1e-6 and panels < roof_max_panels:
-            panels += 1
-            r = run(panels, year=False)
-        # the worst month must keep the design margin on the faces the panels actually occupy
+        # the worst month must keep the design margin on the faces the panels actually occupy; the grid covers the rest
         while panels < roof_max_panels and any(m["production_kwh"] < offgrid.pv_margin * m["consumption_kwh"] - 1e-6 for m in r["monthly"]):
             panels += 1
             r = run(panels, year=False)
-        if use_year:
-            # then over the real year: the battery sized for the autonomy must never run out
-            r = run(panels, year=True)
-            while r["tot"]["imported"] > 1e-6 and panels < roof_max_panels:
-                panels += 1
-                r = run(panels, year=True)
-            autonomy_met = r["tot"]["imported"] <= 1e-6
-        roof_limited = r["tot"]["imported"] > 1e-6 or target_panels > roof_max_panels
+        roof_limited = target_panels > roof_max_panels or any(m["production_kwh"] < offgrid.pv_margin * m["consumption_kwh"] - 1e-6 for m in r["monthly"])
     else:
         roof_limited = target_panels > roof_max_panels
-        if use_year:
-            r = run(panels, year=True)
+    if use_year:
+        r = run(panels, year=True)
     kwp = r["kwp"]
     usable, installed, battery_power = r["usable"], r["installed"], r["power"]
     monthly, profiles, tot = r["monthly"], r["profiles"], r["tot"]
     hourly_year = r["hourly_year"] or {"available": False}
 
     if roof_limited and off_grid:
-        warnings.append({"code": "roof_limited", "message": f"Off-grid needs about {max(target_kwp, kwp):.1f} kWp but the roof holds {roof_max_kwp:.2f} kWp. About {tot['imported']:,.0f} kWh a year would go unserved. Consider net metering with a battery, or cutting load."})
+        warnings.append({"code": "roof_limited", "message": f"The design margin needs about {max(target_kwp, kwp):.1f} kWp but the roof holds {roof_max_kwp:.2f} kWp; the grid will cover about {tot['imported']:,.0f} kWh a year, and nothing is exported."})
     elif roof_limited:
         warnings.append({"code": "roof_limited", "message": f"Net-zero needs about {target_kwp:.1f} kWp but the roof holds {roof_max_kwp:.2f} kWp; the system is sized to what the roof can provide."})
-    if off_grid and use_year and not autonomy_met:
-        hy = hourly_year
-        warnings.append({"code": "autonomy_not_met", "message": (
-            f"Even with the full roof ({panels} panels) and a battery for {autonomy:g} {'evening' if autonomy == 1 else 'evenings'} without sun, "
-            f"a real year of weather leaves about {hy['loss_of_load_hours']} hours on {hy['loss_of_load_days']} days without power "
-            f"({hy['unserved_kwh']:,.0f} kWh). A bigger battery (more days of autonomy under Pricing settings › System sizing), less load, or net metering with a battery would close it.")})
-    elif off_grid and use_year and autonomy_met and panels > target_panels:
-        warnings.append({"code": "autonomy_panels", "message": f"The real year of weather needed {panels - target_panels} more {'panel' if panels - target_panels == 1 else 'panels'} than the typical days to keep the battery from running out."})
     if panels == 0:
         warnings.append({"code": "no_pv", "message": "Nothing to size: no panels fit, or the audit has no consumption."})
 
@@ -494,8 +476,8 @@ def size_system(
         "annual_battery_kwh": tot["discharge"],
         "annual_export_kwh": tot["export"],
         "annual_curtailed_kwh": tot["curtailed"],
-        "annual_import_kwh": 0.0 if off_grid else tot["imported"],
-        "annual_unserved_kwh": tot["imported"] if off_grid else 0.0,
+        "annual_import_kwh": tot["imported"],
+        "annual_unserved_kwh": 0.0,
         "net_annual_kwh": net_kwh,
         "offgrid": {"pv_margin": offgrid.pv_margin} if off_grid else None,
         "battery": {

@@ -9,7 +9,7 @@ const years = (v: number | null | undefined, horizon: number) => (v == null ? `m
 const GOALS: { id: Goal; title: string; text: string }[] = [
   { id: 'net_metering', title: 'A lower bill', text: 'Solar runs the house by day. Extra power goes to your electric company as credit on your bill (net metering). No battery, so no power during a brownout.' },
   { id: 'combination', title: 'A lower bill, and lights in a brownout', text: 'Solar by day, battery at night and during brownouts. Extra power still earns credit on your bill.' },
-  { id: 'off_grid', title: 'Off the grid', text: 'A bigger battery carries the whole house, day and night. No electric bill, but a bigger system.' },
+  { id: 'off_grid', title: 'Battery first, nothing sold back', text: 'The panels and a bigger battery carry the house day and night. The grid only steps in when both fall short, and no power is exported.' },
 ]
 const PATTERNS: { id: Pattern; title: string; text: string }[] = [
   { id: 'morning', title: 'Mostly morning', text: 'Cooking, laundry, the pump and aircon early in the day.' },
@@ -388,8 +388,8 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
           <div className="pld-line">
             <b>What it makes:</b> about {n0(prod.annual_kwh / 12)} kWh a month, {makesPct}% of the {n0(result.inputs.monthly_kwh)} kWh you use.
             {makesPct > 100 && shown.goal !== 'off_grid' && " Daytime power is used directly; the surplus is credited by your electric company at its generation rate, which is why the bill does not reach zero."}
-            {shown.goal === 'off_grid' && ' Off-grid systems are oversized so the battery still fills in the rainy months.'}
-            {shown.goal === 'off_grid' && prod.annual_unserved_kwh > 50 && ` About ${n0(prod.annual_unserved_kwh)} kWh a year would still go short in the rainy months.`}
+            {shown.goal === 'off_grid' && ' Sized so the panels and the battery carry a typical day; surplus beyond the battery earns nothing, because nothing is sold back.'}
+            {shown.goal === 'off_grid' && prod.annual_import_kwh > 50 && ` The grid would still supply about ${n0(prod.annual_import_kwh)} kWh a year, mostly in the rainy months.`}
           </div>
           {other && (
             <div className="pld-line pld-alt">

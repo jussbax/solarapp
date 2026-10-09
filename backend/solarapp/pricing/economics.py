@@ -85,10 +85,10 @@ def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig) -> di
     for m in sizing["monthly"]:
         cons = float(m["consumption_kwh"])
         used = float(m["direct_kwh"]) + float(m["battery_kwh"])
-        exp = 0.0 if off_grid else float(m["export_kwh"])
-        imp = 0.0 if off_grid else float(m["import_kwh"])
+        exp = 0.0 if off_grid else float(m["export_kwh"])   # no export means no credit; the grid still bills what it supplies
+        imp = float(m["import_kwh"])
         before = cons * tariff
-        after = 0.0 if off_grid else max(imp * tariff - exp * export_rate, 0.0)
+        after = max(imp * tariff - exp * export_rate, 0.0)
         monthly.append({
             "month": m["month"], "consumption_kwh": cons, "solar_used_kwh": used, "export_kwh": exp, "import_kwh": imp,
             "unserved_kwh": float(m.get("unserved_kwh", 0)), "bill_before": before, "bill_after": after, "savings": before - after,
@@ -113,8 +113,8 @@ def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig) -> di
         warnings.append({"code": "no_savings", "message": "The sized system saves nothing on the bill; check the audit and tariff."})
     if not off_grid and any(x["import_kwh"] * tariff < x["export_kwh"] * export_rate for x in monthly):
         warnings.append({"code": "export_credit_capped", "message": "In some months the export credit is bigger than the bill. The extra credit is not carried over, so savings are slightly understated."})
-    if off_grid and sum(x["unserved_kwh"] for x in monthly) > 0:
-        warnings.append({"code": "unserved", "message": f"Off-grid: about {sum(x['unserved_kwh'] for x in monthly):,.0f} kWh a year would go unserved; savings count only the energy served."})
+    if off_grid and y1_import > 0:
+        warnings.append({"code": "grid_backup", "message": f"No export: the grid supplies about {y1_import:,.0f} kWh a year when the panels and the battery fall short, billed at the tariff; surplus beyond the battery earns nothing."})
 
     # year series
     flows = [-contract]

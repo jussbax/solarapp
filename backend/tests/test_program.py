@@ -134,10 +134,18 @@ def test_task_floors_stretch_the_plan_and_warn(priced):
     assert by_task["Mount the hybrid inverter"] >= 60 and by_task["Anchor and connect the battery"] >= 60
     applied = {x["task"]: x for x in plan["task_floors"]["applied"]}
     assert applied["Energize, test and commission"]["minutes"] == 120 and applied["Energize, test and commission"]["priced_minutes"] < 120
-    # the small job no longer fits the priced day: the plan says so instead of hiding it; the price is untouched
-    assert plan["days"] == 2 and plan["paid_days"] == 1
-    assert any(w["code"] == "schedule_overrun" for w in plan["warnings"]) and not any(w["code"] == "early_finish" for w in plan["warnings"])
+    # the small job runs past the usual end but stays one day: the crew finishes late within the allowance; the price is untouched
+    assert plan["days"] == 1 and plan["paid_days"] == 1
+    late = next(w for w in plan["warnings"] if w["code"] == "late_finish")
+    assert "finishes about" in late["message"] and not any(w["code"] in ("early_finish", "schedule_overrun") for w in plan["warnings"])
     assert plan["man_hours"]["total"] == pr["labor"]["total_mh"]
+    # without the allowance the same floors spill into a second day, and the plan says so
+    cfg_strict = cfg.model_copy(deep=True)
+    cfg_strict.program.late_finish_max_minutes = 0
+    strict = plan_install_days(pr, cfg_strict, AssessmentDoc())
+    assert strict["days"] == 2 and any(w["code"] == "schedule_overrun" for w in strict["warnings"])
+    # the day added beyond the plan is a standard day, not the stretched last one
+    assert max(s["end"] for s in strict["segments"] if s["day"] == 1 and s["stream"] == "ground") <= max(s["end"] for s in strict["segments"] if s["day"] == 0 and s["stream"] == "ground")
     # a floor the crew already meets changes nothing
     cfg.program.min_task_minutes = {"commissioning": 5, "battery": 5, "inverter": 5}
     plan2 = plan_install_days(pr, cfg, AssessmentDoc())

@@ -8,7 +8,7 @@ const n0 = (v: number) => Math.round(v).toLocaleString()
 const n1 = (v: number) => v.toFixed(1)
 const n2 = (v: number) => v.toFixed(2)
 const pct = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
-export const KIND_LABEL: Record<string, string> = { off_grid: 'Off-grid (battery, no grid)', net_metering: 'Net metering (no battery)', combination: 'Net metering + battery (hybrid)' }
+export const KIND_LABEL: Record<string, string> = { off_grid: 'Battery first, no export (grid as backup)', net_metering: 'Net metering (no battery)', combination: 'Net metering + battery (hybrid)' }
 
 /** The energy audit against the sized system: the typical day, audit versus bill, the appliances, the peak and the
  * month-by-month balance. With `tiles` the sizing KPIs and the sizing warnings are shown too; the System design card
@@ -83,12 +83,12 @@ export default function AuditResults({ audit, sizing, panelName, panelWp, tiles 
             <div className="label">{offGrid ? 'Unserved' : 'From the grid'}</div>
             <div className="value">{n0(offGrid ? sizing.annual_unserved_kwh : sizing.annual_import_kwh)} kWh</div>
             <div className="sub">
-              {offGrid ? `per year not covered, ${n0(sizing.annual_curtailed_kwh)} kWh surplus unused` : `imported per year, ${n0(sizing.annual_export_kwh)} exported`}
+              {offGrid ? `imported per year, ${n0(sizing.annual_curtailed_kwh)} kWh surplus unused (no export)` : `imported per year, ${n0(sizing.annual_export_kwh)} exported`}
             </div>
           </div>
           {hy?.available && sizing.kind !== 'net_metering' && (
             <div className="kpi">
-              <div className="label">{offGrid ? 'Hours without power' : 'Hours the grid steps in'}</div>
+              <div className="label">Hours the grid steps in</div>
               <div className="value">{n0(hy.loss_of_load_hours ?? 0)} h</div>
               <div className="sub">
                 on {n0(hy.loss_of_load_days ?? 0)} {hy.loss_of_load_days === 1 ? 'day' : 'days'} over a real year of weather ({n0(hy.unserved_kwh ?? 0)} kWh)

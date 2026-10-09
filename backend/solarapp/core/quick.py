@@ -30,7 +30,7 @@ SHAPES = {
     "evening": [0.8, 0.6, 0.5, 0.5, 0.5, 0.6, 0.9, 1.0, 0.8, 0.7, 0.7, 0.8, 0.8, 0.7, 0.7, 0.8, 1.0, 1.6, 2.6, 3.0, 2.8, 2.2, 1.6, 1.1],
 }
 PATTERN_LABEL = {"morning": "mostly in the morning", "balanced": "spread through the day", "evening": "mostly in the evening"}
-GOAL_LABEL = {"net_metering": "solar with net metering, no battery", "combination": "solar with a battery and net metering", "off_grid": "off-grid solar with a battery"}
+GOAL_LABEL = {"net_metering": "solar with net metering, no battery", "combination": "solar with a battery and net metering", "off_grid": "solar with a battery and no export (the grid as backup)"}
 OUT_OF_AREA_KM = 25.0
 # Under this a system is one panel and a ₱180,000 inverter: refused with a plain message instead of a silly figure.
 MIN_MONTHLY_KWH = 60.0

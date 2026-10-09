@@ -322,7 +322,9 @@ def resolve_roles(cfg: PricingConfig, items: dict[str, Item], warnings: list[str
          and not any(w in f"{i.name} {i.spec}".lower() for w in excluded)),
         key=lambda i: i.code,
     )
-    r.default_inverter_code_grid = grid_ok[0].code if grid_ok else ""
+    # the owner's default (the eco-hybrid) stays the grid default when it may export; else the first grid-interactive hybrid
+    preferred = next((i for i in items.values() if i.code in (r.default_inverter_code_grid, r.default_inverter_code_offgrid) and i.grid_interactive is True), None)
+    r.default_inverter_code_grid = preferred.code if preferred else (grid_ok[0].code if grid_ok else "")
     if not grid_ok:
         warnings.append("No grid-interactive hybrid inverter in the workbook; net-metering jobs take the cheapest grid-interactive unit that fits once one is marked on the Materials page.")
     if r.default_inverter_code_offgrid and r.default_inverter_code_offgrid not in items:

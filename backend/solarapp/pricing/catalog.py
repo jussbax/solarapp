@@ -64,17 +64,28 @@ ELECTRICAL_FIELDS = (
 
 
 def infer_grid_interactive(name: str, remarks: str = "") -> Optional[bool]:
-    """From the item's name and the workbook remark: "grid-tie" (also "hybrid (grid-tie + backup)") means it may
-    export; "off-grid" means it may not; "on/off-grid" and a remark that says to CHECK the grid certification are
-    unknown, so the owner confirms with the datasheet. Stays editable on the Materials page."""
-    text = f"{name} {remarks}".lower()
-    if re.search(r"check[^.]*certif", text):
+    """From the item's name first, then the workbook remark. "grid-tie" means it may export; "off-grid" in the NAME
+    means it may not; "on/off-grid" names a mode, not a listing, so it is unknown; any other "hybrid" may export (the
+    Felicity eco-hybrid included: the owner confirmed its selling option with the maker, whatever the remark calls its
+    type). A remark that says it cannot export, or to CHECK the certification, overrides. Stays editable on the
+    Materials page."""
+    n = (name or "").lower()
+    r = (remarks or "").lower()
+    if re.search(r"(no|cannot|can't|without)\s+(export|sell|feed)", f"{n} {r}"):
+        return False
+    if re.search(r"check[^.]*certif", r):
         return None
-    if re.search(r"grid[\s-]?tie", text):
+    if re.search(r"grid[\s-]?tie", n):
         return True
-    if re.search(r"on/off[\s-]?grid|on[\s-]grid", text):
+    if re.search(r"on/off[\s-]?grid|on[\s-]grid", n):
         return None
-    if re.search(r"off[\s-]?grid", text):
+    if re.search(r"off[\s-]?grid", n):
+        return False
+    if "hybrid" in n:
+        return True
+    if re.search(r"grid[\s-]?tie", r):
+        return True
+    if re.search(r"off[\s-]?grid", r):
         return False
     return None
 

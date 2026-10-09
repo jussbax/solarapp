@@ -85,9 +85,9 @@ def test_off_grid_serves_everything_from_solar_and_battery():
     combo = size_system(load, per_kwp, 29, 550, "combination", 4.0, 1.5, 3.0)
     assert og["kwp"] >= combo["kwp"]
     assert abs(og["battery"]["usable_kwh"] - combo["battery"]["usable_kwh"]) < 0.5  # same rule: the unmet night load
-    # roof too small: unserved energy is reported instead of a system that cannot fit
+    # roof too small: the grid covers the shortfall (nothing goes unserved, nothing is exported) and the warning says so
     small = size_system(load, per_kwp, 3, 550, "off_grid", 4.0, 1.5, 3.0, offgrid=OffGridRules())
-    assert small["roof_limited"] and small["annual_unserved_kwh"] > 0 and small["panels"] == 3
+    assert small["roof_limited"] and small["annual_import_kwh"] > 0 and small["annual_unserved_kwh"] == 0 and small["annual_export_kwh"] == 0 and small["panels"] == 3
     assert any(w["code"] == "roof_limited" for w in small["warnings"])
 
 

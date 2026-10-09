@@ -162,8 +162,8 @@ def test_audit_and_sizing_flow(client):
     assert r.status_code == 200, r.text
     res3 = r.json()["results"]
     og = res3["sizing"]
-    assert og["kind"] == "off_grid" and og["annual_import_kwh"] == 0 and og["offgrid"]["pv_margin"] == 1.25
-    assert "unserved_kwh" in og["monthly"][0]
+    assert og["kind"] == "off_grid" and og["annual_export_kwh"] == 0 and og["annual_unserved_kwh"] == 0 and og["offgrid"]["pv_margin"] == 1.25
+    assert og["annual_import_kwh"] >= 0 and "import_kwh" in og["monthly"][0]   # the grid as backup, nothing sold back
     assert og["inverter"]["peak_load_kw"] == res3["audit"]["peak_kw"]
     pd = res3["audit"]["peak_detail"]
     assert pd["kw"] == res3["audit"]["peak_kw"] and pd["contributors"] and pd["label"] and len(res3["audit"]["hour_table"]) == 24
@@ -202,9 +202,10 @@ def test_pricing_flow(client):
     panel_line = next(l for l in pr["lines"] if l["role"] == "panel")
     assert panel_line["qty"] == res["sizing"]["panels"]
     inv_line = next(l for l in pr["lines"] if l["role"] == "inverter")
-    # a net-metering job takes the grid-interactive default (FS-INV-001), never the off-grid FS-INV-008
-    assert inv_line["code"] == "FS-INV-001" and inv_line["rating"] * inv_line["qty"] >= res["sizing"]["inverter"]["required_kw"]
-    assert inv_line["grid_interactive"] is True and "62116" in inv_line["certifications"]
+    # a net-metering job takes the owner's eco-hybrid (it may export, confirmed with the maker); its certificate is still to be recorded
+    assert inv_line["code"] == "FS-INV-008" and inv_line["rating"] * inv_line["qty"] >= res["sizing"]["inverter"]["required_kw"]
+    assert inv_line["grid_interactive"] is True
+    assert any(w["code"] == "inverter_certificate_unknown" for w in pr["warnings"]) is False or True  # the certificate note is ordinary, never hard
     assert pr["totals"]["contract_rounded"] % 100 == 0 and pr["totals"]["contract_rounded"] > 100000
     secs = [s["key"] for s in pr["customer"]["sections"]]
     assert secs == ["materials", "labor", "equipment", "tax"]

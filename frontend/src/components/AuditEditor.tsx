@@ -275,12 +275,12 @@ export default function AuditEditor({ audit, onChange }: { audit: EnergyAudit; o
           <select value={audit.system.kind} onChange={(e) => setSystem({ kind: e.target.value as SystemSettings['kind'] })}>
             <option value="net_metering">Net metering (no battery)</option>
             <option value="combination">Net metering + battery (hybrid)</option>
-            <option value="off_grid">Off-grid (battery, no grid)</option>
+            <option value="off_grid">Battery first, no export (grid as backup)</option>
           </select>
         </div>
         {audit.system.kind === 'off_grid' && (
           <div className="narrow" style={{ width: 150 }}>
-            <label>Off-grid margin (× worst month)</label>
+            <label>Design margin (× worst month)</label>
             <NumberInput value={audit.system.offgrid_pv_margin} onChange={(v) => setSystem({ offgrid_pv_margin: v ?? 1.25 })} min={1} max={2} step={0.05} />
           </div>
         )}

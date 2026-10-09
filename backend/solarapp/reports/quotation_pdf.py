@@ -27,7 +27,7 @@ from ..schemas import AssessmentDoc  # noqa: E402
 from . import brand  # noqa: E402
 from .drawings import plan_blocks  # noqa: E402
 
-KIND_LABEL = {"off_grid": "Off-grid solar with battery (no electric bill)", "net_metering": "Solar with net metering, no battery", "combination": "Hybrid solar with battery and net metering"}
+KIND_LABEL = {"off_grid": "Solar with battery, no export (the grid as backup)", "net_metering": "Solar with net metering, no battery", "combination": "Hybrid solar with battery and net metering"}
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 ACCENT = brand.BLACK
 ACCENT_LIGHT = brand.OFF_WHITE
@@ -125,7 +125,7 @@ def inverter_certificate(pricing: dict) -> str:
 
 def battery_backup_line(sizing: dict) -> str:
     """One honest line about the battery: the evenings it is designed to carry and, from the balance over a real
-    year of weather, how often it still runs out (the grid steps in on a hybrid; an off-grid house goes without)."""
+    year of weather, how often the grid still has to step in (every kind keeps the grid; "no export" only means nothing is sold back)."""
     kind = sizing.get("kind", "")
     aut = (sizing.get("battery") or {}).get("days_of_autonomy")
     if kind == "net_metering" or not aut:
@@ -133,13 +133,13 @@ def battery_backup_line(sizing: dict) -> str:
     evenings = f"{aut:g} {'evening' if float(aut) == 1 else 'evenings'}"
     hy = sizing.get("hourly_year") or {}
     if kind == "off_grid":
-        line = f"Designed to carry {evenings} without sun."
+        line = f"Designed to carry {evenings} without sun; the grid steps in only when the panels and the battery fall short, and nothing is sent back to it."
         if hy.get("available"):
             hours, days = int(hy.get("loss_of_load_hours") or 0), int(hy.get("loss_of_load_days") or 0)
             if hours > 0:
-                line += f" In a typical year of weather (PVGIS records) expect about {hours} {'hour' if hours == 1 else 'hours'} without power, on {days} {'day' if days == 1 else 'days'}, mostly in long rainy spells."
+                line += f" In a typical year of weather (PVGIS records) that is about {hours} {'hour' if hours == 1 else 'hours'} on {days} {'day' if days == 1 else 'days'}, mostly in long rainy spells."
             else:
-                line += " In a typical year of weather (PVGIS records) the battery does not run out; a longer rainy spell than the records hold still can."
+                line += " In a typical year of weather (PVGIS records) the battery does not run out."
         return line
     return f"Designed to carry {evenings} without sun; in the rainy season the grid covers the rest."
 
@@ -506,8 +506,8 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         hy = sizing.get("hourly_year") or {}
         tail = ""
         if hy.get("available") and int(hy.get("loss_of_load_hours") or 0) > 0:
-            tail = f" In a long rainy spell the battery can run out: in a typical year of weather that is about {int(hy['loss_of_load_hours'])} hours on {int(hy['loss_of_load_days'])} days."
-        qa.append(("What happens in a brownout?", f"Nothing changes: the house runs on the panels and the {bat_kwh:.0f} kWh battery all the time and does not depend on the grid.{tail}"))
+            tail = f" In a long rainy spell the battery can run out and the grid takes over: in a typical year of weather that is about {int(hy['loss_of_load_hours'])} hours on {int(hy['loss_of_load_days'])} days."
+        qa.append(("What happens in a brownout?", f"The house runs on the panels and the {bat_kwh:.0f} kWh battery first, every day; the grid only steps in when both fall short, so a brownout changes little.{tail}"))
     elif bat_kwh > 0:
         qa.append(("What happens in a brownout?", f"The battery takes over the moment the grid drops. A {bat_kwh:.0f} kWh battery carries lights, fans, the refrigerator, TV and wifi through a typical evening; running aircon shortens that. By day the panels keep charging it."))
     else:

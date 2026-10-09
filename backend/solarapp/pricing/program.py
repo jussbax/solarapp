@@ -44,8 +44,9 @@ class Window:
 class Timeline:
     """Walks productive windows across installation days; returns clock segments for a number of work minutes."""
 
-    def __init__(self, windows: list[Window]):
+    def __init__(self, windows: list[Window], extra_day: Optional[list[tuple[int, int]]] = None):
         self.windows = windows
+        self.extra_day = extra_day   # (start, end) windows of a standard day, for days added beyond the plan
         self.i = 0
         self.pos = windows[0].start if windows else 0
 
@@ -73,9 +74,12 @@ class Timeline:
         left = float(minutes)
         while left > 1e-6:
             if self.i >= len(self.windows):
-                # ran out of planned days: extend with a copy of the last day's windows (morning and afternoon) on a new day
+                # ran out of planned days: add a standard day (the last priced day may have been stretched for a late finish)
                 last_day = self.windows[-1].day
-                extra = [Window(w.day + 1, w.start, w.end) for w in self.windows if w.day == last_day]
+                if self.extra_day:
+                    extra = [Window(last_day + 1, a, b) for a, b in self.extra_day]
+                else:
+                    extra = [Window(w.day + 1, w.start, w.end) for w in self.windows if w.day == last_day]
                 self.windows += extra
                 self.pos = extra[0].start
             w = self.windows[self.i]
@@ -166,6 +170,14 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
     days = max(int(math.ceil(float(lb["days"]) - 1e-9)), 1)
     extra_km = float((pricing.get("job_inputs") or {}).get("extra_km") or 0)
     windows, frame = day_windows(cfg, doc, days, extra_km)
+    # a crew stays late to finish rather than come back for an hour: the last priced day may run past the usual end,
+    # up to the allowance; only beyond that does the plan add a day
+    standard_day = [(w.start, w.end) for w in windows if w.day == 0]
+    late_allowance = max(int(cfg.program.late_finish_max_minutes or 0), 0)
+    usual_end = max(w.end for w in windows if w.day == days - 1)
+    if late_allowance > 0:
+        last = max((w for w in windows if w.day == days - 1), key=lambda w: w.end)
+        last.end += late_allowance
     warnings: list[dict] = []
 
     # streams: (task label, man-hours)
@@ -196,7 +208,7 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
     floored: list[dict] = []
 
     segments: list[dict] = []
-    roof_tl = Timeline([Window(w.day, w.start, w.end) for w in windows])
+    roof_tl = Timeline([Window(w.day, w.start, w.end) for w in windows], standard_day)
     for task, mh in roof_tasks:
         if mh <= 0:
             continue
@@ -204,7 +216,7 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
             segments.append({"day": d, "stream": "roof", "task": task, "start": a, "end": b, "crew": roof_persons})
     roof_done = roof_tl.now()
 
-    ground_tl = Timeline([Window(w.day, w.start, w.end) for w in windows])
+    ground_tl = Timeline([Window(w.day, w.start, w.end) for w in windows], standard_day)
     def after(x: tuple[int, int], y: tuple[int, int]) -> bool:
         return x[0] > y[0] or (x[0] == y[0] and x[1] >= y[1])
     for task, mh in ground_tasks + [energize]:
@@ -221,7 +233,7 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
             crew = persons if after(now, roof_done) else ground_persons
             if crew == ground_persons:
                 # minutes of work possible before the roof crew joins
-                probe = Timeline([Window(w.day, w.start, w.end) for w in ground_tl.windows])
+                probe = Timeline([Window(w.day, w.start, w.end) for w in ground_tl.windows], standard_day)
                 probe.i, probe.pos = ground_tl.i, ground_tl.pos
                 mins_until_join = 0.0
                 while True:
@@ -262,6 +274,8 @@ def plan_install_days(pricing: dict, cfg: PricingConfig, doc: AssessmentDoc) -> 
     planned_days = max(max(s["day"] for s in segments) + 1, 1) if segments else days
     if planned_days > days:
         warnings.append({"code": "schedule_overrun", "message": f"The hour-by-hour plan needs {planned_days} {'day' if planned_days == 1 else 'days'} but labor is priced for {days}. Raise Max installation days or Max roof pairs under Pricing inputs."})
+    elif finish[0] == days - 1 and finish[1] > usual_end:
+        warnings.append({"code": "late_finish", "message": f"The crew finishes about {_clock(finish[1])}, {int(round(finish[1] - usual_end))} minutes after the usual {_clock(usual_end)}, to finish the commissioning the same day (allowance under Pricing settings › Program)."})
     elif finish[0] == planned_days - 1 and finish[1] < _hhmm(frame["work_end"]) - 60:
         warnings.append({"code": "early_finish", "message": f"The crew finishes about {_clock(finish[1])} on the last day; labor is still priced at {days} full {'day' if days == 1 else 'days'}."})
     # fixed parts of each day

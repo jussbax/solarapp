@@ -62,8 +62,9 @@ def _pdf_text(pdf: bytes) -> str:
 def test_importer_reads_electrical_data_and_infers_grid_interactive(imported):
     cat, cfg = imported.catalog, imported.config
     assert cat.get("FS-INV-001").grid_interactive is True and cat.get("FS-INV-001").certifications == "IEC 61727 / 62116"
-    assert cat.get("FS-INV-008").grid_interactive is False and cat.get("BC-INV-002").grid_interactive is False
-    assert cat.get("IAN-INV-025").grid_interactive is None     # a plain "HYBRID": unknown until the datasheet says
+    # the eco-hybrid may export (the owner confirmed the selling option with Felicity Solar); any hybrid counts as grid-interactive
+    assert cat.get("FS-INV-008").grid_interactive is True and cat.get("FS-INV-008").certifications == ""
+    assert cat.get("IAN-INV-025").grid_interactive is True     # a plain "HYBRID" may export; its certificate is still to be recorded
     assert cat.get("FS-INV-002").grid_interactive is None      # the remark says to CHECK the grid certification
     assert cat.get("BC-INV-006").grid_interactive is None      # "(on/off-grid)" is not a listing
     # figures the owner wrote into the remarks are a starting point for the string and current checks
@@ -73,7 +74,7 @@ def test_importer_reads_electrical_data_and_infers_grid_interactive(imported):
     assert cat.get("FS-BAT-002").continuous_a == 120 and cat.get("BC-BAT-003").continuous_a == 100 and cat.get("FS-BAT-004").continuous_a == 250
     assert cat.get("BC-PNL-001").voc_v is None and cat.get("BC-PNL-001").isc_a is None   # no panel columns in the bundled workbook
     # the per-kind defaults: the first grid-interactive hybrid for net metering, the eco-hybrid off the grid
-    assert cfg.roles.default_inverter_code_grid == "FS-INV-001" and cfg.roles.default_inverter_code_offgrid == "FS-INV-008"
+    assert cfg.roles.default_inverter_code_grid == "FS-INV-008" and cfg.roles.default_inverter_code_offgrid == "FS-INV-008"   # the owner's eco-hybrid, both kinds
     # optional columns are found by their header, in any column
     cols = electrical_columns(("Code", "Item", "Voc (V)", "Max PV voltage", "Grid-interactive", "Continuous current (A)", "MPPT count", "Temp coeff Voc (%/C)"))
     assert cols == {"voc_v": 2, "max_pv_voltage_v": 3, "grid_interactive": 4, "continuous_a": 5, "mppt_count": 6, "temp_coeff_voc_pct": 7}
@@ -87,8 +88,8 @@ def test_importer_reads_electrical_data_and_infers_grid_interactive(imported):
 
 def test_old_single_default_inverter_migrates_to_the_off_grid_slot():
     roles = BoqRoles.model_validate({"default_inverter_code": "BC-INV-002"})
-    assert roles.default_inverter_code_offgrid == "BC-INV-002" and roles.default_inverter_code_grid == "FS-INV-001"
-    assert roles.default_inverter_for("off_grid") == "BC-INV-002" and roles.default_inverter_for("combination") == "FS-INV-001"
+    assert roles.default_inverter_code_offgrid == "BC-INV-002" and roles.default_inverter_code_grid == "FS-INV-008"
+    assert roles.default_inverter_for("off_grid") == "BC-INV-002" and roles.default_inverter_for("combination") == "FS-INV-008"
     cfg = PricingConfig.model_validate({"roles": {"default_inverter_code": ""}})
     assert cfg.roles.default_inverter_code_offgrid == "" and cfg.system_losses.factor == pytest.approx(0.96 * 0.98 * 0.97 * 0.99)
     assert cfg.sizing.days_of_autonomy == 1.0 and cfg.program.min_task_minutes == {"commissioning": 120, "battery": 60, "inverter": 60}
@@ -119,23 +120,26 @@ def test_grid_job_takes_a_grid_interactive_inverter_and_warns_on_an_off_grid_def
         opts = select_inverter(6, cat, cfg, kind)
         assert opts and all(i.grid_interactive is True for i, n, c in opts)
     assert any(i.grid_interactive is not True for i, n, c in select_inverter(6, cat, cfg, "off_grid"))
-    # the configured grid default is an off-grid type: skipped with a warning that names it
+    # the configured grid default cannot export (marked so on the Materials page): skipped with a warning that names it
+    cat2 = deepcopy(cat)
+    cat2.get("FS-INV-008").grid_interactive = False
     cfg2 = cfg.model_copy(deep=True)
     cfg2.roles.default_inverter_code_grid = "FS-INV-008"
-    res = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=10, kind="combination"), cat, cfg2)
+    res = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=10, kind="combination"), cat2, cfg2)
     inv = next(l for l in res.lines if l.role == "inverter")
-    assert inv.code != "FS-INV-008" and cat.get(inv.code).grid_interactive is True
+    assert inv.code != "FS-INV-008" and cat2.get(inv.code).grid_interactive is True
     w = next(w for w in res.warnings if w["code"] == "default_inverter_not_grid")
     assert "FS-INV-008" in w["message"] and "off-grid type" in w["message"]
     assert all(o["grid_interactive"] is True for o in res.choices["inverter_options"])
-    assert res.choices["inverter_grid_interactive"] is True and res.choices["inverter_certifications"]
+    assert res.choices["inverter_grid_interactive"] is True   # the grid-tie model steps in; its certificate rides on its line
     # a per-job override whose flag is unknown: the hard warning about the certificate
-    res3 = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=0, inverter_code="IAN-INV-025", kind="net_metering"), cat, cfg)
+    # a per-job override whose flag is unknown ("on/off-grid" in the name): an ordinary note to confirm the certificate
+    res3 = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=0, inverter_code="BC-INV-006", kind="net_metering"), cat, cfg)
     w3 = next(w for w in res3.warnings if w["code"] == "inverter_certificate_unknown")
-    assert w3.get("hard") and "confirm the inverter's anti-islanding certificate before the net-metering application" in w3["message"]
+    assert not w3.get("hard") and "confirm its anti-islanding certificate" in w3["message"]
     assert "grid-interactive: unknown" in next(l for l in res3.lines if l.role == "inverter").note
-    # a per-job override that is an off-grid type on a grid job: the hard warning that the DU will not accept it
-    res4 = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=10, inverter_code="FS-INV-008", kind="combination"), cat, cfg)
+    # a per-job override the owner marked as unable to export, on a grid job: the hard warning that the DU will not accept it
+    res4 = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=10, inverter_code="FS-INV-008", kind="combination"), cat2, cfg)
     w4 = next(w for w in res4.warnings if w["code"] == "inverter_not_grid_interactive")
     assert w4.get("hard") and "cannot export" in w4["message"]
     # off the grid none of this applies: the eco-hybrid default, no grid warnings
@@ -216,10 +220,11 @@ def test_hourly_year_balance_reports_loss_of_load_and_autonomy_changes_the_batte
     rainy = _year_plan(per_kwp, dark_days=range(200, 205))    # five dark days in a row
     og = size_system(load, per_kwp, 6, 550, "off_grid", 4.0, 1.5, 3.0, battery=BatterySpec(days_of_autonomy=1.0), plan=rainy)
     hy = og["hourly_year"]
-    assert hy["available"] and hy["hours"] == 8760 and hy["meaning"] == "unserved"
+    # the grid steps in during the dark spell: no export, but nothing goes unserved and the roof is not filled to chase it
+    assert hy["available"] and hy["hours"] == 8760 and hy["meaning"] == "grid_covered"
     assert hy["loss_of_load_hours"] > 0 and hy["loss_of_load_days"] >= 3 and hy["unserved_kwh"] > 0 and hy["worst_month"] == 7
-    assert og["annual_unserved_kwh"] == pytest.approx(hy["unserved_kwh"]) and og["roof_limited"] and og["panels"] == 6
-    assert any(w["code"] == "autonomy_not_met" and "hours" in w["message"] for w in og["warnings"])
+    assert og["annual_unserved_kwh"] == 0 and og["annual_export_kwh"] == 0 and og["annual_import_kwh"] > 0
+    assert not any(w["code"] == "autonomy_not_met" for w in og["warnings"])
     assert og["battery"]["days_of_autonomy"] == 1.0
     # two evenings of autonomy: twice the battery, fewer hours without power
     og2 = size_system(load, per_kwp, 6, 550, "off_grid", 4.0, 1.5, 3.0, battery=BatterySpec(days_of_autonomy=2.0), plan=rainy)
@@ -296,18 +301,18 @@ def test_results_carry_the_meter_figures_faces_and_the_hourly_year(client):
     assert eco["assumptions"]["loss_factor"] == pytest.approx(f) and eco["year1"]["production_kwh"] == pytest.approx(sizing["annual_production_kwh"])
     # the priced inverter is grid-interactive, with its certificate on the line; the rows follow the allocation
     inv = next(l for l in pr["lines"] if l["role"] == "inverter")
-    assert inv["grid_interactive"] is True and inv["certifications"] == "IEC 61727 / 62116"
+    assert inv["grid_interactive"] is True and inv["code"] == "FS-INV-008"   # the owner's eco-hybrid; certificate to be recorded
     assert sum(x["panels"] for x in pr["choices"]["rows"]) == sizing["panels"]
     assert not any(w["code"] in ("inverter_not_grid_interactive", "inverter_certificate_unknown") for w in pr["warnings"])
-    # the proposal: the meter figure, the certificate and the one honest battery line
+    # the proposal: the meter figure and the one honest battery line (the eco-hybrid's certificate is not recorded yet)
     from tests.conftest import real_weather
     real_weather(aid)
     pdf = client.get(f"/api/assessments/{aid}/quotation.pdf")
     assert pdf.status_code == 200
     text_ = _pdf_text(pdf.content)
-    assert "kWh a year at your meter" in text_ and "Inverter certificate" in text_ and "IEC 61727 / 62116" in text_
+    assert "kWh a year at your meter" in text_ and "Inverter certificate" not in text_   # the eco-hybrid's certificate is not recorded yet
     assert "Designed to carry 1 evening without sun; in the rainy season the grid covers the rest." in " ".join(text_.split())
-    assert inverter_certificate(pr) == "IEC 61727 / 62116"
+    assert inverter_certificate(pr) == ""
     # the roof check prints the meter figures (built directly: the API refuses customer PDFs on test weather)
     roof = _pdf_text(build_customer_pdf(AssessmentDoc.model_validate(r.json()["doc"]), res, {"company_name": "Test"}))
     assert f"about {prod['annual_kwh_ac']:,.0f} kWh at your meter" in roof and "at your meter" in roof
@@ -323,18 +328,19 @@ def test_off_grid_results_and_proposal_say_how_often_the_battery_runs_out(client
     res = r.json()["results"]
     sizing, pr = res["sizing"], res["pricing"]
     hy = sizing["hourly_year"]
-    assert hy["available"] and hy["meaning"] == "unserved" and sizing["annual_unserved_kwh"] == pytest.approx(hy["unserved_kwh"])
+    assert hy["available"] and hy["meaning"] == "grid_covered" and sizing["annual_unserved_kwh"] == 0 and sizing["annual_export_kwh"] == 0
+    assert sizing["annual_import_kwh"] == pytest.approx(hy["unserved_kwh"]) if hy["loss_of_load_hours"] else sizing["annual_import_kwh"] == 0
     assert next(l for l in pr["lines"] if l["role"] == "inverter")["code"] == "FS-INV-008"
     line = battery_backup_line(sizing)
-    assert line.startswith("Designed to carry 1 evening without sun.")
+    assert line.startswith("Designed to carry 1 evening without sun; the grid steps in only when the panels and the battery fall short, and nothing is sent back to it.")
     if hy["loss_of_load_hours"] > 0:
-        assert f"about {hy['loss_of_load_hours']} hours without power" in line and any(w["code"] in ("autonomy_not_met", "roof_limited") for w in sizing["warnings"])
+        assert f"about {hy['loss_of_load_hours']} hours on" in line
     else:
         assert "does not run out" in line
     from tests.conftest import real_weather
     real_weather(aid)
     text_ = " ".join(_pdf_text(client.get(f"/api/assessments/{aid}/quotation.pdf").content).split())
-    assert "Designed to carry 1 evening without sun." in text_ and "Inverter certificate" not in text_
+    assert "Designed to carry 1 evening without sun; the grid steps in only when" in text_ and "Inverter certificate" not in text_
 
 
 def test_quick_estimate_applies_the_losses_and_the_inverter_rule(imported, tmp_path):
@@ -355,3 +361,14 @@ def test_quick_estimate_applies_the_losses_and_the_inverter_rule(imported, tmp_p
     cfg0.system_losses.inverter = cfg0.system_losses.wiring = cfg0.system_losses.soiling = cfg0.system_losses.other = 1.0
     q0 = quick_estimate(QuickRequest(goal="net_metering", town="Pila", province="Laguna", monthly_kwh=338, pattern="balanced"), PvgisDataset(tmp_path), PricingContext(imported.catalog, cfg0))
     assert q0["system"]["panels"] <= q["system"]["panels"] and q0["production"]["loss_factor"] == 1.0
+
+
+def test_grid_flag_reads_the_name_first_and_the_owner_confirmed_the_eco_hybrid():
+    """The owner confirmed with Felicity Solar that the eco-hybrid can sell to the grid: a hybrid is grid-interactive
+    whatever the remark calls its type, unless the name says off-grid or the remark says it cannot export."""
+    assert infer_grid_interactive("6 kW low-voltage eco-hybrid inverter", "Off-grid high-frequency type, 2 MPPT 20A each") is True
+    assert infer_grid_interactive("48V6000W HYBRID OFF-GRID 80A") is False
+    assert infer_grid_interactive("8 kW hybrid inverter (on/off-grid)") is None
+    assert infer_grid_interactive("6 kW hybrid inverter", "cannot export; island mode only") is False
+    assert infer_grid_interactive("Off-grid inverter 5 kW") is False
+    assert infer_grid_interactive("6 kW inverter", "grid-tie listed") is True
