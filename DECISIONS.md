@@ -1051,3 +1051,55 @@ chart, and the engineering build order in the plan.
   brownouts page now says only that the switch-over is automatic), the
   mounting wind rating and the battery warranty for the two unanswered
   questions (typhoon, battery life), and the local fixed charges.
+
+## The clean form: one grid, defaults that show, Settings in sections
+
+- The owner's words, round 3: "the setting tab are all over the place and
+  is not organized ... fields have default values that is not showing, the
+  entry parts are not aligned ... make it clean and professional as an
+  engineering solar app." The stylesheet now carries one type scale, one
+  spacing scale and one control height (36 px on the desk, 44 px on a
+  phone) as tokens, and every editor renders through one form cell
+  (`Field`): label above, the unit beside the control, help under it. A
+  line of fields is a CSS grid whose cells are subgrids of three rows, so
+  every control in the line starts on the same edge whatever its label
+  does, and a help text in one column never pushes the next line askew.
+  The KPI tiles use the same device, so a label that wraps no longer drops
+  its value below its neighbours'. Flex rows (`.row`) stay for the editors
+  other batches own; a field in one carries no bottom margin, so the
+  controls, not the margins, line up.
+- The number in force is always visible. A project input (pricing, savings,
+  schedule) shows the value the calculation will use: the job's own value,
+  or the default from the pricing settings filled in and tagged "default".
+  Typing makes it an override, tagged and with the way back; typing the
+  default itself, or clearing the field, is the way back too. Before the
+  first calculation a default the settings alone cannot give (the tariff
+  from the bill, the pin's extra km, the computed string count) reads
+  "shown after the first calculation". Placeholders are examples only
+  ("e.g. ..."), never values, and never repeated as help.
+- Settings is one page in six sections, in reading order, with a sticky
+  index on the desk and a jump list on the phone: Company and documents,
+  Website, Pricing, Your account, People (owners), Weather and data. The
+  pricing settings keep their sections and the META map (labels, units,
+  help) but are grouped the way the owner looks for them: Materials and
+  markup tiers; Labor and crew; Freight and the truck; Program of works;
+  Economics and warranties; System design and the website estimate. A
+  section a later batch adds lands under "Other settings" rather than
+  disappearing. Each section is a closed block whose summary lists what
+  is inside; "Find a setting" opens every section that matches a word.
+  The save bar is sticky at the foot of the Pricing card and bleeds to
+  its edges; on the phone it is the chip and Save, with Discard and Reset
+  on a second row only while there is something to discard or undo.
+- The "At a glance" strip's battery is the battery the BOM prices, in
+  nominal kWh as the proposal prints it, read from whichever field the
+  server names nominal and otherwise from the chosen battery option and
+  its units; the sized figure is the fallback only without pricing.
+- Small rules that close the audit's "odd sticks": chart gold is a fill,
+  never text (table text uses `--gold-text`); an action row inside a white
+  card has no band (`.actions.inline`); a number column followed by a
+  text column keeps 20 px between them; a row header is never shouted;
+  every sideways-scrolling table on a phone shows the edge shadows; the
+  cashflow chart draws every week from the first flow to the last; axis
+  ticks read "1.5k", not "2k"; Gantt labels get 40 % of the desk width;
+  the first-sign-in gate carries the brand mark; the phone menu's name
+  row is as wide as the rest; no grey band sits inside a card.

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Me } from '../api'
 import { getPasskey, passkeyProblem, passkeySupported } from '../passkeys'
+import Field from '../components/Field'
 
 type Method = 'key' | 'password'
 const METHOD_KEY = 'login-method'
@@ -99,19 +100,12 @@ export default function LoginPage({ onLogin }: { onLogin: (me: Me) => void }) {
       )}
       {passwordForm && (
         <>
-          <div className="field">
-            <label>Username</label>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
-          </div>
-          <div className="field">
-            <label>Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
-          </div>
+          <Field label="Username">{(id) => <input id={id} value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />}</Field>
+          <Field label="Password">{(id) => <input id={id} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />}</Field>
           {twoFactor && (
-            <div className="field">
-              <label>Code from your authenticator app</label>
-              <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits, or a backup code" />
-            </div>
+            <Field label="Code from your authenticator app">
+              {(id) => <input id={id} value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits, or a backup code" />}
+            </Field>
           )}
         </>
       )}

@@ -159,7 +159,7 @@ export default function ResultsView({ doc, results }: { doc: AssessmentDoc; resu
       <details className="internal" style={{ marginTop: 16 }}>
         <summary>Internal details (not on customer documents)</summary>
         <h3>Site factor</h3>
-        <table>
+        <table className="kv wide">
           <tbody>
             <tr>
               <th>k (owner's formula, average of rows)</th>

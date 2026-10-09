@@ -55,7 +55,14 @@ export default function App() {
   if (user?.must_change_password) {
     return (
       <div className="page">
-        <div className="card login" style={{ maxWidth: 440 }}>
+        <div className="card login gate" style={{ maxWidth: 440 }} data-testid="first-sign-in">
+          <div className="brand-mark">
+            <img src="/brand/logo-mark.png" alt="PL Development" />
+            <span>
+              <span className="name">PL Development</span>
+              <span className="tag">Solar engineering</span>
+            </span>
+          </div>
           <h2>Welcome, {user.display_name || user.username}</h2>
           <div className="muted" style={{ marginBottom: 10 }}>
             The password you signed in with is temporary and opens nothing else. Choose your own to continue.

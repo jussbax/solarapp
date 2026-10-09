@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { cloneElement, isValidElement, useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react'
 import { api, type Me } from '../api'
 import NumberInput from '../components/NumberInput'
 import type { ImportReport, MaterialItem, MaterialSupplier, PricingStatus } from '../types'
@@ -18,6 +18,11 @@ function blankItem(): ItemDraft {
 
 const isInverter = (cat: string) => cat === 'Inverter' || cat === 'All-in-one System'
 const gridLabel = (v: boolean | null | undefined) => (v === true ? 'yes' : v === false ? 'no' : 'unknown')
+const GRID_TITLE: Record<string, string> = {
+  yes: 'Grid-interactive: may export (anti-islanding listed)',
+  no: 'Not grid-interactive: an off-grid type, cannot export',
+  unknown: 'Grid-interactive status unknown: set it under Edit; a net-metering job warns until it is known',
+}
 
 /** Datasheet figures per category (contract C4): panels for the string design, inverters for the string and
  *  circuit design and the net-metering rule, batteries for the current check against the inverter. */
@@ -83,13 +88,16 @@ function ElectricalFields({ it, set }: { it: ItemDraft; set: (p: Partial<ItemDra
 
 function electricalSummary(it: MaterialItem): React.ReactNode {
   if (isInverter(it.category)) {
-    const parts = [`Grid-interactive: ${gridLabel(it.grid_interactive)}`]
+    const grid = gridLabel(it.grid_interactive)
+    const parts = [`Grid: ${grid}`]
     if (it.certifications) parts.push(it.certifications)
     if (it.battery_max_a) parts.push(`battery ${it.battery_max_a} A`)
     if (it.mppt_count) parts.push(`${it.mppt_count} MPPT${it.mppt_max_a ? ` × ${it.mppt_max_a} A` : ''}`)
     return (
       <>
-        <span className={`badge ${it.grid_interactive === true ? 'good' : it.grid_interactive === false ? 'neutral' : 'bad'}`}>{parts[0]}</span>
+        <span className={`badge ${it.grid_interactive === true ? 'good' : it.grid_interactive === false ? 'neutral' : 'bad'}`} title={GRID_TITLE[grid]}>
+          {parts[0]}
+        </span>
         {parts.length > 1 && <div className="muted" style={{ fontSize: 11 }}>{parts.slice(1).join(' · ')}</div>}
       </>
     )
@@ -104,11 +112,14 @@ function electricalSummary(it: MaterialItem): React.ReactNode {
   return ''
 }
 
+/** A fixed-width cell in an item form row: the label is attached to the single control inside it. */
 function Field({ label, width = 160, children }: { label: string; width?: number; children: React.ReactNode }) {
+  const id = useId()
+  const control = isValidElement(children) ? cloneElement(children as ReactElement<{ id?: string }>, { id }) : children
   return (
-    <div className="narrow" style={{ width }}>
-      <label>{label}</label>
-      {children}
+    <div className={width ? 'narrow field' : 'field'} style={width ? { width } : { flex: '2 1 260px' }}>
+      <label htmlFor={id}>{label}</label>
+      <div className="control">{control}</div>
     </div>
   )
 }
@@ -303,12 +314,10 @@ export default function MaterialsPage({ user }: { user: Me }) {
           edits here are used for pricing. Re-importing a workbook updates items by code and keeps panel dimensions typed here.
         </div>
         <div className="row" style={{ marginTop: 10 }}>
-          <div style={{ flex: '2 1 260px' }}>
-            <label>Search</label>
+          <Field label="Search" width={0}>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="code, name or spec" />
-          </div>
-          <div className="narrow" style={{ width: 200 }}>
-            <label>Category</label>
+          </Field>
+          <Field label="Category" width={200}>
             <select value={category} onChange={(e) => setCategory(e.target.value)}>
               <option value="">All</option>
               {cats.map((c) => (
@@ -317,9 +326,8 @@ export default function MaterialsPage({ user }: { user: Me }) {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="narrow" style={{ width: 180 }}>
-            <label>Supplier</label>
+          </Field>
+          <Field label="Supplier" width={180}>
             <select value={supplier} onChange={(e) => setSupplier(e.target.value)}>
               <option value="">All</option>
               {suppliers.map((s) => (
@@ -328,12 +336,12 @@ export default function MaterialsPage({ user }: { user: Me }) {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="narrow inline" style={{ paddingBottom: 8 }}>
-            <input type="checkbox" checked={inactive} onChange={(e) => setInactive(e.target.checked)} style={{ width: 'auto' }} /> Show inactive
-          </div>
+          </Field>
+          <label className="check narrow">
+            <input type="checkbox" checked={inactive} onChange={(e) => setInactive(e.target.checked)} /> <span>Show inactive</span>
+          </label>
           {owner && (
-            <div className="narrow inline" style={{ paddingBottom: 4 }}>
+            <div className="narrow">
               <button type="button" className="primary" onClick={() => setCreating(blankItem())}>
                 New item
               </button>

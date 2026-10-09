@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { api } from '../api'
 import type { PaymentPlan, PricingConfig } from '../types'
 import { PaymentPlanEditor } from './ProgramSection'
+import Field from './Field'
 import { fmtDate } from '../fmt'
+import { PRICING_GROUPS } from './shared'
+
+const OTHER_GROUP = { id: 'pricing-other', label: 'Other settings', lead: 'Sections added since the groups above were drawn.' }
 
 const SECTION_LABELS: Record<string, string> = {
   company_base: 'Company base',
@@ -168,6 +172,18 @@ const SECTION_NOTES: Record<string, string> = {
   categories: 'The markup tier and the wastage allowance for every item in a category, by the category name on the Materials page. A category that is not listed takes 30% markup and no wastage.',
 }
 
+/** A label for a block with no single control (a matrix, a size table, the payment terms): looks like a field label. */
+function BlockLabel({ children, keyName }: { children: ReactNode; keyName?: string }) {
+  return (
+    <div className="field-head">
+      <span className="field-label">
+        {children}
+        {keyName && <span className="key">{keyName}</span>}
+      </span>
+    </div>
+  )
+}
+
 /** A category rule as the server stores it (percentages as fractions). */
 interface CategoryRule {
   name: string
@@ -235,7 +251,8 @@ const UNDO_SECONDS = 10
 export default function PricingSettings() {
   const [cfg, setCfg] = useState<PricingConfig | null>(null)
   const [saved, setSaved] = useState<PricingConfig | null>(null)
-  const [open, setOpen] = useState<string | null>(null)
+  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set())
+  const [needle, setNeedle] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({})
@@ -351,240 +368,351 @@ export default function PricingSettings() {
     setJsonDrafts({})
   }
 
-  const renderValue = (section: string, key: string, v: unknown) => {
+  const q = needle.trim().toLowerCase()
+  const labelOf = (section: string, key: string) => META[`${section}.${key}`]?.label ?? titleCase(key)
+  const matches = (section: string, key: string) =>
+    !q || `${labelOf(section, key)} ${key} ${META[`${section}.${key}`]?.help ?? ''} ${SECTION_LABELS[section] ?? titleCase(section)}`.toLowerCase().includes(q)
+
+  /** One setting as a form cell: a Field for a single control, a full-width block for a table or an editor. */
+  const renderField = (section: string, key: string, v: unknown) => {
     const path = `${section}.${key}`
     const meta = META[path]
     const id = fieldId(section, key)
+    const keyName = KEYED_SECTIONS.has(section) ? key : undefined
+    const label = labelOf(section, key)
     if (typeof v === 'number') {
       const pct = PCT_KEYS.has(key)
       return (
-        <span className="inline">
-          <input
-            id={id}
-            type="number"
-            step="any"
-            value={pct ? Math.round(v * 10000) / 100 : v}
-            style={{ width: 130 }}
-            onChange={(e) => {
-              const n = e.target.value === '' ? 0 : Number(e.target.value)
-              setField(section, key, pct ? n / 100 : n)
-            }}
-          />
-          {(meta?.unit || pct) && <span className="muted">{meta?.unit ?? '%'}</span>}
-        </span>
+        <Field key={key} id={id} label={label} unit={meta?.unit ?? (pct ? '%' : undefined)} help={meta?.help} keyName={keyName}>
+          {(fid) => (
+            <input
+              id={fid}
+              type="number"
+              step="any"
+              value={pct ? Math.round(v * 10000) / 100 : v}
+              onChange={(e) => {
+                const n = e.target.value === '' ? 0 : Number(e.target.value)
+                setField(section, key, pct ? n / 100 : n)
+              }}
+            />
+          )}
+        </Field>
       )
     }
-    if (typeof v === 'boolean') return <input id={id} type="checkbox" checked={v} onChange={(e) => setField(section, key, e.target.checked)} style={{ width: 'auto' }} />
+    if (typeof v === 'boolean') {
+      return (
+        <Field key={key} id={id} label={label} help={meta?.help} keyName={keyName}>
+          {(fid) => (
+            <span className="inline" style={{ minHeight: 'var(--control-h)' }}>
+              <input id={fid} type="checkbox" checked={v} onChange={(e) => setField(section, key, e.target.checked)} />
+              <span className="muted">{v ? 'on' : 'off'}</span>
+            </span>
+          )}
+        </Field>
+      )
+    }
     if (typeof v === 'string') {
-      if (TIME_KEYS.has(key)) return <input id={id} type="time" value={v} style={{ width: 150 }} onChange={(e) => setField(section, key, e.target.value)} />
-      return <input id={id} value={v} onChange={(e) => setField(section, key, e.target.value)} className={KEYED_SECTIONS.has(section) ? 'code' : undefined} />
+      if (TIME_KEYS.has(key)) {
+        return (
+          <Field key={key} id={id} label={label} help={meta?.help} keyName={keyName}>
+            {(fid) => <input id={fid} type="time" value={v} onChange={(e) => setField(section, key, e.target.value)} />}
+          </Field>
+        )
+      }
+      const long = v.length > 24 || /words|names/.test(label)
+      return (
+        <Field key={key} id={id} label={label} help={meta?.help} keyName={keyName} className={long ? 'wide' : undefined}>
+          {(fid) => <input id={fid} value={v} onChange={(e) => setField(section, key, e.target.value)} className={KEYED_SECTIONS.has(section) ? 'code' : undefined} />}
+        </Field>
+      )
     }
     if (section === 'program' && key === 'payment') {
-      return <PaymentPlanEditor plan={v as PaymentPlan} defaults={v as PaymentPlan} onChange={(p) => p && setField(section, key, p)} hideDefaultLink />
+      return (
+        <div key={key} className="field full">
+          <BlockLabel>{label}</BlockLabel>
+          <div className="control">
+            <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+              <PaymentPlanEditor plan={v as PaymentPlan} defaults={v as PaymentPlan} onChange={(p) => p && setField(section, key, p)} hideDefaultLink />
+            </div>
+          </div>
+          {meta?.help && <div className="help">{meta.help}</div>}
+        </div>
+      )
     }
     if (isMatrix(v)) {
       const stops: string[] = Array.isArray(cfg[section]?.stops) ? (cfg[section].stops as string[]) : v.map((_, i) => `#${i + 1}`)
       return (
-        <div className="table-wrap scroll-x">
-          <div className="scroll-note muted">Scroll sideways to see every stop.</div>
-          <table className="matrix">
-            <thead>
-              <tr>
-                <th></th>
-                {stops.map((s, j) => (
-                  <th key={j} className="num">
-                    {s}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {v.map((row, i) => (
-                <tr key={i}>
-                  <th>{stops[i] ?? `#${i + 1}`}</th>
-                  {row.map((x, j) => (
-                    <td key={j} className="num">
-                      <input
-                        type="number"
-                        step="any"
-                        value={x}
-                        style={{ width: 72 }}
-                        aria-label={`${stops[i] ?? i + 1} to ${stops[j] ?? j + 1}`}
-                        onChange={(e) => {
-                          const next = v.map((r) => [...r])
-                          next[i][j] = e.target.value === '' ? 0 : Number(e.target.value)
-                          setField(section, key, next)
-                        }}
-                      />
-                    </td>
+        <div key={key} className="field full">
+          <BlockLabel keyName={keyName}>{label}</BlockLabel>
+          <div className="control">
+            <div className="table-wrap scroll-x" style={{ flex: '1 1 auto' }}>
+              <div className="scroll-note muted">Scroll sideways to see every stop.</div>
+              <table className="matrix">
+                <thead>
+                  <tr>
+                    <th></th>
+                    {stops.map((st, j) => (
+                      <th key={j} className="num">
+                        {st}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {v.map((row, i) => (
+                    <tr key={i}>
+                      <th>{stops[i] ?? `#${i + 1}`}</th>
+                      {row.map((x, j) => (
+                        <td key={j} className="num">
+                          <input
+                            type="number"
+                            step="any"
+                            value={x}
+                            aria-label={`${stops[i] ?? i + 1} to ${stops[j] ?? j + 1}`}
+                            onChange={(e) => {
+                              const next = v.map((r) => [...r])
+                              next[i][j] = e.target.value === '' ? 0 : Number(e.target.value)
+                              setField(section, key, next)
+                            }}
+                          />
+                        </td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {meta?.help && <div className="help">{meta.help}</div>}
         </div>
       )
     }
     if (isPrimList(v)) {
       const numeric = v.every((x) => typeof x === 'number')
       return (
-        <input
-          id={id}
-          value={jsonDrafts[path] ?? v.join(', ')}
-          onChange={(e) => {
-            setJsonDrafts({ ...jsonDrafts, [path]: e.target.value })
-            const parts = e.target.value.split(',').map((x) => x.trim()).filter(Boolean)
-            setField(section, key, numeric ? parts.map(Number).filter((n) => Number.isFinite(n)) : parts)
-          }}
-          onBlur={() => {
-            const d = { ...jsonDrafts }
-            delete d[path]
-            setJsonDrafts(d)
-          }}
-          placeholder="comma separated"
-        />
+        <Field key={key} id={id} label={label} help={meta?.help ?? 'Comma separated.'} keyName={keyName} className="wide">
+          {(fid) => (
+            <input
+              id={fid}
+              value={jsonDrafts[path] ?? v.join(', ')}
+              onChange={(e) => {
+                setJsonDrafts({ ...jsonDrafts, [path]: e.target.value })
+                const parts = e.target.value.split(',').map((x) => x.trim()).filter(Boolean)
+                setField(section, key, numeric ? parts.map(Number).filter((n) => Number.isFinite(n)) : parts)
+              }}
+              onBlur={() => {
+                const d = { ...jsonDrafts }
+                delete d[path]
+                setJsonDrafts(d)
+              }}
+              placeholder="comma separated"
+            />
+          )}
+        </Field>
       )
     }
     if (isPrimDict(v)) {
       const sizes = KEYED_SECTIONS.has(section)
       return (
-        <table className="kv">
-          <tbody>
-            {Object.entries(v).map(([k, x]) => (
-              <tr key={k}>
-                <th>{sizes && /^[\d.]+$/.test(k) ? `${k} mm²` : k}</th>
-                <td>
-                  <input
-                    type={typeof x === 'number' ? 'number' : 'text'}
-                    step="any"
-                    value={x}
-                    style={{ width: 150 }}
-                    aria-label={`${meta?.label ?? titleCase(key)} ${k}`}
-                    className={sizes ? 'code' : undefined}
-                    onChange={(e) => setField(section, key, { ...v, [k]: typeof x === 'number' ? (e.target.value === '' ? 0 : Number(e.target.value)) : e.target.value })}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div key={key} className="field wide">
+          <BlockLabel keyName={keyName}>{label}</BlockLabel>
+          <div className="control">
+            <table className="kv">
+              <tbody>
+                {Object.entries(v).map(([k, x]) => (
+                  <tr key={k}>
+                    <th>{sizes && /^[\d.]+$/.test(k) ? `${k} mm²` : k}</th>
+                    <td>
+                      <input
+                        type={typeof x === 'number' ? 'number' : 'text'}
+                        step="any"
+                        value={x}
+                        aria-label={`${label} ${k}`}
+                        className={sizes ? 'code' : undefined}
+                        onChange={(e) => setField(section, key, { ...v, [k]: typeof x === 'number' ? (e.target.value === '' ? 0 : Number(e.target.value)) : e.target.value })}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {meta?.help && <div className="help">{meta.help}</div>}
+        </div>
       )
     }
     const text = jsonDrafts[path] ?? JSON.stringify(v, null, 1)
     return (
-      <textarea
-        id={id}
-        rows={Math.min(12, Math.max(2, text.split('\n').length))}
-        value={text}
-        style={{ fontFamily: 'monospace', fontSize: 12 }}
-        onChange={(e) => {
-          setJsonDrafts({ ...jsonDrafts, [path]: e.target.value })
-          try {
-            setField(section, key, JSON.parse(e.target.value))
-          } catch {
-            /* keep typing */
-          }
-        }}
-      />
+      <Field key={key} id={id} label={label} help={meta?.help} keyName={keyName} className="full">
+        {(fid) => (
+          <textarea
+            id={fid}
+            rows={Math.min(12, Math.max(2, text.split('\n').length))}
+            value={text}
+            style={{ fontFamily: 'monospace', fontSize: 12 }}
+            onChange={(e) => {
+              setJsonDrafts({ ...jsonDrafts, [path]: e.target.value })
+              try {
+                setField(section, key, JSON.parse(e.target.value))
+              } catch {
+                /* keep typing */
+              }
+            }}
+          />
+        )}
+      </Field>
     )
   }
 
-  /** The key's label: a <label htmlFor> when the control is a single input, plain text for tables and editors. */
-  const renderKey = (section: string, key: string, v: unknown) => {
-    const meta = META[`${section}.${key}`]
-    const single = typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string' || isPrimList(v)
-    const text = meta?.label ?? titleCase(key)
+  /** A whole section: its fields in the form grid, or its editor when the section is not a plain object. */
+  const renderSection = (sec: string) => {
+    const v = cfg[sec]
+    const isObj = v && typeof v === 'object' && !Array.isArray(v)
+    if (isObj) {
+      const entries = Object.entries(v as Record<string, unknown>).filter(([k]) => matches(sec, k))
+      if (entries.length === 0) return null
+      return <div className="form-grid">{entries.map(([k, val]) => renderField(sec, k, val))}</div>
+    }
+    if (!matches(sec, sec)) return null
+    if (isCategoryList(v)) return <CategoriesEditor rows={v} onChange={(rows) => setCfg({ ...cfg, [sec]: rows })} />
+    if (typeof v === 'string') {
+      return (
+        <div className="form-grid">
+          <Field label={SECTION_LABELS[sec] ?? titleCase(sec)} className="wide" id={fieldId(sec, 'value')}>
+            {(fid) => <input id={fid} value={v} onChange={(e) => setCfg({ ...cfg, [sec]: e.target.value })} />}
+          </Field>
+        </div>
+      )
+    }
     return (
-      <>
-        {single ? <label htmlFor={fieldId(section, key)}>{text}</label> : text}
-        {KEYED_SECTIONS.has(section) && <span className="key">{key}</span>}
-        {meta?.help && <div className="hint">{meta.help}</div>}
-      </>
+      <div className="form-grid">
+        <Field label={SECTION_LABELS[sec] ?? titleCase(sec)} className="full" id={fieldId(sec, 'value')}>
+          {(fid) => (
+            <textarea
+              id={fid}
+              rows={10}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+              value={jsonDrafts[sec] ?? JSON.stringify(v, null, 1)}
+              onChange={(e) => {
+                setJsonDrafts({ ...jsonDrafts, [sec]: e.target.value })
+                try {
+                  setCfg({ ...cfg, [sec]: JSON.parse(e.target.value) })
+                } catch {
+                  /* keep typing */
+                }
+              }}
+            />
+          )}
+        </Field>
+      </div>
     )
+  }
+
+  /** What a closed section holds, for the summary line: the first few labels. */
+  const preview = (sec: string) => {
+    const v = cfg[sec]
+    if (isCategoryList(v)) return v.map((r) => r.name).filter(Boolean).slice(0, 6).join(', ') + (v.length > 6 ? ', …' : '')
+    if (typeof v === 'string') return v
+    const keys = v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v as object) : []
+    const names = keys.slice(0, 5).map((k) => labelOf(sec, k))
+    return names.join(', ') + (keys.length > 5 ? `, … (${keys.length} settings)` : '')
+  }
+  const countOf = (sec: string) => {
+    const v = cfg[sec]
+    if (v && typeof v === 'object' && !Array.isArray(v)) return Object.keys(v as object).filter((k) => matches(sec, k)).length
+    return matches(sec, sec) ? 1 : 0
   }
 
   const sections = Object.keys(cfg).filter((k) => !SKIP.has(k))
+  const grouped = new Set(PRICING_GROUPS.flatMap((g) => g.sections))
+  const groups = [...PRICING_GROUPS, { ...OTHER_GROUP, sections: sections.filter((k) => !grouped.has(k)) }]
+  const matchCount = sections.reduce((a, sec) => a + countOf(sec), 0)
+
   return (
     <div>
-      <div className="muted" style={{ marginBottom: 8 }}>
+      <div className="lead">
         Imported from {cfg.imported_from ?? 'built-in defaults'}
-        {cfg.imported_at ? ` on ${fmtDate(cfg.imported_at)}` : ''}. These drive the price build-up; the workbook's DRIVERS, ROUTE,
-        LABOR RATES, MOB-DEMOB, TOOLS and JOB sheets live here now. Percentages are shown as percent.
+        {cfg.imported_at ? ` on ${fmtDate(cfg.imported_at)}` : ''}. These drive the price build-up, the program and the savings; the workbook's DRIVERS, ROUTE, LABOR RATES,
+        MOB-DEMOB, TOOLS and JOB sheets live here now. Percentages are shown as percent. Open a section to edit it; the bar at the foot saves every section at once.
       </div>
-      {sections.map((sec) => {
-        const v = cfg[sec]
-        const isObj = v && typeof v === 'object' && !Array.isArray(v)
-        const changed = dirtySections.includes(sec)
+      <div className="setting-filter">
+        <Field label="Find a setting" id="setting-filter">
+          {(fid) => <input id={fid} type="search" value={needle} onChange={(e) => setNeedle(e.target.value)} placeholder="e.g. VAT, team lead, toll, battery life" />}
+        </Field>
+      </div>
+      {q && (
+        <div className="muted setting-filter-note" data-testid="setting-filter-note">
+          {matchCount === 0 ? 'No setting matches. Try another word.' : `${matchCount} ${matchCount === 1 ? 'setting matches' : 'settings match'}; every matching section is open.`}
+        </div>
+      )}
+      {groups.map((g) => {
+        const visible = g.sections.filter((sec) => sec in cfg && (!q || countOf(sec) > 0))
+        if (visible.length === 0) return null
         return (
-          <div key={sec} className="set-card">
-            <div className="inline" style={{ cursor: 'pointer', fontWeight: 600, width: '100%' }} onClick={() => setOpen(open === sec ? null : sec)}>
-              <span>{open === sec ? '▾' : '▸'}</span> {SECTION_LABELS[sec] ?? titleCase(sec)}
-              {changed && <span className="chip unsaved" style={{ marginLeft: 'auto' }}>edited</span>}
-            </div>
-            {open === sec && (
-              <div style={{ marginTop: 8 }}>
-                {SECTION_NOTES[sec] && (
-                  <div className="muted" style={{ marginBottom: 6 }}>
-                    {SECTION_NOTES[sec]}
-                  </div>
-                )}
-                {isObj ? (
-                  <table className="settings">
-                    <tbody>
-                      {Object.entries(v as Record<string, unknown>).map(([k, val]) => (
-                        <tr key={k}>
-                          <th className="settings-key">{renderKey(sec, k, val)}</th>
-                          <td>{renderValue(sec, k, val)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : isCategoryList(v) ? (
-                  <CategoriesEditor rows={v} onChange={(rows) => setCfg({ ...cfg, [sec]: rows })} />
-                ) : (
-                  <div>
-                    {typeof v === 'string' ? (
-                      <input value={v} onChange={(e) => setCfg({ ...cfg, [sec]: e.target.value })} aria-label={SECTION_LABELS[sec] ?? titleCase(sec)} />
-                    ) : (
-                      <textarea
-                        rows={10}
-                        style={{ fontFamily: 'monospace', fontSize: 12 }}
-                        aria-label={SECTION_LABELS[sec] ?? titleCase(sec)}
-                        value={jsonDrafts[sec] ?? JSON.stringify(v, null, 1)}
-                        onChange={(e) => {
-                          setJsonDrafts({ ...jsonDrafts, [sec]: e.target.value })
-                          try {
-                            setCfg({ ...cfg, [sec]: JSON.parse(e.target.value) })
-                          } catch {
-                            /* keep typing */
-                          }
-                        }}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+          <div key={g.id} className="pricing-group" id={g.id}>
+            <h3>{g.label}</h3>
+            <div className="lead">{g.lead}</div>
+            {visible.map((sec) => {
+              const changed = dirtySections.includes(sec)
+              const open = !!q || openSections.has(sec)
+              return (
+                <details
+                  key={sec}
+                  className="setting-group"
+                  open={open}
+                  data-testid={`setting-${sec}`}
+                  onToggle={(e) => {
+                    if (q) return
+                    const next = new Set(openSections)
+                    if (e.currentTarget.open) next.add(sec)
+                    else next.delete(sec)
+                    setOpenSections(next)
+                  }}
+                >
+                  <summary>
+                    <span className="summary-main">
+                      <span className="summary-title">{SECTION_LABELS[sec] ?? titleCase(sec)}</span>
+                      <span className="summary-keys">{preview(sec)}</span>
+                    </span>
+                    {changed && <span className="chip unsaved">edited</span>}
+                  </summary>
+                  {open && (
+                    <div className="setting-body">
+                      {SECTION_NOTES[sec] && <div className="lead">{SECTION_NOTES[sec]}</div>}
+                      {renderSection(sec)}
+                    </div>
+                  )}
+                </details>
+              )
+            })}
           </div>
         )
       })}
-      <div className="actions" style={{ position: 'sticky', bottom: 0 }}>
+      <div className="actions card-bar" data-testid="pricing-bar">
         <span className={`chip ${dirty ? 'unsaved' : 'ok'}`}>{dirty ? `${dirtySections.length} ${dirtySections.length === 1 ? 'section' : 'sections'} edited` : 'Saved'}</span>
         <button type="button" className="primary" onClick={save} disabled={!dirty || busy}>
-          Save pricing settings
+          <span className="bar-long">Save pricing settings</span>
+          <span className="bar-short">Save pricing</span>
         </button>
-        <button type="button" onClick={discard} disabled={!dirty}>
-          Discard changes
-        </button>
-        {undo ? (
-          <button type="button" onClick={undoReset} disabled={busy} style={{ marginLeft: 'auto' }} data-testid="undo-reset">
-            Undo reset ({undo.left} s)
-          </button>
-        ) : (
-          <button type="button" onClick={reset} disabled={busy} style={{ marginLeft: 'auto' }}>
+        {!dirty && !undo && (
+          <button type="button" className="toggle link phone-only" onClick={reset} disabled={busy}>
             Reset to defaults
           </button>
         )}
+        <span className={`second-row ${!dirty && !undo ? 'hidden-phone' : ''}`}>
+          <button type="button" onClick={discard} disabled={!dirty}>
+            Discard changes
+          </button>
+          {undo ? (
+            <button type="button" onClick={undoReset} disabled={busy} className="push" data-testid="undo-reset">
+              Undo reset ({undo.left} s)
+            </button>
+          ) : (
+            <button type="button" onClick={reset} disabled={busy} className="push">
+              Reset to defaults
+            </button>
+          )}
+        </span>
         {msg && <span className="muted" style={{ flexBasis: '100%' }}>{msg}</span>}
         {error && (
           <div className="banner bad" style={{ flexBasis: '100%', margin: 0 }}>

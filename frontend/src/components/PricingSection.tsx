@@ -4,6 +4,8 @@ import type { MaterialItem, PricingBlock, PricingJob } from '../types'
 import MaterialPicker from './MaterialPicker'
 import NumberInput from './NumberInput'
 import Field from './Field'
+import { DefaultNum } from './ProgramSection'
+import { usePricingDefaults } from './shared'
 import { php0, php2 } from '../fmt'
 
 const php = php2
@@ -12,22 +14,27 @@ const qty = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1))
 /** Warnings that stop the job even without the `hard` flag: no item to price. */
 const RED_CODES = new Set(['missing_item', 'no_inverter', 'no_battery', 'ats', 'ac_breaker'])
 
-function Num({ label, value, onChange, hint, step, min }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number }) {
-  return <Field label={label}>{(id) => <NumberInput id={id} value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />}</Field>
-}
-
 export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pricing: PricingBlock | null; onChange: (j: PricingJob) => void }) {
   const set = (p: Partial<PricingJob>) => onChange({ ...job, ...p })
   const ch = pricing?.choices
   const ji = pricing?.job_inputs ?? {}
-  const d = (k: string, fallback: string) => (ji[k] != null ? String(ji[k]) : fallback)
+  const cfg = usePricingDefaults()
+  const jd = cfg?.job_defaults ?? {}
+  const wr = cfg?.wiring ?? {}
+  /** The default in force: the current setting, or what the last calculation used when the job left the field blank. */
+  const def = (key: keyof PricingJob, setting: unknown): number | undefined => {
+    if (typeof setting === 'number') return setting
+    const used = ji[key as string]
+    return job[key] == null && typeof used === 'number' ? used : undefined
+  }
+  const pinKm = pricing?.pin_distance?.extra_km
   return (
     <div>
-      <div className="muted" style={{ marginBottom: 8 }}>
-        Blank fields use the pricing settings. Extra km comes from the map pin (straight line × road factor, less the route's reference site).
+      <div className="lead">
+        A value tagged <span className="field-tag">default</span> comes from the pricing settings and is the one in force; type over it to change it for this job only.
       </div>
-      <div className="input-grid">
-        <Field label="Inverter" className="wide">
+      <div className="form-grid">
+        <Field label="Inverter" className="wide" state={job.inverter_code ? 'override' : ch?.inverter_code ? 'default' : undefined} onUseDefault={() => set({ inverter_code: null })}>
           {(id) => (
             <select id={id} value={job.inverter_code ?? ''} onChange={(e) => set({ inverter_code: e.target.value || null })}>
               <option value="">Default inverter{ch?.inverter_code ? ` (${ch.inverter_units && ch.inverter_units > 1 ? `${ch.inverter_units} x ` : ''}${ch.inverter_code})` : ''}</option>
@@ -40,7 +47,7 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
             </select>
           )}
         </Field>
-        <Field label="Battery" className="wide">
+        <Field label="Battery" className="wide" state={job.battery_code ? 'override' : ch?.battery_code ? 'default' : undefined} onUseDefault={() => set({ battery_code: null })}>
           {(id) => (
             <select id={id} value={job.battery_code ?? ''} onChange={(e) => set({ battery_code: e.target.value || null })}>
               <option value="">Cheapest combination that fits{ch?.battery_code ? ` (${ch.battery_units} x ${ch.battery_code})` : ''}</option>
@@ -53,25 +60,36 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
             </select>
           )}
         </Field>
-      </div>
-      <div className="input-grid">
-        <Num label="Max panels per string" value={job.max_panels_per_string} onChange={(v) => set({ max_panels_per_string: v })} hint="10" min={1} step={1} />
-        <Num label="Strings (override)" value={job.strings_override} onChange={(v) => set({ strings_override: v })} hint={ch ? `${ch.strings} computed` : 'computed'} min={1} step={1} />
-        <Num label="Extra km (one way)" value={job.extra_km} onChange={(v) => set({ extra_km: v })} hint={pricing?.pin_distance ? `${pricing.pin_distance.extra_km} from pin` : '0'} min={0} />
-        <Num label="Extra toll (₱)" value={job.extra_toll} onChange={(v) => set({ extra_toll: v })} hint={d('extra_toll', '0')} min={0} />
-      </div>
-      <div className="input-grid">
-        <Num label="Roof productivity factor" value={job.roof_factor} onChange={(v) => set({ roof_factor: v })} hint={d('roof_factor', '0.75')} min={0.1} step={0.05} />
-        <Num label="Days the roof is closed" value={job.roof_closed_days} onChange={(v) => set({ roof_closed_days: v })} hint={d('roof_closed_days', '1')} min={0} step={1} />
-        <Num label="Max installation days" value={job.max_days} onChange={(v) => set({ max_days: v })} hint={d('max_days', '2')} min={1} step={1} />
-        <Num label="Max roof pairs" value={job.max_pairs} onChange={(v) => set({ max_pairs: v })} hint={d('max_pairs', '2')} min={1} step={1} />
-        <Num label="Owner days on site" value={job.owner_days} onChange={(v) => set({ owner_days: v })} hint={d('owner_days', '0')} min={0} />
-      </div>
-      <div className="input-grid">
-        <Num label="PV run per string (m)" value={job.pv_run_m} onChange={(v) => set({ pv_run_m: v })} hint="25" min={1} />
-        <Num label="AC run (m)" value={job.ac_run_m} onChange={(v) => set({ ac_run_m: v })} hint="15" min={1} />
-        <Num label="Grounding run (m)" value={job.grounding_run_m} onChange={(v) => set({ grounding_run_m: v })} hint="20" min={0} />
-        <Num label="Conduit (m)" value={job.conduit_m} onChange={(v) => set({ conduit_m: v })} hint="30" min={0} />
+        <DefaultNum label="Max panels per string" unit="panels" value={job.max_panels_per_string} fallback={typeof cfg?.roles?.max_panels_per_string === 'number' ? cfg.roles.max_panels_per_string : undefined} onChange={(v) => set({ max_panels_per_string: v })} min={1} step={1} />
+        <DefaultNum
+          label="Strings"
+          value={job.strings_override}
+          fallback={ch?.strings}
+          onChange={(v) => set({ strings_override: v })}
+          min={1}
+          step={1}
+          help="Computed from the panels per string; type a count to force it."
+          unknownHelp="Computed from the panels per string; shown after the first calculation."
+        />
+        <DefaultNum
+          label="Extra km, one way"
+          unit="km"
+          value={job.extra_km}
+          fallback={pinKm ?? def('extra_km', jd.extra_km)}
+          onChange={(v) => set({ extra_km: v })}
+          min={0}
+          help={pinKm != null ? 'From the map pin: straight line × road factor, less the route’s reference site.' : 'From the map pin once calculated.'}
+        />
+        <DefaultNum label="Extra toll" unit="₱" value={job.extra_toll} fallback={def('extra_toll', jd.extra_toll)} onChange={(v) => set({ extra_toll: v })} min={0} />
+        <DefaultNum label="Roof productivity factor" unit="×" value={job.roof_factor} fallback={def('roof_factor', jd.roof_factor)} onChange={(v) => set({ roof_factor: v })} min={0.1} step={0.05} />
+        <DefaultNum label="Days the roof is closed" unit="days" value={job.roof_closed_days} fallback={def('roof_closed_days', jd.roof_closed_days)} onChange={(v) => set({ roof_closed_days: v })} min={0} step={1} />
+        <DefaultNum label="Max installation days" unit="days" value={job.max_days} fallback={def('max_days', jd.max_days)} onChange={(v) => set({ max_days: v })} min={1} step={1} />
+        <DefaultNum label="Max roof pairs" unit="pairs" value={job.max_pairs} fallback={def('max_pairs', jd.max_pairs)} onChange={(v) => set({ max_pairs: v })} min={1} step={1} />
+        <DefaultNum label="Owner days on site" unit="days" value={job.owner_days} fallback={def('owner_days', jd.owner_days)} onChange={(v) => set({ owner_days: v })} min={0} />
+        <DefaultNum label="PV run per string" unit="m" value={job.pv_run_m} fallback={typeof wr.pv_run_m === 'number' ? wr.pv_run_m : undefined} onChange={(v) => set({ pv_run_m: v })} min={1} />
+        <DefaultNum label="AC run" unit="m" value={job.ac_run_m} fallback={typeof wr.ac_run_m === 'number' ? wr.ac_run_m : undefined} onChange={(v) => set({ ac_run_m: v })} min={1} />
+        <DefaultNum label="Grounding run" unit="m" value={job.grounding_run_m} fallback={typeof wr.grounding_run_m === 'number' ? wr.grounding_run_m : undefined} onChange={(v) => set({ grounding_run_m: v })} min={0} />
+        <DefaultNum label="Conduit" unit="m" value={job.conduit_m} fallback={typeof wr.conduit_m === 'number' ? wr.conduit_m : undefined} onChange={(v) => set({ conduit_m: v })} min={0} />
       </div>
     </div>
   )
@@ -142,9 +160,9 @@ export function PricingResults({
       ))}
       <div className="kpis">
         <div className="kpi">
-          <div className="label">Contract price (VAT included)</div>
+          <div className="label">Contract price</div>
           <div className="value">{php0(t.contract_rounded)}</div>
-          <div className="sub">{t.price_per_wp ? `₱${t.price_per_wp.toFixed(2)} per Wp` : ''} · {t.kwp.toFixed(2)} kWp</div>
+          <div className="sub">VAT included · {t.price_per_wp ? `₱${t.price_per_wp.toFixed(2)} per Wp · ` : ''}{t.kwp.toFixed(2)} kWp</div>
         </div>
         <div className="kpi">
           <div className="label">Materials</div>
@@ -226,7 +244,7 @@ export function PricingResults({
           </>
         )}
       </div>
-      <div className="actions bom-actions" style={{ position: 'static', border: 0, padding: '4px 0 8px' }}>
+      <div className="actions inline bom-actions">
         <button type="button" disabled={!!docReason} onClick={() => openDocument(exportUrls.csv)} data-testid="export-csv">
           Export CSV
         </button>

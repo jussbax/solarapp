@@ -3,6 +3,7 @@ import { api, type Me, type Passkey } from '../api'
 import { fmtDateTime } from '../fmt'
 import { createPasskey, passkeyProblem, passkeySupported } from '../passkeys'
 import ChangePassword from './ChangePassword'
+import Field from './Field'
 
 type Setup = { secret: string; uri: string; qr: string }
 
@@ -128,10 +129,10 @@ export default function AccountCard({ user, onUser }: { user: Me; onUser: (me: M
   const insecure = typeof window !== 'undefined' && !window.isSecureContext
 
   return (
-    <div className="card" id="account">
+    <div className="card settings-section" id="account" data-testid="section-account">
       <h2>Your account</h2>
-      <div className="muted" style={{ marginBottom: 8 }}>
-        Signed in as <strong>{user.display_name || user.username}</strong> ({user.username}, {user.role === 'owner' ? 'owner' : 'engineer'}).
+      <div className="lead">
+        Signed in as <strong>{user.display_name || user.username}</strong> ({user.username}, {user.role === 'owner' ? 'owner' : 'engineer'}): your password, authenticator app, security keys and sessions.
         {user.role === 'owner' ? ' An owner also manages people, the company profile and pricing.' : ' The owner manages people, the company profile and pricing.'}
       </div>
 
@@ -140,16 +141,14 @@ export default function AccountCard({ user, onUser }: { user: Me; onUser: (me: M
         Turning the authenticator on or off and adding or removing a key ask for your password{twoFactor ? ' and a fresh code' : ''} again, so a stolen
         session cannot do it.
       </div>
-      <div className="row">
-        <div className="field">
-          <label>Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" data-testid="confirm-password" />
-        </div>
+      <div className="form-grid">
+        <Field label="Password">
+          {(id) => <input id={id} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" data-testid="confirm-password" />}
+        </Field>
         {twoFactor && (
-          <div className="field">
-            <label>Authenticator code</label>
-            <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits" data-testid="confirm-code" />
-          </div>
+          <Field label="Authenticator code">
+            {(id) => <input id={id} value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits" data-testid="confirm-code" />}
+          </Field>
         )}
       </div>
 
@@ -175,9 +174,10 @@ export default function AccountCard({ user, onUser }: { user: Me; onUser: (me: M
                 Scan this with Google Authenticator, Microsoft Authenticator, Aegis or 1Password. If scanning is not possible, enter the key by hand:
               </div>
               <code style={{ display: 'block', margin: '6px 0', wordBreak: 'break-all' }}>{setup.secret}</code>
-              <div className="field" style={{ marginTop: 8 }}>
-                <label>Then the 6-digit code it shows</label>
-                <input value={setupCode} onChange={(e) => setSetupCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits" data-testid="totp-setup-code" />
+              <div className="form-grid cols-2" style={{ marginTop: 8 }}>
+                <Field label="Then the 6-digit code it shows">
+                  {(id) => <input id={id} value={setupCode} onChange={(e) => setSetupCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits" data-testid="totp-setup-code" />}
+                </Field>
               </div>
               <div className="row">
                 <button className="primary narrow" type="button" disabled={busy || setupCode.trim().length < 6} onClick={confirmTotp} data-testid="totp-confirm">
@@ -258,14 +258,15 @@ export default function AccountCard({ user, onUser }: { user: Me; onUser: (me: M
       ) : insecure ? (
         <div className="muted">Passkeys need https and a real hostname. Open the back office by its name to add one.</div>
       ) : (
-        <div className="row" style={{ marginTop: 8 }}>
-          <div className="field">
-            <label>Name for the new key</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. YubiKey on the keyring, or My phone" maxLength={60} />
+        <div className="form-grid key-row" style={{ marginTop: 8 }}>
+          <Field label="Name for the new key">
+            {(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. YubiKey on the keyring, or My phone" maxLength={60} />}
+          </Field>
+          <div className="field-action">
+            <button className="primary" type="button" disabled={busy} onClick={add} data-testid="add-passkey">
+              Add a security key
+            </button>
           </div>
-          <button className="primary narrow" type="button" disabled={busy} onClick={add} data-testid="add-passkey">
-            Add a security key
-          </button>
         </div>
       )}
       {msg && (

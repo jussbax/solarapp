@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { newReadingSet, SKY_CONDITIONS, type ReadingSet, type ReadingSetResult, type RoofFace } from '../types'
 import NumberInput from './NumberInput'
+import Field from './Field'
 
 // per-row k values come back aligned with the rows as typed (null where a row was dropped), plus which rows were used
 type RowResult = ReadingSetResult & { row_usable?: boolean[] }
@@ -50,41 +51,36 @@ export default function ReadingsEditor({
         const r: RowResult | null = results && results[i] && results.length === sets.length ? results[i] : null
         return (
           <div className="set-card" key={s.id}>
-            <div className="row">
-              <div>
-                <label>Roof face</label>
-                <select value={s.face_id ?? ''} onChange={(e) => update(i, { face_id: e.target.value || null })}>
-                  <option value="">Whole site</option>
-                  {faces.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label>Set name (optional)</label>
-                <input value={s.label} onChange={(e) => update(i, { label: e.target.value })} placeholder="optional" />
-              </div>
-              <div>
-                <label>Date and time</label>
-                <input type="datetime-local" value={s.measured_at ?? ''} onChange={(e) => update(i, { measured_at: e.target.value || null })} />
-              </div>
-              <div>
-                <label>Sky</label>
-                <select value={s.sky_condition} onChange={(e) => update(i, { sky_condition: e.target.value })}>
-                  {SKY_CONDITIONS.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label>Air temperature (°C, optional)</label>
-                <NumberInput value={s.ambient_temp_c} onChange={(v) => update(i, { ambient_temp_c: v })} allowEmpty placeholder="estimate" />
-              </div>
-              <div className="narrow">
+            <div className="form-grid set-head">
+              <Field label="Roof face">
+                {(id) => (
+                  <select id={id} value={s.face_id ?? ''} onChange={(e) => update(i, { face_id: e.target.value || null })}>
+                    <option value="">Whole site</option>
+                    {faces.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label="Set name">{(id) => <input id={id} value={s.label} onChange={(e) => update(i, { label: e.target.value })} placeholder="optional" />}</Field>
+              <Field label="Date and time">{(id) => <input id={id} type="datetime-local" value={s.measured_at ?? ''} onChange={(e) => update(i, { measured_at: e.target.value || null })} />}</Field>
+              <Field label="Sky">
+                {(id) => (
+                  <select id={id} value={s.sky_condition} onChange={(e) => update(i, { sky_condition: e.target.value })}>
+                    {SKY_CONDITIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label="Air temperature" unit="°C" help="Optional; estimated when blank.">
+                {(id) => <NumberInput id={id} value={s.ambient_temp_c} onChange={(v) => update(i, { ambient_temp_c: v })} allowEmpty placeholder="estimate" />}
+              </Field>
+              <div className="field-action">
                 <button type="button" className="danger" onClick={() => remove(i)}>
                   Remove set
                 </button>
@@ -111,13 +107,13 @@ export default function ReadingsEditor({
                         <tr className={unused ? 'reading-unused' : undefined}>
                           <td>{k + 1}</td>
                           <td>
-                            <NumberInput value={rd.irradiance_wm2} onChange={(v) => updateReading(i, k, { irradiance_wm2: v ?? 0 })} min={0} />
+                            <NumberInput value={rd.irradiance_wm2} onChange={(v) => updateReading(i, k, { irradiance_wm2: v ?? 0 })} min={0} ariaLabel={`Reading ${k + 1} sunlight, W/m²`} />
                           </td>
                           <td>
-                            <NumberInput value={rd.power_w} onChange={(v) => updateReading(i, k, { power_w: v ?? 0 })} min={0} />
+                            <NumberInput value={rd.power_w} onChange={(v) => updateReading(i, k, { power_w: v ?? 0 })} min={0} ariaLabel={`Reading ${k + 1} MPPT power, W`} />
                           </td>
                           <td>
-                            <NumberInput value={rd.module_temp_c} onChange={(v) => updateReading(i, k, { module_temp_c: v })} allowEmpty placeholder="estimate" />
+                            <NumberInput value={rd.module_temp_c} onChange={(v) => updateReading(i, k, { module_temp_c: v })} allowEmpty placeholder="estimate" ariaLabel={`Reading ${k + 1} panel temperature, °C`} />
                           </td>
                           {r && <td className="num k-col">{used ? fmt(r.k_raw_values[k]) : <span className="badge bad">not used</span>}</td>}
                           {r && <td className="num k-col">{used ? fmt(r.k_site_values[k]) : ''}</td>}
