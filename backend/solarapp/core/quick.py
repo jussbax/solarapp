@@ -30,7 +30,8 @@ SHAPES = {
     "evening": [0.8, 0.6, 0.5, 0.5, 0.5, 0.6, 0.9, 1.0, 0.8, 0.7, 0.7, 0.8, 0.8, 0.7, 0.7, 0.8, 1.0, 1.6, 2.6, 3.0, 2.8, 2.2, 1.6, 1.1],
 }
 PATTERN_LABEL = {"morning": "mostly in the morning", "balanced": "spread through the day", "evening": "mostly in the evening"}
-GOAL_LABEL = {"net_metering": "solar with net metering, no battery", "combination": "solar with a battery and net metering", "off_grid": "solar with a battery and no export (the grid as backup)"}
+GOAL_LABEL = {"net_metering": "solar with net metering, no battery", "combination": "solar with a battery and net metering", "off_grid": "battery first, nothing sold back (the grid as backup)"}
+NIGHT_HOURS = list(range(18, 24)) + list(range(0, 6))   # 6 pm to 6 am, the night the battery is asked to carry
 OUT_OF_AREA_KM = 25.0
 # Under this a system is one panel and a ₱180,000 inverter: refused with a plain message instead of a silly figure.
 MIN_MONTHLY_KWH = 60.0
@@ -43,6 +44,21 @@ def load_profile(monthly_kwh: float, pattern: str) -> np.ndarray:
     shape = shape / shape.sum()
     daily = monthly_kwh / 30.4
     return np.tile(shape * daily, (12, 1))  # [12, 24] kW, the same every month
+
+
+def battery_note(battery_kwh: float, monthly_kwh: float, pattern: str, depth_of_discharge: float) -> dict:
+    """What the battery carries, from the pattern shape scaled to the monthly kWh (there is no audit on the website):
+    night = the shape's share from 6 pm to 6 am of a day's use; usable = the priced battery × the depth of discharge
+    the sizing designs to. The proposal does the same sum from the audit's hourly balance."""
+    if battery_kwh < 0.5:
+        return {"night_kwh": 0.0, "usable_kwh": 0.0, "hours": None, "text": ""}
+    shape = np.array(SHAPES.get(pattern) or SHAPES["balanced"], dtype=float)
+    night = float(shape[NIGHT_HOURS].sum() / shape.sum() * monthly_kwh / 30.4)
+    usable = battery_kwh * depth_of_discharge
+    if usable >= night:
+        return {"night_kwh": night, "usable_kwh": usable, "hours": None, "text": "enough for a typical night of your use when the grid is down"}
+    hours = usable / (night / len(NIGHT_HOURS))
+    return {"night_kwh": night, "usable_kwh": usable, "hours": hours, "text": f"about {hours:.0f} hours of your evening use when the grid is down"}
 
 
 def per_kwp_profile(pvgis: PvgisDataset, lat: float, lon: float, tilt: float, azimuth: float, k_site: float) -> tuple[np.ndarray, dict]:
@@ -140,6 +156,7 @@ def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, l
     boq = generate_boq(BoqRequest(panel.code, panels, rows, inverter_kw=float(inv["size_kw"]), inverter_units=int(inv["units"]),
                                   inverter_required_kw=float(inv.get("required_kw") or 0) or None, battery_kwh=required_kwh, kind=goal), catalog, cfg)
     bat_kwh = _priced_battery_kwh(boq, catalog, required_kwh)
+    carries = battery_note(bat_kwh, monthly_kwh, pattern, float(s["battery"].get("depth_of_discharge") or 0.85))
     pin = extra_km_from_pin(lat, lon, cfg)
     d = cfg.job_defaults
     job = JobInputs(roof_factor=d.roof_factor, roof_closed_days=d.roof_closed_days, max_days=d.max_days, max_pairs=d.max_pairs,
@@ -163,6 +180,7 @@ def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, l
             "panels": panels, "panel_wp": panel_wp, "panel_name": panel.name, "kwp": float(s["kwp"]),
             "inverter_kw": float(inv["size_kw"]), "inverter_units": int(inv["units"]), "battery_kwh": bat_kwh,
             "roof_area_m2": panels * dim * width, "roof_limited": bool(s.get("roof_limited")),
+            "battery_note": carries["text"], "battery_night_kwh": carries["night_kwh"], "battery_usable_kwh": carries["usable_kwh"],
         },
         "production": {
             "annual_kwh": float(s["annual_production_kwh"]), "monthly_kwh": [m["production_kwh"] for m in s["monthly"]],   # at the meter
@@ -222,6 +240,9 @@ def quick_estimate(req: QuickRequest, pvgis: PvgisDataset, ctx: PricingContext) 
         f"Savings assume electricity at ₱{tariff:.2f} per kWh, rising {cfg.economics.tariff_escalation * 100:.0f}% a year."
         + (f" Power you send back to the grid is credited at ₱{cfg.economics.export_rate_php_per_kwh:.2f} per kWh (the net metering rate)." if req.goal != "off_grid" else ""),
     ]
+    if main["system"]["battery_note"] or (alternative and alternative["system"]["battery_note"]):
+        dod = BatterySpec().depth_of_discharge   # the sizing's own figure (no setting of its own)
+        assumptions.append(f"What the battery carries assumes your evening follows the pattern you chose ({PATTERN_LABEL[req.pattern]}) and that {dod * 100:.0f}% of the battery's rating is usable each night; the energy audit on the visit uses your real appliances.")
     out = dict(main)
     out.update({
         "inputs": {"goal": req.goal, "goal_label": GOAL_LABEL[req.goal], "pattern": req.pattern, "pattern_label": PATTERN_LABEL[req.pattern],

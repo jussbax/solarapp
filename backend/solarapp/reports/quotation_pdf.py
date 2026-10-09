@@ -27,7 +27,8 @@ from ..schemas import AssessmentDoc  # noqa: E402
 from . import brand  # noqa: E402
 from .drawings import plan_blocks  # noqa: E402
 
-KIND_LABEL = {"off_grid": "Solar with battery, no export (the grid as backup)", "net_metering": "Solar with net metering, no battery", "combination": "Hybrid solar with battery and net metering"}
+KIND_LABEL = {"off_grid": "Battery first, nothing sold back (the grid as backup)", "net_metering": "Solar with net metering, no battery", "combination": "Hybrid solar with battery and net metering"}
+NIGHT_HOURS = set(range(18, 24)) | set(range(0, 6))   # 6 pm to 6 am: the night the battery is asked to carry
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 ACCENT = brand.BLACK
 ACCENT_LIGHT = brand.OFF_WHITE
@@ -44,6 +45,38 @@ def php(v: float) -> str:
 
 def php0(v: float) -> str:
     return f"PHP {v:,.0f}"
+
+
+def php_about(v: float) -> str:
+    """A savings figure as a person says it: "about PHP 1.41 million", "about PHP 61,000", "about PHP 3,800"."""
+    a = abs(float(v))
+    if a >= 1_000_000:
+        text = f"PHP {a / 1_000_000:.2f}".rstrip("0").rstrip(".") + " million"
+    elif a >= 10_000:
+        text = f"PHP {round(a, -3):,.0f}"
+    else:
+        text = f"PHP {round(a, -2):,.0f}"
+    return f"about {'-' if v < 0 else ''}{text}"
+
+
+def years_about(y: float) -> str:
+    """Payback rounded to the half year: "about 5 years", "about 3½ years", "under a year"."""
+    half = round(float(y) * 2) / 2
+    if half < 1:
+        return "under a year"
+    whole = int(half)
+    if half == whole:
+        return f"about {whole} {'year' if whole == 1 else 'years'}"
+    return f"about {whole}½ years"
+
+
+def _ampm(hhmm: str) -> str:
+    """"06:15" -> "6:15 am", for the customer."""
+    try:
+        h, m = (int(x) for x in str(hhmm).split(":")[:2])
+    except ValueError:
+        return str(hhmm)
+    return f"{(h % 12) or 12}:{m:02d} {'am' if h < 12 else 'pm'}"
 
 
 def _d(s: str | None) -> str:
@@ -123,25 +156,174 @@ def inverter_certificate(pricing: dict) -> str:
     return ""
 
 
+def night_kwh(sizing: dict) -> float | None:
+    """What the house uses from 6 pm to 6 am on an average month's day, from the sizing's hourly balance (the
+    reconciled load at the meter, the same balance the savings come from). None without a balance."""
+    loads = [p.get("load") for p in (sizing.get("profiles") or {}).values() if p.get("load") and len(p["load"]) == 24]
+    if not loads:
+        return None
+    avg = [sum(float(l[h]) for l in loads) / len(loads) for h in range(24)]
+    return sum(avg[h] for h in NIGHT_HOURS)
+
+
+def _window_hours(start: str, end: str) -> set[int]:
+    s, e = int(str(start)[:2]), int(str(end)[:2])
+    return set(range(s, 24)) | set(range(0, e)) if e <= s else set(range(s, e))   # end at or before start crosses midnight; equal = 24 h
+
+
+def aircon_at_night(doc: AssessmentDoc) -> bool:
+    """Whether an aircon (existing or planned) is inside the 6 pm to 6 am figure, so the sentence can say so."""
+    for a in doc.audit.appliances:
+        if a.status in ("existing", "future") and a.category.startswith("aircon") and any(_window_hours(w.start, w.end) & NIGHT_HOURS for w in a.windows):
+            return True
+    return False
+
+
+def battery_carries(doc: AssessmentDoc, sizing: dict, battery_kwh: float) -> tuple[str, bool]:
+    """What the battery carries, in the customer's words, from the hourly balance already in the results: usable = the
+    battery the customer pays for × the depth of discharge the sizing designs to; night = the reconciled load summed
+    6 pm to 6 am. Returns the clause and whether the battery holds the whole night. Empty without a balance."""
+    if battery_kwh <= 0 or sizing.get("kind") == "net_metering":
+        return "", False
+    night = night_kwh(sizing)
+    if not night:
+        return "", False
+    dod = float((sizing.get("battery") or {}).get("depth_of_discharge") or 0.85)
+    usable = battery_kwh * dod
+    ac = aircon_at_night(doc)
+    if usable >= night:
+        return f"enough for a whole night of your usual use (about {night:.0f} kWh from 6 pm to 6 am{', aircon included' if ac else ''}, against {usable:.0f} kWh usable)", True
+    hours = usable / (night / len(NIGHT_HOURS))
+    loads = "your evening use, aircon included" if ac else "your evening use (lights, fans, refrigerator, TV, Wi-Fi; aircon shortens that)"
+    return f"about {hours:.0f} hours of {loads}, from {usable:.0f} kWh usable against about {night:.0f} kWh used from 6 pm to 6 am", False
+
+
+def battery_row(doc: AssessmentDoc, sizing: dict, battery_kwh: float) -> str:
+    """The Battery line of System information: the unit the customer pays for and what it carries."""
+    unit = f"{battery_kwh:.0f} kWh lithium battery (LiFePO4)"
+    clause, _ = battery_carries(doc, sizing, battery_kwh)
+    if not clause:
+        return unit
+    return f"{unit}, {clause}, recharged by the panels the next day" + ("; in the rainy season the grid covers the rest." if sizing.get("kind") == "combination" else ".")
+
+
 def battery_backup_line(sizing: dict) -> str:
-    """One honest line about the battery: the evenings it is designed to carry and, from the balance over a real
-    year of weather, how often the grid still has to step in (every kind keeps the grid; "no export" only means nothing is sold back)."""
+    """The battery-first kind only: the evenings it is designed to carry and, from the balance over a real year of
+    weather, how often the grid still has to step in ("no export" only means nothing is sold back). The hybrid's
+    line is the Battery row itself (what it carries)."""
     kind = sizing.get("kind", "")
     aut = (sizing.get("battery") or {}).get("days_of_autonomy")
-    if kind == "net_metering" or not aut:
+    if kind != "off_grid" or not aut:
         return ""
-    evenings = f"{aut:g} {'evening' if float(aut) == 1 else 'evenings'}"
+    evenings = "one evening" if float(aut) == 1 else f"{aut:g} evenings"
     hy = sizing.get("hourly_year") or {}
+    line = f"Designed to carry {evenings} without sun; the grid steps in only when the panels and the battery fall short, and nothing is sent back to it."
+    if hy.get("available"):
+        hours, days = int(hy.get("loss_of_load_hours") or 0), int(hy.get("loss_of_load_days") or 0)
+        if hours > 0:
+            line += f" In a typical year of weather (PVGIS records) that is about {hours} {'hour' if hours == 1 else 'hours'} on {days} {'day' if days == 1 else 'days'}, mostly in long rainy spells."
+        else:
+            line += " In a typical year of weather (PVGIS records) the battery does not run out."
+    return line
+
+
+def coverage_row(sizing: dict) -> list[str] | None:
+    """The share of the house's usage served by the system, named by what serves it, so it is never mistaken for
+    the production ratio ("N% of what you use") printed on the production row and the website."""
+    cov = sizing.get("coverage_pct")
+    if cov is None:
+        return None
+    kind = sizing.get("kind", "")
+    if kind == "net_metering":
+        return ["Used straight from the panels", f"{cov:.0f}% of your usage; the rest of the day's solar goes to the grid and is credited on your bill"]
     if kind == "off_grid":
-        line = f"Designed to carry {evenings} without sun; the grid steps in only when the panels and the battery fall short, and nothing is sent back to it."
-        if hy.get("available"):
-            hours, days = int(hy.get("loss_of_load_hours") or 0), int(hy.get("loss_of_load_days") or 0)
-            if hours > 0:
-                line += f" In a typical year of weather (PVGIS records) that is about {hours} {'hour' if hours == 1 else 'hours'} on {days} {'day' if days == 1 else 'days'}, mostly in long rainy spells."
+        return ["Covered by the panels and the battery", f"{cov:.0f}% of your usage"]
+    return ["Covered by solar, by day and from the battery", f"{cov:.0f}% of your usage"]
+
+
+def production_row(sizing: dict, production: dict | None) -> list[str] | None:
+    """Solar power made at the meter, with the ratio to the house's usage the website estimate printed."""
+    annual = sizing.get("annual_production_kwh") or (production or {}).get("annual_kwh_ac") or (production or {}).get("annual_kwh")
+    if not annual:
+        return None
+    cons = float(sizing.get("annual_consumption_kwh") or 0)
+    ratio = f", {annual / cons * 100:.0f}% of what you use" if cons > 0 else ""
+    return ["Solar power made", f"about {annual:,.0f} kWh a year at your meter{ratio}"]
+
+
+def move_house_answer(kind: str) -> str:
+    """The website's corrected answer, per kind: no resale value, no transfer the owner cannot verify."""
+    if kind == "off_grid":
+        return "The system stays with the house, and the new owner keeps using it. We hand over the plans and the papers."
+    return "The system stays with the house. Net metering is tied to the service connection, so the new owner continues it with the electric company; we help with the paperwork."
+
+
+def in_short(doc: AssessmentDoc, results: dict, n_panels: int, kwp: float, battery_kwh: float) -> str:
+    """The customer's situation and the solution in one block, every figure from the results; a missing figure drops
+    its sentence. The price is given before VAT, as VAT, and VAT included (the owner's rule)."""
+    sizing = results.get("sizing") or {}
+    eco = results.get("economics") or {}
+    eco = eco if eco.get("available") else {}
+    cust = (results.get("pricing") or {}).get("customer") or {}
+    kind = sizing.get("kind", "")
+    parts: list[str] = []
+    bill_today, bill_kwh = eco.get("bill_today_monthly"), eco.get("bill_today_kwh")
+    if bill_today:
+        s = f"Your bill today is {php0(bill_today)} a month" + (f" for {bill_kwh:,.0f} kWh" if bill_kwh else "")
+        if eco.get("includes_future_loads") and eco.get("bill_before_monthly"):
+            s += f"; with the appliances you plan to add it would be about {php0(eco['bill_before_monthly'])}"
+        parts.append(s + ".")
+    has_battery = battery_kwh > 0 and kind != "net_metering"
+    system = f"{n_panels} {'panel' if n_panels == 1 else 'panels'}" + (f" ({kwp:.2f} kWp)" if kwp else "") + (f" and a {battery_kwh:.0f} kWh battery" if has_battery else "")
+    cov, after = sizing.get("coverage_pct"), eco.get("bill_after_monthly")
+    if n_panels and (cov is not None or after is not None):
+        s = system
+        if cov is not None:
+            s += f" cover {cov:.0f}% of what the house uses"
+        if after is not None:
+            s += f"{':' if cov is not None else ''} the bill comes down to about {php0(after)} a month"
+        if kind == "net_metering":
+            s += "; there is no battery, so the house runs on the grid at night and in a brownout"
+        elif has_battery:
+            _, whole_night = battery_carries(doc, sizing, battery_kwh)
+            if kind == "off_grid":
+                hy = sizing.get("hourly_year") or {}
+                hours = int(hy.get("loss_of_load_hours") or 0) if hy.get("available") else 0
+                s += ", the battery carries the house at night, nothing is sold back, and the grid steps in only in long rainy spells" + (f" (about {hours} hours a year)" if hours else "")
             else:
-                line += " In a typical year of weather (PVGIS records) the battery does not run out."
-        return line
-    return f"Designed to carry {evenings} without sun; in the rainy season the grid covers the rest."
+                s += f", and the battery carries your {'whole night' if whole_night else 'evening'} when the grid drops"
+        parts.append(s + ".")
+    total = float(cust.get("total") or 0)
+    if total > 0:
+        tax = sum(float(x["amount"]) for x in cust.get("sections", []) if x.get("key") == "tax")
+        s = f"{php0(total - tax)} before VAT and {php0(tax)} VAT: {php0(total)} installed, permits and VAT included" if tax > 0 else f"{php0(total)} installed, permits included"
+        if eco.get("payback_years") is not None:
+            s += f"; it pays for itself in {years_about(eco['payback_years'])}"
+        parts.append(s + ".")
+    return " ".join(parts)
+
+
+def installation_day_lines(prog: dict, kind: str, has_battery: bool, outage_hours: float | None) -> list[str]:
+    """The customer's side of installation day, from the program's own figures (crew, arrival, finish) plus the
+    owner's outage setting; blank leaves the length unstated. The papers are only those the app already asks for."""
+    if not prog.get("available"):
+        return []
+    inst = prog.get("install") or {}
+    crew = int((inst.get("crew") or {}).get("persons") or 0)
+    frame = inst.get("frame") or {}
+    days = int(inst.get("days") or 1)
+    arrive, done = frame.get("arrive"), frame.get("pack_up_end")
+    s = f"Our crew of {crew}" if crew else "Our crew"
+    if arrive:
+        s += f" arrives about {_ampm(arrive)}" + (f" on each of the {days} days" if days > 1 else "")
+    if done:
+        s += f" and is usually done by about {_ampm(done)}" + (" on the last day" if days > 1 else "")
+    lines = [s + ". We need someone at home, the gate open for the materials, and access to the roof, the panel board and the wall where the inverter" + (" and the battery go." if has_battery else " goes.")]
+    outage = f" for about {outage_hours:g} {'hour' if outage_hours == 1 else 'hours'}" if outage_hours else ""
+    lines.append(f"Your power is off{outage} while we connect the inverter to your panel board; we tell you before we switch it off.")
+    if kind != "off_grid":
+        lines.append("What we need from you: a copy of your latest electric bill and your signature on the net metering forms we prepare. If your electric company asks for anything more, we confirm the list with you.")
+    return lines
 
 
 def customer_sections(cust: dict) -> list[dict]:
@@ -177,8 +359,9 @@ def payment_rows(payments: list[dict]) -> list[dict]:
     return rows
 
 
-def lead_estimate_sentence(doc: AssessmentDoc, eco: dict | None) -> str:
-    """The bridge from the website estimate to the measured proposal, when the record started as a website lead."""
+def lead_estimate_sentence(doc: AssessmentDoc, eco: dict | None, n_panels: int = 0, battery_kwh: float = 0.0, total: float = 0.0) -> str:
+    """The bridge from the website estimate to the measured proposal, when the record started as a website lead:
+    what the estimate was, then what it is now and why (measured, and the planned appliances when they count)."""
     est = doc.lead.estimate if doc.lead else None
     if not est or not est.price:
         return ""
@@ -191,8 +374,11 @@ def lead_estimate_sentence(doc: AssessmentDoc, eco: dict | None) -> str:
     panels = f"{est.panels} {'panel' if est.panels == 1 else 'panels'}"
     battery = f" and a {est.battery_kwh:.0f} kWh battery" if est.battery_kwh >= 0.5 else ""
     future = bool((eco or {}).get("includes_future_loads")) or any(a.status == "future" for a in doc.audit.appliances)
-    return (f"Your website estimate{when} was PHP {est.price:,.0f} for {panels}{battery}. "
-            f"This proposal is measured on your roof{' and includes the appliances you plan to add' if future else ''}.")
+    why = "Measured on your roof" + (" and with the appliances you plan to add" if future else "")
+    if n_panels and total:
+        now = f"{n_panels} {'panel' if n_panels == 1 else 'panels'}" + (f" and a {battery_kwh:.0f} kWh battery" if battery_kwh >= 0.5 else "")
+        return f"Your website estimate{when} was PHP {est.price:,.0f} for {panels}{battery}. {why}, it is {now} at PHP {total:,.0f}."
+    return f"Your website estimate{when} was PHP {est.price:,.0f} for {panels}{battery}. This proposal is measured on your roof{' and includes the appliances you plan to add' if future else ''}."
 
 
 def what_you_get(sizing: dict, prog: dict, has_warranties: bool) -> list[str]:
@@ -247,7 +433,8 @@ def _bill_chart(eco: dict | None, sizing: dict | None, audit: dict | None) -> tu
     return Image(buf, width=84 * mm, height=40 * mm), title
 
 
-def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, proposal_no: str = "") -> bytes:
+def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, proposal_no: str = "", outage_hours: float | None = None) -> bytes:
+    """``outage_hours`` is the owner's Program setting (hours the customer's power is off on installation day); None or 0 leaves it unstated."""
     pricing = results["pricing"]
     sizing = results.get("sizing") or {}
     eco = results.get("economics") or {}
@@ -325,14 +512,17 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     mat = next((s for s in cust["sections"] if s["key"] == "materials"), {"items": []})
     battery_item = next((i for i in mat["items"] if i["key"] == "Battery"), None)
     battery_part = float(battery_item["amount"]) * (1 + vat_rate) if battery_item else 0.0
+    # the customer block names the customer and the address only: no map pin on a signed document (a pin from a website
+    # booking is the town centre until the roof visit)
     cust_block = [
         Paragraph(f"<b>{escape(doc.customer_name or '-')}</b>", ParagraphStyle("cn", parent=body, fontSize=10, leading=13)),
         Paragraph(escape(doc.address or ""), body),
-        Paragraph(f"Map pin {doc.lat:.5f}, {doc.lon:.5f}" if doc.lat is not None and doc.lon is not None else "", small),
     ]
     tot_rows = [[Paragraph("TOTAL CONTRACT PRICE (VAT INCLUDED)", big_lbl)], [Paragraph(php(cust["total"]), big)]]
     if battery_part > 0:
         tot_rows.append([Paragraph(f"Solar system {php0(cust['total'] - battery_part)} · battery for brownouts {php0(battery_part)}", ParagraphStyle("bl2", parent=big_lbl, alignment=2))])
+    if eco.get("available") and float(eco.get("bill_today_monthly") or 0) > 0:
+        tot_rows.append([Paragraph(f"That is about {float(cust['total']) / float(eco['bill_today_monthly']):.0f} months of your bill today", ParagraphStyle("bl3", parent=big_lbl, alignment=2))])
     tot = Table(tot_rows, colWidths=[64 * mm])  # "Valid until" prints once, in the header strip
     tot.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), ACCENT), ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
                              ("TOPPADDING", (0, 0), (0, 0), 6), ("BOTTOMPADDING", (0, -1), (0, -1), 6)]))
@@ -347,6 +537,16 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     panel = pricing.get("panel") or {}
     n_panels = int(next((l["qty"] for l in lines if l.get("category") == "Solar Panel"), 0))
     wp = panel.get("watt_peak") or next((l.get("rating") for l in lines if l.get("category") == "Solar Panel"), 0) or 0
+    kwp = float((pricing.get("totals") or {}).get("kwp") or 0)
+
+    # ---- in short: the customer's situation and the solution, before any table (every figure from the results)
+    summary = in_short(doc, results, n_panels, kwp, battery_kwh)
+    if summary:
+        box = Table([[Paragraph(f"<b>In short.</b> {escape(summary)}", ParagraphStyle("short", parent=body, fontSize=9, leading=12.5))]], colWidths=[184 * mm])
+        box.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), brand.GOLD_BG), ("LINEBEFORE", (0, 0), (0, -1), 3, GOLD), ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                                 ("RIGHTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+        story.append(box)
+        story.append(Spacer(1, 6))
     sysinfo = [
         ["System type", KIND_LABEL.get(sizing.get("kind", ""), "Solar PV system")],
         ["Solar panels", f"{n_panels} × {wp:.0f} W" if wp else f"{n_panels}"],
@@ -357,18 +557,16 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
     if certs:
         sysinfo.append(["Inverter certificate", escape(certs)])
     if battery_kwh > 0 and sizing.get("kind") != "net_metering":
-        sysinfo.append(["Battery", f"{battery_kwh:.0f} kWh lithium battery (LiFePO4)"])
+        sysinfo.append(["Battery", battery_row(doc, sizing, battery_kwh)])   # the unit the customer pays for, and what it carries
         backup = battery_backup_line(sizing)
         if backup:
             sysinfo.append(["Battery backup", backup])
     if company.get("brands"):
         sysinfo.append(["Brands", escape(company["brands"])])
     # at the meter: the sizing's balance carries the system losses; the roof simulation's AC figure is the fallback
-    annual = sizing.get("annual_production_kwh") or (results.get("production") or {}).get("annual_kwh_ac") or (results.get("production") or {}).get("annual_kwh")
-    if annual:
-        sysinfo.append(["Solar power made", f"about {annual:,.0f} kWh a year at your meter"])
-    if sizing.get("coverage_pct") is not None:
-        sysinfo.append(["Share of your usage covered by solar", f"{sizing['coverage_pct']:.0f}%"])
+    for row in (production_row(sizing, results.get("production")), coverage_row(sizing)):
+        if row:
+            sysinfo.append(row)
     left_col = []
     chart, chart_title = _bill_chart(eco if eco.get("available") else None, sizing or None, results.get("audit"))
     if chart is not None:
@@ -389,9 +587,9 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
             sav.append(["Savings against your bill today", php(float(eco["bill_today_monthly"]) - float(eco["bill_after_monthly"]))])
         sav += [
             ["Monthly savings" + (" (against the bill with the new appliances)" if future else ""), php(eco["savings_monthly"])],
-            ["Savings in the first year", php(eco["year1"]["savings"])],
+            ["Savings in the first year", php_about(eco["year1"]["savings"])],   # savings are estimates: said as a person says them, not to the centavo
             ["Pays for itself in", f"{eco['payback_years']:.1f} years" if eco.get("payback_years") is not None else f"more than {a['analysis_years']} years"],
-            [f"Saved over {a['analysis_years']} years", php(eco["lifetime_net"])],
+            [f"Saved over {a['analysis_years']} years", php_about(eco["lifetime_net"])],
         ]
         if eco.get("irr") is not None:
             sav.append(["Yearly return on your money", f"{eco['irr'] * 100:.0f}%"])
@@ -415,8 +613,11 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         "Quantities are based on your roof check and may change after the final check before installation. We will confirm any change with you first.",
         f"This proposal is good for {validity} days from the proposal date.",
     ]
-    if lead_estimate_sentence(doc, eco):
-        reminders.insert(0, lead_estimate_sentence(doc, eco))
+    bridge = lead_estimate_sentence(doc, eco, n_panels, battery_kwh if sizing.get("kind") != "net_metering" else 0.0, float(cust["total"]))
+    if bridge:
+        reminders.insert(0, bridge)
+    if battery_kwh > 0 and sizing.get("kind") != "net_metering" and night_kwh(sizing):
+        reminders.append(f"The battery's night figures use the appliance hours from your energy audit and assume {float(bat.get('depth_of_discharge') or 0.85) * 100:.0f}% of its rating is usable each night (the depth of discharge we design to).")
     if eco.get("available"):
         a = eco["assumptions"]
         src = "from your latest bill" if str(a.get("tariff_source", "")).startswith("bill") else "our usual rate; your bill may differ"
@@ -496,20 +697,27 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         story.append(st2)
         story.append(Spacer(1, 8))
 
-    # ---- your questions: the objections, answered on paper
+    # ---- the customer's side of installation day: who comes when, what we need, the power cut, the papers
     kind = sizing.get("kind", "")
     bat_kwh = battery_kwh  # the same figure as System information
+    day_lines = installation_day_lines(prog, kind, bat_kwh > 0 and kind != "net_metering", outage_hours)
+    if day_lines:
+        story.append(KeepTogether([section("ON INSTALLATION DAY"), Spacer(1, 2)] + [Paragraph(x, body) for x in day_lines] + [Spacer(1, 8)]))
+
+    # ---- your questions: the objections, answered on paper
     ev = {e["key"]: e for e in prog.get("events", [])} if prog.get("available") else {}
     days = int((prog.get("install") or {}).get("days") or 1) if prog.get("available") else 1
     qa: list[tuple[str, str]] = []
+    carries, _ = battery_carries(doc, sizing, bat_kwh)
     if kind == "off_grid":
         hy = sizing.get("hourly_year") or {}
         tail = ""
         if hy.get("available") and int(hy.get("loss_of_load_hours") or 0) > 0:
             tail = f" In a long rainy spell the battery can run out and the grid takes over: in a typical year of weather that is about {int(hy['loss_of_load_hours'])} hours on {int(hy['loss_of_load_days'])} days."
-        qa.append(("What happens in a brownout?", f"The house runs on the panels and the {bat_kwh:.0f} kWh battery first, every day; the grid only steps in when both fall short, so a brownout changes little.{tail}"))
+        qa.append(("What happens in a brownout?", f"The house runs on the panels and the {bat_kwh:.0f} kWh battery first, every day{f'; the battery is {carries}' if carries else ''}. The grid only steps in when both fall short, so a brownout changes little.{tail}"))
     elif bat_kwh > 0:
-        qa.append(("What happens in a brownout?", f"The battery takes over the moment the grid drops. A {bat_kwh:.0f} kWh battery carries lights, fans, the refrigerator, TV and wifi through a typical evening; running aircon shortens that. By day the panels keep charging it."))
+        what = f": {carries}" if carries else f". A {bat_kwh:.0f} kWh battery carries lights, fans, the refrigerator, TV and wifi through a typical evening; running aircon shortens that"
+        qa.append(("What happens in a brownout?", f"The battery takes over the moment the grid drops{what}. By day the panels recharge it."))
     else:
         qa.append(("What happens in a brownout?", "A system without a battery switches off during a brownout, as the safety rules require, and restarts on its own when the grid returns. A battery can be added later if you want backup."))
     if kind != "off_grid":
@@ -517,7 +725,7 @@ def build_quotation_pdf(doc: AssessmentDoc, results: dict, company: dict, propos
         if ev.get("commissioning") and ev.get("meter_installed"):
             gap = f" Between switch-on ({_d(ev['commissioning']['date'])}) and the two-way meter ({_d(ev['meter_installed']['date'])}) the system already cuts your daytime bill, but power sent to the grid is not yet credited."
         qa.append(("Who handles net metering?", "We prepare and file the net metering application, the ERC certificate of compliance (the net metering certificate) and the two-way meter request with your electric company; you sign the forms." + gap))
-    qa.append(("What if we move house?", "The system stays with the house and adds to its value. The net metering agreement transfers to the new owner."))
+    qa.append(("What if we move house?", move_house_answer(kind)))
     qa.append(("Who looks after it?", "Rinse the panels with water two or three times a year, more in the dry season. The inverter shows its output on its screen or app, and we check the system at switch-on and whenever you ask."))
     qa.append(("What does the installation do to the roof?", f"The rails clamp to the roof framing through the sheet with sealed fasteners. Installation takes {days} {'day' if days == 1 else 'days'} and leaves no open holes."))
     first = True

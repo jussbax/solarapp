@@ -955,3 +955,99 @@ chart, and the engineering build order in the plan.
 - The VAT labels on the customer sections ("VAT (12%)", "VAT, 12% of the
   amounts above") are formatted from the VAT setting; the commission rate
   in the owner's screens is the screens' batch.
+
+## The customer's story on paper (round 3, marketing batch)
+
+- The proposal opens, after the customer block and before any table, with
+  an "In short" block: the bill today (and what it becomes with the
+  appliances the customer plans to add), the system in plain words and the
+  share of the house's usage it covers, the bill after, what the battery
+  carries, the price before VAT, the VAT and the VAT-inclusive total (the
+  owner's rule: "we put a before and after VAT price"), and the payback
+  rounded to the half year. Every figure is the results'; a figure that is
+  missing drops its sentence and nothing is invented. Under the total box
+  the contract is also said as "about N months of your bill today", which
+  replaces the "45 months" guess in the marketing kit.
+- The battery is described by what it carries, from the hourly balance
+  already in the results: usable = the battery the customer pays for (BOM
+  units × rating) × the depth of discharge the sizing designs to (0.85);
+  night = the reconciled load summed from 6 pm to 6 am on an average
+  month's day. When usable covers the night the proposal says "enough for a
+  whole night of your usual use (about N kWh from 6 pm to 6 am, aircon
+  included, against M kWh usable)", "aircon included" only when an aircon's
+  usage window reaches into the night; otherwise "about H hours of your
+  evening use", H = usable over the night's average draw, with the aircon
+  caveat only when the aircon is outside the night figure. The assumption
+  (the audit's appliance hours, the depth of discharge) is printed in the
+  reminders. The website estimate has no audit, so it does the same sum on
+  the pattern shape scaled to the monthly kWh and says so in its
+  assumptions; the words are "enough for a typical night of your use when
+  the grid is down" or "about H hours of your evening use when the grid is
+  down". The hybrid's old "Designed to carry 1 evening" line is gone; the
+  battery-first kind keeps its grid-hours line, with "one evening".
+- "What if we move house?" no longer claims a resale value or a transfer
+  of the net metering agreement; it carries the website's corrected
+  wording per kind (net metering is tied to the service connection and
+  the new owner continues it with the electric company; the battery-first
+  kind: the new owner keeps using it, we hand over the plans and papers).
+  The transfer rule itself stays on the owner's verify list with the DU.
+- "On installation day" tells the customer their side from the program's
+  own figures (crew size, arrival, the usual finish) and one owner setting,
+  `program.installation_outage_hours` (hours the power is off while the
+  inverter is cut over at the panel board; 0 or blank prints no length,
+  never a guess). The papers asked for are only those the app already asks
+  for: the latest bill and the signature on the net metering forms; if
+  the electric company asks for more "we confirm the list with you". No DU
+  document list is invented.
+- Two measures, two names, everywhere the customer reads them: the
+  production ratio is "N% of what you use" (website "What it makes", the
+  proposal's production row), the served share is "Covered by solar, by
+  day and from the battery" (hybrid), "Covered by the panels and the
+  battery" (battery first) or "Used straight from the panels … the rest
+  goes to the grid and is credited" (net metering). "Share of your usage
+  covered by solar" is gone. The third kind has one customer name, the
+  estimate's: "Battery first, nothing sold back (the grid as backup)" on
+  the proposal, the estimate's assumptions and the home page card; the
+  "bigger battery" claim is dropped because the engine adds panels, not
+  battery, for that kind.
+- The website estimate prints "a small bill" instead of "about ₱0" when the
+  modelled bill is under ₱100: the fixed charges never go away and the grid
+  bills the hours it steps in during long rainy spells, which the proposal
+  for the same house shows. The threshold is a copy rule, not an engine
+  number; the owner's fixed-charge figure (plan item 10) replaces it when
+  it exists.
+- The net-metering page's four tiles are the engine's for its stated
+  example (500 kWh a month, Tanauan, mostly evening, no battery) and are
+  pinned by a test that reruns that example on the real weather and
+  compares the tiles (kWp, panels, rounded price, "under 4 years", "about
+  two thirds" between 60 and 72% off); on test weather the check is
+  skipped. The payback and the cut are written as ranges that survive small
+  price moves, by design.
+- The bridge from the website estimate says what changed and why
+  ("Measured on your roof and with the appliances you plan to add, it is
+  7 panels and a 15 kWh battery at PHP 314,600"); the card and the roof
+  check carry the estimate's panel count. The thank-you page sets up the
+  path (visit, card the same evening, audit, proposal within two working
+  days, valid N days from the pricing setting) and uses the first name
+  when the visitor typed two words. Savings over the years are rounded as
+  a person says them ("about PHP 1.41 million", "about PHP 61,000"); the
+  contract and the payment schedule stay exact.
+- A website booking with a landmark keeps its town in the project address
+  ("Brgy. Labuin, near the chapel, Pila, Laguna") unless the visitor typed
+  the town. The proposal prints no map pin (a signed document names the
+  customer and the address); the roof check prints the pin in small print
+  only when it is not a listed town centre, which is the hand-off's default
+  pin until the roof visit. The project still starts on the town centre so
+  the weather cell is right from the first calculation.
+- The card's "around N times what your house uses" divides the same
+  at-meter figure it prints in the sentence, as the roof check PDF does;
+  the card and the roof check say "This roof check" and "About this roof
+  check", since the customer's "estimate" is the website figure. The roof
+  check names the panel by rating and supplier ("585 W panel (Blue
+  Carbon)"), never the catalogue string. The schedule says "two-way meter
+  installed".
+- Still the owner's to supply, labelled as such: the outage length, the
+  DU's document list and transfer rule, the inverter's transfer time (the
+  brownouts page now says only that the switch-over is automatic), the
+  mounting wind rating and the battery warranty for the two unanswered
+  questions (typhoon, battery life), and the local fixed charges.

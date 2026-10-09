@@ -146,6 +146,7 @@ def quick_status(session: Session = Depends(get_session), settings: Settings = D
         "towns": towns_payload(),
         "public_url": settings.public_url,
         "estimate_url": settings.estimate_url,
+        "proposal_valid_days": cfg.job.quotation_validity_days,   # the thank-you page's "valid N days" is the pricing setting
     }
 
 

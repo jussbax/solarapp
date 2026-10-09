@@ -313,3 +313,13 @@ def test_engineer_gets_the_hand_off_only(client):
     assert lid not in [l["id"] for l in eng.get("/api/leads/open").json()]
     # the owner still has the whole inbox
     assert client.get(f"/api/leads/{lid}").json()["status"] == "converted"
+
+
+def test_start_project_keeps_the_town_in_a_landmark_address(client):
+    # a landmark alone would leave the engineer without a town; the typed town is not repeated
+    lid = book(client, name="Landmark Person", address="Brgy. Labuin, near the chapel")
+    doc = client.get(f"/api/assessments/{client.post(f'/api/leads/{lid}/convert').json()['project_id']}").json()["doc"]
+    assert doc["address"] == "Brgy. Labuin, near the chapel, Tanauan, Batangas"
+    lid = book(client, name="Typed Town", address="Brgy. Sambat, Tanauan City")
+    doc = client.get(f"/api/assessments/{client.post(f'/api/leads/{lid}/convert').json()['project_id']}").json()["doc"]
+    assert doc["address"] == "Brgy. Sambat, Tanauan City"

@@ -19,7 +19,10 @@ these words; keep the same names everywhere:
 1. **Estimate** on pldevinc.com (four questions, one minute). Link every
    ad, post and reply to it with a tag: `pldevinc.com/estimate?utm_source=fb&utm_medium=ad&utm_campaign=<name>`.
 2. **Booking** on the same page. The thank-you says who will message and
-   when; the lead appears on the job list with the figures the visitor saw.
+   when, and what follows (visit, card, audit, proposal). The booking lands
+   in the website's inbox (the CRM's data, owner-only on the server) and
+   shows under Projects › "From a website booking" in the engineering app
+   with the figures the visitor saw; "Start project" makes the project.
 3. **Roof visit** within the week, about an hour, free. Bring the test
    panel and meters; send the roof check card the same evening.
 4. **Energy audit**: on the same visit when the house is small (ask for the
@@ -27,10 +30,11 @@ these words; keep the same names everywhere:
 5. **Proposal** within two working days of the audit, valid 15 days.
 6. **Signing** on Messenger (signed photo plus downpayment) or on a visit.
 
-Measure five numbers every week, from the job list header: estimates run,
-leads, visits, proposals, signed. Healthy targets to start: leads at 15 to
-25% of estimates, visits at over 60% of leads, signed at 30 to 40% of
-proposals.
+Measure five numbers every week: estimates run, leads, visits booked and
+converted (the booking inbox's funnel, `/api/leads/funnel`, owner-only until
+the CRM has a page for it), quoted and signed (the projects by stage).
+Healthy targets to start: leads at 15 to 25% of estimates, visits at over
+60% of leads, signed at 30 to 40% of proposals.
 
 ## Messenger templates
 
@@ -52,16 +56,24 @@ Replace the parts in brackets. Short messages, one question each.
 > [N] panels at about ₱[price]; the visit settles the exact figure.
 
 **Evening after the roof visit (with the card):**
-> Here is your roof check, [Name]. Your roof holds [N] panels; you need
-> about [n] to cover your bill. Next step is the energy audit on [date,
-> time]; please have your latest bill ready.
+> Here is your roof check, [Name]. Your roof holds [N] panels; your
+> estimate said about [n]. Next step is the energy audit on [date, time];
+> please have your latest bill ready.
 
-**Sending the proposal:**
-> Your proposal is attached, [Name]. In short: ₱[price] installed, your
-> bill from ₱[before] to about ₱[after] a month, pays for itself in
-> [years] years. Page 3 answers the usual questions (brownouts, net
-> metering, warranties). It's valid until [date]. Happy to go through it on
-> a call.
+([N] is the card's "panels fit"; [n] is the card's own line "Your estimate
+said about [n] panels and ₱[price]", printed when the record started as a
+website booking.)
+
+**Sending the proposal (the same five sentences as the proposal's "In
+short" block, so your message and the paper agree):**
+> Your proposal is attached, [Name]. In short: your bill today is
+> ₱[bill] a month[; with the appliances you plan to add it would be about
+> ₱[before]]. [N] panels[ and a [kWh] kWh battery] cover [coverage]% of
+> what the house uses: the bill comes down to about ₱[after] a month[, and
+> the battery carries your evening when the grid drops]. ₱[price] installed,
+> permits and VAT included; it pays for itself in about [years] years. Page
+> 2 answers the usual questions (brownouts, net metering, warranties). It's
+> valid until [date]. Happy to go through it on a call.
 
 **Day 7 of the proposal (answer the two likeliest objections before they
 are asked):**
@@ -98,10 +110,13 @@ the town name; no stock images.
 
 2. **Bill swap (net metering, strongest numbers).** ₱5,000 to ₱10,000
    bills, no battery.
-   > A ₱5,000 bill becomes about ₱1,100. The system pays for itself in
-   > under 4 years, then runs for 20 more. See your own number in one
+   > A ₱5,000 bill becomes about ₱1,500, and the system pays for itself in
+   > about 4 years, then runs for 20 more. See your own number in one
    > minute, free.
    Image: a bill with the before and after circled.
+   The figures are the engine's for a ₱5,000 bill in Tanauan, mostly
+   evening, net metering (9 Oct 2026: ₱5,003 → about ₱1,460, 4.0 years);
+   run the estimate again on the day you post the ad and keep "about".
 
 3. **Measured roof (why us).** Word-of-mouth lookalikes.
    > Other installers quote from a satellite photo. We put a test panel
@@ -131,8 +146,11 @@ heading is "How much solar does your house need?"):
   the price 30 days past the 15-day validity. Low risk, converts "thinking
   about it".
 - **Financing.** Not offered yet; it will be its own module. Until then, no
-  "from ₱X a month" line anywhere. The safe frame is "pay the price of
-  about 45 months of your bill, then about 20 years of near-free power."
+  "from ₱X a month" line anywhere. The safe frame is the proposal's own
+  line under the total, "That is about [N] months of your bill today"
+  (the contract over the bill today: about 44 months on the sample
+  house's net-metering proposal, 78 with the battery), "then about 20
+  years of near-free power."
 - **Trust devices to fill in under Settings.** Phone, Messenger link,
   Facebook page, owner's name, the PEE's name and PRC number, warranties,
   brands, where you install, where to pay. The estimate page and the
@@ -140,22 +158,26 @@ heading is "How much solar does your house need?"):
 
 ## Where the estimate lives
 
-**Now, before the website exists:** the estimate page is the website.
-Point `pldevinc.com` at the app's tunnel and set
-`SOLARAPP_PUBLIC_HOST=pldevinc.com` in the server's `.env`: that hostname
-serves the estimate at its root and refuses everything else (the login,
-the API and the documents stay on `solar.pldevinc.com`). Ads, posts and
-the card's QR code then point at `https://pldevinc.com`. The README has
-the tunnel steps.
+The website (`site/`, plain pages) is its own process on `pldevinc.com`
+with the estimate at `pldevinc.com/estimate`; the engineering app, the
+login, the API and the documents stay on `solar.pldevinc.com`. The README
+("Set it up: two tunnels as containers") has the steps. Ads, posts and the
+card's QR code point at `https://pldevinc.com/estimate` (set
+`SOLARAPP_WEBSITE_URL=https://pldevinc.com`).
 
-**Later, with a real website:** embed the widget on a page such as
-pldevinc.com/estimate with
+Single-container fallback, without the website process: set
+`SOLARAPP_PUBLIC_HOST=pldevinc.com` and route that hostname to the app; it
+then serves the estimate alone at the root of that hostname and refuses
+everything else there.
+
+Any other page can carry the estimate with
 
 ```html
 <div id="pld-solar-estimate"></div>
-<script src="https://solar.pldevinc.com/widget/quick.js" defer></script>
+<script src="https://pldevinc.com/widget/quick.js" defer></script>
 ```
 
-and `SOLARAPP_PUBLIC_ORIGINS=https://pldevinc.com,https://www.pldevinc.com`
-in the server's `.env`. Put the trust strip (owner, PEE, installs count,
-three real roofs) and the privacy notice on the website page around it.
+and, from a different origin,
+`SOLARAPP_PUBLIC_ORIGINS=https://pldevinc.com,https://www.pldevinc.com` in
+the server's `.env`. Put the trust strip (owner, PEE, installs count,
+three real roofs) and the privacy notice on the page around it.

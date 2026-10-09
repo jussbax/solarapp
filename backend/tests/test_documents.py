@@ -196,11 +196,12 @@ def test_proposal_prints_the_bom_battery_plain_item_names_and_the_website_estima
     assert secs[1]["items"][1]["key"] == "tools" and abs(sum(s["amount"] for s in secs) - pr["customer"]["total"]) < 0.01
     # the website estimate, on the proposal and the card
     parsed = AssessmentDoc.model_validate(out["doc"])
-    assert lead_estimate_sentence(parsed, res["economics"]) == (
+    n_panels = int(next(l["qty"] for l in pr["lines"] if l["category"] == "Solar Panel"))
+    assert lead_estimate_sentence(parsed, res["economics"], n_panels, kwh, pr["customer"]["total"]) == (
         "Your website estimate on 28 Sep 2026 was PHP 282,000 for 5 panels and a 10 kWh battery. "
-        "This proposal is measured on your roof and includes the appliances you plan to add.")
+        f"Measured on your roof and with the appliances you plan to add, it is {n_panels} panels and a {kwh:.0f} kWh battery at PHP {pr['customer']['total']:,.0f}.")
     assert lead_estimate_sentence(AssessmentDoc.model_validate(LAGUNA_DOC), None) == ""
-    assert estimate_line(parsed) == "Your estimate said about PHP 282,000; the visit settles the exact figure."
+    assert estimate_line(parsed) == "Your estimate said about 5 panels and PHP 282,000; the visit settles the exact figure."
     assert what_you_get(res["sizing"], res["program"], False)[-1].endswith("on installation day.")
     assert "warranties" in what_you_get(res["sizing"], res["program"], True)[-1]
     assert res["program"]["assumptions"][-2].startswith("Assumed: permit approval") and res["program"]["assumptions"][-1].startswith("Assumed for net metering:")
@@ -211,7 +212,21 @@ def test_proposal_prints_the_bom_battery_plain_item_names_and_the_website_estima
     text = _pdf_text(client.get(f"/api/assessments/{aid}/quotation.pdf").content)
     assert text.count("Valid until") == 1
     assert "WHAT YOU GET" in text and "Your website estimate on 28 Sep 2026" in text
-    assert text.count(f"{kwh:.0f} kWh lithium battery") == 1 and f"A {kwh:.0f} kWh battery carries" in text
+    # the battery the customer pays for, once, and what it carries from the hourly balance; never the sizing's nominal kWh
+    flat = " ".join(text.split())   # full-width paragraphs wrap mid-phrase in the layout text; the narrow table columns interleave, so those are checked by their first words
+    assert text.count("kWh lithium") == 1 and f"{kwh:.0f} kWh lithium" in text and "The battery takes over the moment the grid drops" in flat
+    assert "from 6 pm to 6 am" in flat and "Designed to carry" not in flat
+    # the customer's story: in short, the two coverage measures by name, installation day, the corrected move-house answer, no pin
+    assert "In short." in text and f"Your bill today is PHP {res['economics']['bill_today_monthly']:,.0f} a month for 310 kWh; with the appliances you plan to add it would be about PHP" in flat
+    assert "before VAT and PHP" in flat and "installed, permits and VAT included; it pays for itself in about" in flat
+    assert "months of your bill today" in flat
+    assert "Covered by solar" in text and "% of what you use" in flat and "Share of your usage" not in flat
+    assert "ON INSTALLATION DAY" in text and "Our crew of" in text and "Your power is off while we connect the inverter to your panel board" in flat
+    assert "What we need from you: a copy of your latest electric bill" in flat
+    assert "Net metering is tied to the service connection" in flat and "adds to its value" not in flat and "transfers to the new owner" not in flat
+    assert "Map pin" not in text and "two-way meter installed" in flat and "net metering meter" not in flat
+    assert re.search(r"Saved over 25 years\s+about PHP", text) and re.search(r"Savings in the first year\s+about PHP", text)
+    assert "The battery's night figures use the appliance hours from your energy audit" in flat
     assert "Installation tools subtotal" not in text and "Installation tools" in text
     assert "Quantities are based on your roof check" in text and "roof assessment" not in text
     assert "ERC certificate of compliance" in text and "ERC Certificate" not in text and "Two-way meter from your electric company" in text
@@ -229,7 +244,8 @@ def test_roof_check_prints_the_readings_and_keeps_the_closing_notes_together(cli
     text = _pdf_text(build_customer_pdf(doc, res, {"company_name": "Test Solar", "company_contact": "x"}))
     assert "Measured on your roof" in text and "Sunlight on the roof: " in text and "clear sky, 11:30 AM" in text and "Test panel: " in text
     last = next(p for p in text.split("\f") if "Next step: your free energy audit" in p)
-    assert "About this estimate" in last  # never a lone paragraph on its own page
+    assert "About this roof check" in last and "About this estimate" not in text  # never a lone paragraph on its own page
+    assert "Monofacial" not in text and "585 W panel (" in text
     text = _pdf_text(build_program_pdf(doc, res, {"company_name": "Test Solar"}))
     assert "Assumed: permit approval" in text and "Assumption:" not in text
 
