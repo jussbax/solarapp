@@ -62,10 +62,10 @@ export default function PanelsEditor({
             return (
               <tr key={p.id}>
                 <td>
-                  <input type="radio" name="selected-panel" checked={!automatic && selectedId === p.id} onChange={() => onSelect(p.id)} style={{ width: 'auto' }} />
+                  <input type="radio" name="selected-panel" checked={!automatic && selectedId === p.id} onChange={() => onSelect(p.id)} style={{ width: 'auto' }} aria-label={`Use ${p.name || `panel ${i + 1}`}`} />
                 </td>
                 <td>
-                  <input value={p.name} onChange={(e) => update(i, { name: e.target.value, code: p.code ?? null })} placeholder="e.g. Canadian 550W" />
+                  <input value={p.name} onChange={(e) => update(i, { name: e.target.value, code: p.code ?? null })} placeholder="e.g. Canadian 550W" aria-label={`Panel ${i + 1} model or name`} />
                   {p.code ? (
                     <div className="muted" style={{ fontSize: 11 }}>
                       List item {p.code}{' '}
@@ -78,13 +78,13 @@ export default function PanelsEditor({
                   )}
                 </td>
                 <td>
-                  <NumberInput value={p.watt_peak} onChange={(v) => update(i, { watt_peak: v ?? 0 })} min={1} />
+                  <NumberInput value={p.watt_peak} onChange={(v) => update(i, { watt_peak: v ?? 0 })} min={1} ariaLabel={`Panel ${i + 1} Wp`} />
                 </td>
                 <td>
-                  <NumberInput value={p.length_m} onChange={(v) => update(i, { length_m: v ?? 0 })} min={0.1} step={0.001} />
+                  <NumberInput value={p.length_m} onChange={(v) => update(i, { length_m: v ?? 0 })} min={0.1} step={0.001} ariaLabel={`Panel ${i + 1} length, m`} />
                 </td>
                 <td>
-                  <NumberInput value={p.width_m} onChange={(v) => update(i, { width_m: v ?? 0 })} min={0.1} step={0.001} />
+                  <NumberInput value={p.width_m} onChange={(v) => update(i, { width_m: v ?? 0 })} min={0.1} step={0.001} ariaLabel={`Panel ${i + 1} width, m`} />
                 </td>
                 <td className="num">{r ? r.total_count : '-'}</td>
                 <td className="num">

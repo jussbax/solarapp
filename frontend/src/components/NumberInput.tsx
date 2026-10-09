@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-/** Number input that tolerates partial typing and empty values. */
+/** Number input that tolerates partial typing and empty values. Right-aligned, tabular figures (styles.css). */
 export default function NumberInput({
   value,
   onChange,
@@ -11,6 +11,9 @@ export default function NumberInput({
   placeholder,
   style,
   id,
+  ariaLabel,
+  disabled,
+  className,
 }: {
   value: number | null
   onChange: (v: number | null) => void
@@ -22,6 +25,10 @@ export default function NumberInput({
   style?: React.CSSProperties
   /** Set by Field so the label's htmlFor points here. */
   id?: string
+  /** The accessible name when the input sits in a table cell with no label of its own. */
+  ariaLabel?: string
+  disabled?: boolean
+  className?: string
 }) {
   const [text, setText] = useState(value == null ? '' : String(value))
   useEffect(() => {
@@ -38,6 +45,9 @@ export default function NumberInput({
       placeholder={placeholder}
       style={style}
       value={text}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      className={className}
       onChange={(e) => {
         setText(e.target.value)
         if (e.target.value === '') {
@@ -48,7 +58,8 @@ export default function NumberInput({
         if (Number.isFinite(n)) onChange(n)
       }}
       onBlur={() => {
-        if (text === '' && !allowEmpty) setText(value == null ? '' : String(value))
+        // a cleared field shows the value in force again (the default a project input fell back to, or the kept value)
+        if (text === '' && (value != null || !allowEmpty)) setText(value == null ? '' : String(value))
       }}
     />
   )

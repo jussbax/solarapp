@@ -10,6 +10,7 @@ import ResultsView from '../components/ResultsView'
 import NumberInput from '../components/NumberInput'
 import AuditEditor from '../components/AuditEditor'
 import SystemDesign from '../components/SystemDesign'
+import { batteryNominalKwh } from '../components/shared'
 import DocumentsCard, { documentState } from '../components/DocumentsCard'
 import ErrorBoundary from '../components/ErrorBoundary'
 import Field from '../components/Field'
@@ -367,7 +368,8 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   const eco = results?.economics
   const summaryPanels = sizing?.panels ?? results?.production.total_panels
   const summaryKwp = sizing?.kwp ?? results?.production.system_kwp
-  const batteryKwh = sizing?.battery?.installed_kwh ?? 0
+  // the battery the BOM prices (nominal kWh, as the proposal prints), not the sized figure
+  const batteryKwh = results ? batteryNominalKwh(results) : 0
   const selectedPanel = results?.panels.find((p) => p.panel.id === results.selected_panel_id)?.panel
   // after the first calculation the downstream cards are all "needs the audit": one line says what comes next instead
   const auditPending =
@@ -381,15 +383,17 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   return (
     <div>
       {draft && (
-        <div className="banner info">
+        <div className="banner info" data-testid="draft-banner">
           Unsaved edits from {fmtDateTime(draft.saved_at)} are saved on this device
-          {a && draft.base_updated_at !== a.updated_at && ' (the project was saved elsewhere since, so they may be older)'}.{' '}
-          <button type="button" className="small primary" onClick={restoreDraft} style={{ marginLeft: 6 }}>
-            Restore them
-          </button>{' '}
-          <button type="button" className="small" onClick={discardDraft}>
-            Discard
-          </button>
+          {a && draft.base_updated_at !== a.updated_at && ' (the project was saved elsewhere since, so they may be older)'}.
+          <div className="banner-actions">
+            <button type="button" className="small primary" onClick={restoreDraft}>
+              Restore them
+            </button>
+            <button type="button" className="small" onClick={discardDraft}>
+              Discard
+            </button>
+          </div>
         </div>
       )}
 

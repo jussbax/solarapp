@@ -43,7 +43,7 @@ export function Gantt({ events, today, width = 900 }: GanttProps) {
   if (evs.length === 0) return <div className="muted">No schedule yet.</div>
   const narrow = width < MIN_WIDTH
   const W = narrow ? MIN_WIDTH : width
-  const labelW = Math.min(250, Math.round(W * 0.34))
+  const labelW = narrow ? Math.min(250, Math.round(W * 0.34)) : Math.min(320, Math.round(W * 0.4))
   const rowH = 26
   const axisH = 32
   const legendH = 28

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Me, type Person } from '../api'
 import { fmtDateTime } from '../fmt'
+import Field from './Field'
 
 /** Settings card for owners: who may sign in. A new person gets a temporary password, shown once. */
 export default function PeopleCard({ me }: { me: Me }) {
@@ -69,15 +70,16 @@ export default function PeopleCard({ me }: { me: Me }) {
   }
 
   return (
-    <div className="card" id="people">
+    <div className="card settings-section" id="people" data-testid="section-people">
       <h2>People</h2>
-      <div className="muted" style={{ marginBottom: 8 }}>
-        Everyone signs in with their own username and password and sets up their own authenticator app and security keys. An engineer works on leads,
+      <div className="lead">
+        Who may sign in. Everyone has their own username and password and sets up their own authenticator app and security keys. An engineer works on
         projects and the outputs; only an owner changes the company profile, pricing and the materials list, and manages people.
       </div>
       {people === null ? (
         <div className="muted">Loading…</div>
       ) : (
+        <div className="table-wrap">
         <table className="people">
           <thead>
             <tr>
@@ -120,8 +122,8 @@ export default function PeopleCard({ me }: { me: Me }) {
                       </>
                     )}
                   </td>
-                  <td data-label="Last sign-in">{p.last_login_at ? fmtDateTime(p.last_login_at) : 'never'}</td>
-                  <td className="cell-actions" style={{ whiteSpace: 'nowrap' }}>
+                  <td data-label="Last sign-in" className="cell-when">{p.last_login_at ? fmtDateTime(p.last_login_at) : 'never'}</td>
+                  <td className="cell-actions">
                     <button type="button" className="toggle link" disabled={busy} onClick={() => rename(p)}>
                       Rename
                     </button>
@@ -146,6 +148,7 @@ export default function PeopleCard({ me }: { me: Me }) {
             })}
           </tbody>
         </table>
+        </div>
       )}
       {secret && (
         <div className="banner info" style={{ marginTop: 10 }} data-testid="temporary-password">
@@ -162,29 +165,26 @@ export default function PeopleCard({ me }: { me: Me }) {
       {error && <div className="banner bad" style={{ marginTop: 10 }}>{error}</div>}
       <h3>Add a person</h3>
       <form onSubmit={add} data-testid="add-person">
-        <div className="row">
-          <div className="field">
-            <label>Username</label>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g. juan.delacruz" autoComplete="off" maxLength={40} />
-          </div>
-          <div className="field">
-            <label>Name</label>
-            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="As shown in the app" maxLength={80} />
-          </div>
-          <div className="field narrow" style={{ width: 140 }}>
-            <label>Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as Person['role'])}>
-              <option value="engineer">engineer</option>
-              <option value="owner">owner</option>
-            </select>
-          </div>
-          <div className="field narrow">
+        <div className="form-grid person-row">
+          <Field label="Username">
+            {(id) => <input id={id} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g. juan.delacruz" autoComplete="off" maxLength={40} />}
+          </Field>
+          <Field label="Name">{(id) => <input id={id} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="As shown in the app" maxLength={80} />}</Field>
+          <Field label="Role">
+            {(id) => (
+              <select id={id} value={role} onChange={(e) => setRole(e.target.value as Person['role'])}>
+                <option value="engineer">engineer</option>
+                <option value="owner">owner</option>
+              </select>
+            )}
+          </Field>
+          <div className="field-action">
             <button className="primary" type="submit" disabled={busy || username.trim().length < 2}>
               Add
             </button>
           </div>
+          <div className="help row-help">Username: lower-case letters, digits, dots, dashes or underscores. It is what they type to sign in.</div>
         </div>
-        <div className="hint">Username: lower-case letters, digits, dots, dashes or underscores. It is what they type to sign in.</div>
       </form>
     </div>
   )

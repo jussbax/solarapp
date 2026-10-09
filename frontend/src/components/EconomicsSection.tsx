@@ -1,48 +1,69 @@
 import { useState } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { EconomicsBlock, EconomicsJob } from '../types'
-import NumberInput from './NumberInput'
-import Field from './Field'
+import { DefaultNum } from './ProgramSection'
+import { kTick, usePricingDefaults } from './shared'
 import { php0 } from '../fmt'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-// colours validated for colour-blind separation and contrast on the light surface
+// colours validated for colour-blind separation and contrast on the light surface; as text the gold is --gold-text (4.9:1)
 const C_SAVE = '#C9A227'
 const C_COST = '#c84f2b'
 const C_CUM = '#2f5fd8'
+const GOLD_TEXT = 'var(--gold-text)'
 
-function Num({ label, value, onChange, hint, step, min }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number }) {
-  return <Field label={label}>{(id) => <NumberInput id={id} value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />}</Field>
-}
-
-const pctIn = (v: number | null) => (v == null ? null : Math.round(v * 10000) / 100)
+const pctIn = (v: number | null | undefined) => (v == null ? null : Math.round(v * 10000) / 100)
 const pctOut = (v: number | null) => (v == null ? null : v / 100)
 
 export function EconomicsInputs({ job, eco, onChange }: { job: EconomicsJob; eco: EconomicsBlock | null; onChange: (j: EconomicsJob) => void }) {
   const set = (p: Partial<EconomicsJob>) => onChange({ ...job, ...p })
   const a = eco?.assumptions
-  const hint = (v: number | undefined, f = (x: number) => String(x)) => (v == null ? '' : f(v))
+  const cfg = usePricingDefaults()
+  const ec = cfg?.economics ?? {}
+  /** The default in force: the current setting, or what the last calculation used when the job left the field blank. */
+  const def = (key: keyof EconomicsJob, setting: unknown, used: number | undefined): number | undefined => {
+    if (typeof setting === 'number') return setting
+    return job[key] == null ? used : undefined
+  }
+  const tariffDefault = job.tariff_php_per_kwh == null ? a?.tariff_php_per_kwh : undefined
   return (
     <div>
-      <div className="input-grid">
-        <Num label="Tariff (₱/kWh)" value={job.tariff_php_per_kwh} onChange={(v) => set({ tariff_php_per_kwh: v })} hint={a ? `${a.tariff_php_per_kwh.toFixed(2)} from ${a.tariff_source}` : 'from the bill'} step={0.1} min={0} />
-        <Num label="Export credit (₱/kWh)" value={job.export_rate_php_per_kwh} onChange={(v) => set({ export_rate_php_per_kwh: v })} hint={hint(a?.export_rate_php_per_kwh, (x) => x.toFixed(2))} step={0.1} min={0} />
-        <Num label="Tariff rise per year (%)" value={pctIn(job.tariff_escalation)} onChange={(v) => set({ tariff_escalation: pctOut(v) })} hint={hint(a?.tariff_escalation, (x) => (x * 100).toFixed(1))} step={0.5} />
-        <Num label="Panel degradation per year (%)" value={pctIn(job.degradation)} onChange={(v) => set({ degradation: pctOut(v) })} hint={hint(a?.degradation, (x) => (x * 100).toFixed(2))} step={0.1} min={0} />
+      <div className="lead">
+        A value tagged <span className="field-tag">default</span> comes from the savings settings (the tariff from the latest bill) and is the one in force; type over it to change it for this customer only.
       </div>
-      <div className="input-grid">
-        <Num label="Analysis years" value={job.analysis_years} onChange={(v) => set({ analysis_years: v })} hint={hint(a?.analysis_years)} step={1} min={1} />
-        <Num label="Discount rate (%)" value={pctIn(job.discount_rate)} onChange={(v) => set({ discount_rate: pctOut(v) })} hint={hint(a?.discount_rate, (x) => (x * 100).toFixed(1))} step={0.5} min={0} />
-        <Num label="Battery life (years)" value={job.battery_life_years} onChange={(v) => set({ battery_life_years: v })} hint={hint(a?.battery_life_years)} step={1} min={1} />
-        <Num label="Inverter life (years)" value={job.inverter_life_years} onChange={(v) => set({ inverter_life_years: v })} hint={hint(a?.inverter_life_years)} step={1} min={1} />
-        <Num label="Upkeep per year (₱)" value={job.om_per_year} onChange={(v) => set({ om_per_year: v })} hint={hint(a?.om_per_year, (x) => Math.round(x).toString())} step={100} min={0} />
-      </div>
-      <div className="muted" style={{ marginTop: 6 }}>
-        Blank fields follow the settings. The tariff defaults to the latest bill's amount over kWh, the effective rate the customer pays. The export credit is the utility's blended generation rate under net metering, not the retail rate; check it for the customer's utility.
+      <div className="form-grid">
+        <DefaultNum
+          label="Tariff"
+          unit="₱ per kWh"
+          value={job.tariff_php_per_kwh}
+          fallback={tariffDefault}
+          onChange={(v) => set({ tariff_php_per_kwh: v })}
+          step={0.1}
+          min={0}
+          help={a && job.tariff_php_per_kwh == null ? `From ${a.tariff_source}: the latest bill's amount over its kWh, the effective rate the customer pays.` : 'The latest bill’s amount over its kWh.'}
+          unknownHelp="From the latest bill (the settings' tariff when there is no bill); shown after the first calculation."
+        />
+        <DefaultNum label="Export credit" unit="₱ per kWh" value={job.export_rate_php_per_kwh} fallback={def('export_rate_php_per_kwh', ec.export_rate_php_per_kwh, a?.export_rate_php_per_kwh)} onChange={(v) => set({ export_rate_php_per_kwh: v })} step={0.1} min={0} help="The electric company's blended generation rate under net metering, not the retail rate; check it for the customer's utility." />
+        <DefaultNum label="Electricity price rise" unit="% a year" value={pctIn(job.tariff_escalation)} fallback={pctIn(def('tariff_escalation', ec.tariff_escalation, a?.tariff_escalation)) ?? undefined} onChange={(v) => set({ tariff_escalation: pctOut(v) })} step={0.5} />
+        <DefaultNum label="Panel output loss" unit="% a year" value={pctIn(job.degradation)} fallback={pctIn(def('degradation', ec.degradation, a?.degradation)) ?? undefined} onChange={(v) => set({ degradation: pctOut(v) })} step={0.1} min={0} />
+        <DefaultNum label="Analysis period" unit="years" value={job.analysis_years} fallback={def('analysis_years', ec.analysis_years, a?.analysis_years)} onChange={(v) => set({ analysis_years: v })} step={1} min={1} />
+        <DefaultNum label="Discount rate" unit="%" value={pctIn(job.discount_rate)} fallback={pctIn(def('discount_rate', ec.discount_rate, a?.discount_rate)) ?? undefined} onChange={(v) => set({ discount_rate: pctOut(v) })} step={0.5} min={0} />
+        <DefaultNum label="Battery life" unit="years" value={job.battery_life_years} fallback={def('battery_life_years', ec.battery_life_years, a?.battery_life_years)} onChange={(v) => set({ battery_life_years: v })} step={1} min={1} />
+        <DefaultNum label="Inverter life" unit="years" value={job.inverter_life_years} fallback={def('inverter_life_years', ec.inverter_life_years, a?.inverter_life_years)} onChange={(v) => set({ inverter_life_years: v })} step={1} min={1} />
+        <DefaultNum
+          label="Upkeep"
+          unit="₱ a year"
+          value={job.om_per_year}
+          fallback={job.om_per_year == null ? a?.om_per_year : undefined}
+          onChange={(v) => set({ om_per_year: v })}
+          step={100}
+          min={0}
+          help={typeof ec.om_share_per_year === 'number' ? `${(ec.om_share_per_year * 100).toFixed(1)}% of the contract a year, per the settings.` : undefined}
+          unknownHelp={typeof ec.om_share_per_year === 'number' ? `${(ec.om_share_per_year * 100).toFixed(1)}% of the contract a year; the peso figure follows the first calculation.` : undefined}
+        />
       </div>
     </div>
   )
 }
-
 export function EconomicsResults({ eco }: { eco: EconomicsBlock }) {
   const [showYears, setShowYears] = useState(false)
   if (!eco.available) return <div className="banner warn">{eco.reason}</div>
@@ -54,12 +75,12 @@ export function EconomicsResults({ eco }: { eco: EconomicsBlock }) {
     <div>
       <div className="kpis">
         <div className="kpi">
-          <div className="label">Monthly bill, without → with solar</div>
+          <div className="label">Monthly bill</div>
           <div className="value">
             {php0(eco.bill_before_monthly)} → {php0(eco.bill_after_monthly)}
           </div>
           <div className="sub">
-            saves {php0(eco.savings_monthly)} a month at ₱{a.tariff_php_per_kwh.toFixed(2)}/kWh ({a.tariff_source})
+            without → with solar: saves {php0(eco.savings_monthly)} a month at ₱{a.tariff_php_per_kwh.toFixed(2)}/kWh ({a.tariff_source})
             {eco.includes_future_loads && `; today's bill is ${php0(eco.bill_today_monthly)}, the rest is the planned appliances`}
           </div>
         </div>
@@ -106,7 +127,7 @@ export function EconomicsResults({ eco }: { eco: EconomicsBlock }) {
           <ComposedChart data={monthly} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e3e8e8" vertical={false} />
             <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
+            <YAxis tick={{ fontSize: 11 }} tickFormatter={kTick} />
             <Tooltip formatter={(v) => php0(Number(v))} />
             <Legend />
             <Bar dataKey="Before" fill={C_COST} radius={[4, 4, 0, 0]} />
@@ -121,7 +142,7 @@ export function EconomicsResults({ eco }: { eco: EconomicsBlock }) {
           <ComposedChart data={chart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e3e8e8" vertical={false} />
             <XAxis dataKey="year" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
+            <YAxis tick={{ fontSize: 11 }} tickFormatter={kTick} />
             <Tooltip formatter={(v) => php0(Number(v))} />
             <Legend />
             <ReferenceLine y={0} stroke="#888" />
@@ -161,7 +182,7 @@ export function EconomicsResults({ eco }: { eco: EconomicsBlock }) {
                 <tr key={y.year}>
                   <td>{y.year}</td>
                   <td className="num">{Math.round(y.production_kwh).toLocaleString()}</td>
-                  <td className="num" style={{ color: C_SAVE }}>{php0(y.savings)}</td>
+                  <td className="num" style={{ color: GOLD_TEXT, fontWeight: 600 }}>{php0(y.savings)}</td>
                   <td className="num" style={{ color: C_COST }}>{y.costs ? php0(y.costs) : ''}</td>
                   <td className="num">{php0(y.net)}</td>
                   <td className="num" style={{ fontWeight: 600, color: y.cumulative < 0 ? C_COST : undefined }}>{php0(y.cumulative)}</td>
