@@ -80,11 +80,22 @@ def reading_lines(results: dict) -> list[str]:
 
 
 def estimate_line(doc: AssessmentDoc) -> str:
-    """The website estimate the lead saw, so the card bridges the two figures (blank when the record has none)."""
+    """The website estimate the lead saw (panels and price), so the card and the roof check bridge the two figures
+    (blank when the record has none)."""
     est = doc.lead.estimate if doc.lead else None
     if not est or not est.price:
         return ""
-    return f"Your estimate said about PHP {est.price:,.0f}; the visit settles the exact figure."
+    panels = f"{est.panels} {'panel' if est.panels == 1 else 'panels'} and " if est.panels else ""
+    return f"Your estimate said about {panels}PHP {est.price:,.0f}; the visit settles the exact figure."
+
+
+def roof_vs_bill_line(monthly_at_meter: float, bill_kwh: float) -> str:
+    """What the full roof makes against the bill, both at the meter, so the ratio and the kWh in one sentence agree
+    (the roof check PDF divides the same figures)."""
+    ratio = monthly_at_meter / bill_kwh
+    if ratio >= 1.05:
+        return f"Your bill shows {bill_kwh:,.0f} kWh a month. Your roof can make about {monthly_at_meter:,.0f} kWh, around {ratio:.1f} times what your house uses. The system we propose will be sized to your bill, so it needs only part of the roof."
+    return f"Your bill shows {bill_kwh:,.0f} kWh a month. Your roof can make about {monthly_at_meter:,.0f} kWh, about {ratio * 100:.0f}% of what your house uses."
 
 
 def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_step: str = "", public_url: str = "") -> bytes:
@@ -143,12 +154,7 @@ def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_ste
     # bill: what the full roof makes, in the customer's unit; then the website estimate, when the record carries one
     box: list[tuple[str, ImageFont.FreeTypeFont]] = []
     if bill_kwh:
-        ratio = prod["avg_monthly_kwh"] / bill_kwh
-        if ratio >= 1.05:
-            text = f"Your bill shows {bill_kwh:,.0f} kWh a month. Your roof can make about {monthly:,.0f} kWh, around {ratio:.1f} times what your house uses. The system we propose will be sized to your bill, so it needs only part of the roof."
-        else:
-            text = f"Your bill shows {bill_kwh:,.0f} kWh a month. Your roof can make about {monthly:,.0f} kWh, about {ratio * 100:.0f}% of what your house uses."
-        box.append((text, f_body_b))
+        box.append((roof_vs_bill_line(monthly, bill_kwh), f_body_b))
     if estimate_line(doc):
         box.append((estimate_line(doc), f_body))
     if box:
@@ -249,7 +255,7 @@ def build_client_card(doc: AssessmentDoc, results: dict, company: dict, next_ste
         img.paste(qr, (W - P - 200, y + 24))
         y0 = max(y0, y + 24 + 200)
     y = y0 + 24
-    foot = "This estimate comes from the measurements we took on your roof and long-term sun records for your area (PVGIS). Output is higher in the dry months and lower in the rainy ones. This is not a quotation."
+    foot = "This roof check comes from the measurements we took on your roof and long-term sun records for your area (PVGIS). Output is higher in the dry months and lower in the rainy ones. This is not a quotation."
     for line in _wrap(d, foot, _font(400, 26), W - 2 * P):
         d.text((P, y), line, font=_font(400, 26), fill=MUTED)
         y += 36

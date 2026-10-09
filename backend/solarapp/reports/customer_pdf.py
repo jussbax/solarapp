@@ -15,9 +15,10 @@ from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate
 
 from xml.sax.saxutils import escape  # noqa: E402
 
+from ..core.towns import nearest_town  # noqa: E402
 from ..schemas import AssessmentDoc  # noqa: E402
 from . import brand  # noqa: E402
-from .card import reading_lines  # noqa: E402
+from .card import estimate_line, reading_lines  # noqa: E402
 from .drawings import plan_blocks  # noqa: E402
 from .quotation_pdf import contact_line  # noqa: E402
 
@@ -27,6 +28,22 @@ COMPASS = ["North", "North-northeast", "Northeast", "East-northeast", "East", "E
 
 def compass(azimuth: float) -> str:
     return COMPASS[int(((azimuth % 360) + 11.25) // 22.5) % 16]
+
+
+def pin_is_the_house(lat: float | None, lon: float | None) -> bool:
+    """A website booking without a pin starts the project on the town centre; that pin is not the house and is not
+    printed. A pin more than 50 m from every listed town centre was placed by someone."""
+    if lat is None or lon is None:
+        return False
+    _, km = nearest_town(lat, lon)
+    return km > 0.05
+
+
+def panel_line(panel: dict, pricing: dict | None) -> str:
+    """"585 W panel (Blue Carbon)": the rating and the supplier from the materials list, never the catalogue string."""
+    wp = float(panel.get("watt_peak") or 0)
+    supplier = next((l.get("supplier") for l in (pricing or {}).get("lines") or [] if l.get("category") == "Solar Panel" and l.get("supplier")), "")
+    return f"{wp:.0f} W panel" + (f" ({supplier})" if supplier else "")
 
 
 def _chart(monthly: list[float]) -> Image:
@@ -88,7 +105,7 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     story.append(Paragraph(f"Prepared for <b>{escape(doc.customer_name or '-')}</b> on {when}", body))
     if doc.address:
         story.append(Paragraph(escape(doc.address), body))
-    if doc.lat is not None and doc.lon is not None:
+    if pin_is_the_house(doc.lat, doc.lon):
         story.append(Paragraph(f"Map pin: {doc.lat:.5f}, {doc.lon:.5f}", small))
     story.append(Spacer(1, 6))
 
@@ -99,7 +116,7 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     loss = float(prod.get("loss_factor") or 1.0)
     kpi = [
         ["Panels your roof can hold", f"{prod['total_panels']} × {panel['watt_peak']:.0f} W"],
-        ["Panel", panel.get("name") or "-"],
+        ["Panel", panel_line(panel, results.get("pricing"))],
         ["System size", f"{prod['system_kwp']:.2f} kWp (the size of the solar array)"],
         ["Solar power made in a year", f"about {annual_ac:,.0f} kWh at your meter"],
         ["In a typical month", f"about {avg_ac:,.0f} kWh"],
@@ -116,6 +133,8 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
     ]))
     story.append(t)
     story.append(Paragraph("This is what the roof can hold. The system we propose after the energy audit is usually smaller, sized to your bill.", small))
+    if estimate_line(doc):
+        story.append(Paragraph(escape(estimate_line(doc)), small))   # the bridge from the website estimate, the same line as the card
 
     story.append(Paragraph("What your roof can make each month, at your meter", h2))
     story.append(_chart(monthly_ac))
@@ -165,7 +184,7 @@ def build_customer_pdf(doc: AssessmentDoc, results: dict, company: dict, stale: 
         + "They are for a typical year. Real weather varies, so some years will be higher and some lower.",
         "This is a roof check, not a quotation.",
     ]
-    tail = [Paragraph("About this estimate", h2)] + [Paragraph(n, small) for n in notes]
+    tail = [Paragraph("About this roof check", h2)] + [Paragraph(n, small) for n in notes]
     tail += [
         Paragraph("Next step: your free energy audit", h2),
         Paragraph("We'll go through your bill and the appliances you use, then size the system and send you a proposal with the price, the savings and the schedule. Please have your latest bill ready.", body),

@@ -198,7 +198,8 @@ def customer_quotation(
     if not (results.get("pricing") or {}).get("available"):
         raise HTTPException(status_code=409, detail="Calculate first. Pricing needs the panel linked to the materials list.")
     company = company_settings(session, settings)
-    pdf = build_quotation_pdf(AssessmentDoc.model_validate(a.doc), results, company, proposal_no=f"P-{a.created_at.year}-{a.id:04d}")
+    pdf = build_quotation_pdf(AssessmentDoc.model_validate(a.doc), results, company, proposal_no=f"P-{a.created_at.year}-{a.id:04d}",
+                              outage_hours=load_config(session).program.installation_outage_hours)
     return Response(pdf, media_type="application/pdf", headers=_download_name("proposal", a, "pdf"))
 
 

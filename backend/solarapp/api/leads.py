@@ -184,8 +184,13 @@ def project_from_lead(lead: Lead) -> AssessmentDoc:
     if est.monthly_kwh:
         bills.append(BillEntry(id="lead", billing_month=lead.created_at.strftime("%Y-%m"), kwh=float(est.monthly_kwh), amount_php=est.monthly_php))
     kind = est.goal if est.goal in SYSTEM_KINDS else "combination"
+    # without a pin the town is the only location, so a landmark keeps it ("Brgy. Labuin, near the chapel, Pila, Laguna")
+    # unless the visitor typed the town already; with a pin the address stays as typed (the pin is the house)
+    place = place_label(lead.town, lead.province, None) if lead.lat is None else ""
+    landmark = lead.address.strip()
+    address = landmark if (not place or (lead.town and lead.town.lower() in landmark.lower())) else ", ".join(x for x in (landmark, place) if x)
     return AssessmentDoc(
-        customer_name=lead.name.strip(), address=lead.address.strip() or place_label(lead.town, lead.province, None), notes=lead.notes,
+        customer_name=lead.name.strip(), address=address, notes=lead.notes,
         lat=lat, lon=lon, audit=EnergyAudit(bills=bills, system={"kind": kind}), program=ProgramJob(stage="assessed"),
         # the proposal and the card print "your website estimate was ..." from this; the contact and the source stay on the lead
         lead=LeadInfo(created_at=lead.created_at.isoformat(), estimate=est) if est.price else None,

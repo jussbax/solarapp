@@ -373,7 +373,7 @@ def build_program(doc: AssessmentDoc, results: dict, cfg: PricingConfig, today: 
     ]
     if net_metering:
         events += [
-            {"key": "meter_installed", "label": "Electric company inspection; net metering meter installed", "date": _iso(meter), "end": None, "kind": "milestone"},
+            {"key": "meter_installed", "label": "Electric company inspection; two-way meter installed", "date": _iso(meter), "end": None, "kind": "milestone"},
         ]
     for e in events:
         e["customer"] = e["key"] in CUSTOMER_EVENTS

@@ -37,6 +37,7 @@ export interface EstimateStatus {
   towns: Town[]
   public_url: string
   estimate_url: string   // the website's estimate page, for the copied summary
+  proposal_valid_days?: number   // the pricing setting the thank-you page quotes
 }
 
 export interface LeadSource {
@@ -64,7 +65,12 @@ export interface Variant {
   goal: Goal
   goal_label: string
   location: { distance_km: number; sun_kwh_per_kwp_year: number; road_km: number | null }
-  system: { panels: number; panel_wp: number; panel_name: string; kwp: number; inverter_kw: number; inverter_units: number; battery_kwh: number; roof_area_m2: number; roof_limited: boolean }
+  system: {
+    panels: number; panel_wp: number; panel_name: string; kwp: number; inverter_kw: number; inverter_units: number; battery_kwh: number; roof_area_m2: number; roof_limited: boolean
+    battery_note: string   // what the battery carries, from the pattern shape ("enough for a typical night..." or "about N hours..."); blank without a battery
+    battery_night_kwh: number
+    battery_usable_kwh: number
+  }
   production: {
     annual_kwh: number
     monthly_kwh: number[]

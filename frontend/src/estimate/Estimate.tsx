@@ -3,13 +3,21 @@ import { emit, isUnavailable, makeApi, readSource } from './api'
 import type { EstimateResult, EstimateStatus, Goal, Pattern, Town, Variant } from './types'
 
 const php0 = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '-' : `${v < 0 ? '-' : ''}₱${Math.abs(Math.round(v)).toLocaleString()}`)
+/** A savings figure as a person says it: "₱1.03 million", "₱61,000", "₱3,800" (the price and the bill stay exact). */
+const phpAbout = (v: number) => {
+  const a = Math.abs(v)
+  const text = a >= 1_000_000 ? `₱${(Math.round(a / 10_000) / 100).toString()} million` : a >= 10_000 ? `₱${(Math.round(a / 1000) * 1000).toLocaleString()}` : `₱${(Math.round(a / 100) * 100).toLocaleString()}`
+  return `${v < 0 ? '-' : ''}${text}`
+}
 const n0 = (v: number) => Math.round(v).toLocaleString()
 const years = (v: number | null | undefined, horizon: number) => (v == null ? `more than ${horizon} years` : v < 1 ? 'under a year' : `${v.toFixed(1)} years`)
+/** A bill under this prints as "a small bill": the fixed charges never go away, and the grid still bills the hours it steps in. */
+const SMALL_BILL = 100
 
 const GOALS: { id: Goal; title: string; text: string }[] = [
   { id: 'net_metering', title: 'A lower bill', text: 'Solar runs the house by day. Extra power goes to your electric company as credit on your bill (net metering). No battery, so no power during a brownout.' },
   { id: 'combination', title: 'A lower bill, and lights in a brownout', text: 'Solar by day, battery at night and during brownouts. Extra power still earns credit on your bill.' },
-  { id: 'off_grid', title: 'Battery first, nothing sold back', text: 'The panels and a bigger battery carry the house day and night. The grid only steps in when both fall short, and no power is exported.' },
+  { id: 'off_grid', title: 'Battery first, nothing sold back', text: 'More panels and a battery carry the house day and night; the grid steps in only when both fall short, and nothing is sold back. For homes that cannot or do not want to apply for net metering.' },
 ]
 const PATTERNS: { id: Pattern; title: string; text: string }[] = [
   { id: 'morning', title: 'Mostly morning', text: 'Cooking, laundry, the pump and aircon early in the day.' },
@@ -23,13 +31,26 @@ const hasBattery = (v: Variant) => v.system.battery_kwh >= 0.5
 
 function systemLine(v: Variant) {
   const s = v.system
-  const parts = [`${s.panels} × ${Math.round(s.panel_wp)} W ${s.panels === 1 ? 'panel' : 'panels'} (${s.kwp.toFixed(2)} kWp)`, `${s.inverter_units > 1 ? `${s.inverter_units} × ` : ''}${s.inverter_kw} kW hybrid inverter`]
-  if (hasBattery(v)) parts.push(`${s.battery_kwh.toFixed(0)} kWh lithium battery`)
+  const parts = [`${s.panels} × ${Math.round(s.panel_wp)} W ${s.panels === 1 ? 'panel' : 'panels'} (${s.kwp.toFixed(2)} kWp)`, `${s.inverter_units > 1 ? `${s.inverter_units} × ` : ''}${s.inverter_kw} kW hybrid ${s.inverter_units > 1 ? 'inverters' : 'inverter'}`]
+  if (hasBattery(v)) parts.push(`${s.battery_kwh.toFixed(0)} kWh lithium battery${s.battery_note ? ` (${s.battery_note})` : ''}`)
   return parts.join(', ')
+}
+
+/** The share of the house's usage the system serves, named by what serves it; the production ratio has its own name ("of what you use"). */
+function coveredLine(v: Variant) {
+  const pct = Math.round(v.production.coverage_pct)
+  if (v.goal === 'net_metering') return `Used straight from the panels: ${pct}% of your usage; the rest of the day's solar goes to the grid and is credited on your bill.`
+  if (v.goal === 'off_grid') return `Covered by the panels and the battery: ${pct}% of your usage.`
+  return `Covered by solar, by day and from the battery: ${pct}% of your usage.`
 }
 
 /** "https://m.me/pldev" -> "m.me/pldev", for text that gets copied and forwarded. */
 const bareUrl = (u: string) => u.replace(/^https?:\/\//, '').replace(/\/$/, '')
+/** "Maria Santos" -> "Maria" on the thank-you; a single word stays as typed. */
+const firstName = (name: string) => {
+  const words = name.trim().split(/\s+/)
+  return words.length >= 2 ? words[0] : name.trim()
+}
 
 // embedded: the company website already has a header and a footer around the widget, so the widget
 // shows neither and keeps the trust lines inside the booking card. Standalone (/estimate on the app host) keeps both.
@@ -197,6 +218,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
 
   // where a forwarded summary sends the reader: the website's estimate page and the Messenger handle, when set
   const estimateUrl = status && status !== 'down' ? status.estimate_url || '' : ''
+  const validDays = (status && status !== 'down' && status.proposal_valid_days) || 15
   const summaryText = () => {
     if (!shown || !result) return ''
     const e = shown.economics
@@ -205,7 +227,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
       `Solar estimate from ${profile?.company_name || 'PL Development Inc.'} for ${result.inputs.place}:`,
       systemLine(shown) + '.',
       `Estimated price ${php0(shown.price.total)} installed, VAT included.`,
-      e ? `Bill ${php0(e.bill_before_monthly)} → about ${php0(e.bill_after_monthly)} a month; pays for itself in ${years(e.payback_years, e.analysis_years)}.` : '',
+      e ? `Bill ${php0(e.bill_before_monthly)} → ${e.bill_after_monthly < SMALL_BILL ? 'a small bill' : `about ${php0(e.bill_after_monthly)}`} a month; pays for itself in ${years(e.payback_years, e.analysis_years)}.` : '',
       'This is an estimate, not a quotation.',
       links,
     ]
@@ -356,15 +378,19 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                 <div className="pld-hero-row">
                   <div className="pld-hero-label">Your monthly bill</div>
                   <div className="pld-hero-big">
-                    {php0(e.bill_before_monthly)} <span className="pld-arrow">→</span> about {php0(e.bill_after_monthly)}
+                    {php0(e.bill_before_monthly)} <span className="pld-arrow">→</span> {e.bill_after_monthly < SMALL_BILL ? 'a small bill' : `about ${php0(e.bill_after_monthly)}`}
                   </div>
-                  <div className="pld-hero-sub">about {php0(e.savings_monthly)} less each month, before any fixed charges on your bill</div>
+                  <div className="pld-hero-sub">
+                    {e.bill_after_monthly < SMALL_BILL
+                      ? `about ${php0(e.savings_monthly)} less each month; your electric company's fixed charges remain, and the grid still bills the hours it steps in during long rainy spells`
+                      : `about ${php0(e.savings_monthly)} less each month, before any fixed charges on your bill`}
+                  </div>
                 </div>
                 <div className="pld-hero-grid">
                   <div>
                     <div className="pld-hero-label">Pays for itself in</div>
                     <div className="pld-hero-mid">{years(e.payback_years, e.analysis_years)}</div>
-                    <div className="pld-hero-sub">{php0(e.savings_year1)} saved in the first year</div>
+                    <div className="pld-hero-sub">about {phpAbout(e.savings_year1)} saved in the first year</div>
                   </div>
                   <div>
                     <div className="pld-hero-label">Estimated price</div>
@@ -390,13 +416,14 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
             {makesPct > 100 && shown.goal !== 'off_grid' && " Daytime power is used directly; the surplus is credited by your electric company at its generation rate, which is why the bill does not reach zero."}
             {shown.goal === 'off_grid' && ' Sized so the panels and the battery carry a typical day; surplus beyond the battery earns nothing, because nothing is sold back.'}
             {shown.goal === 'off_grid' && prod.annual_import_kwh > 50 && ` The grid would still supply about ${n0(prod.annual_import_kwh)} kWh a year, mostly in the rainy months.`}
+            {' '}{coveredLine(shown)}
           </div>
           {other && (
             <div className="pld-line pld-alt">
               {hasBattery(shown) ? (
                 <>
                   <b>Without the battery:</b> {php0(other.price.total)}
-                  {other.economics && `, bill about ${php0(other.economics.bill_after_monthly)} a month, pays for itself in ${years(other.economics.payback_years, other.economics.analysis_years)}`}.
+                  {other.economics && `, bill ${other.economics.bill_after_monthly < SMALL_BILL ? 'small' : `about ${php0(other.economics.bill_after_monthly)}`} a month, pays for itself in ${years(other.economics.payback_years, other.economics.analysis_years)}`}.
                   {' '}The battery is for brownouts; it adds little to the savings.{' '}
                   <button type="button" className="pld-link" onClick={() => setWithBattery(false)}>
                     Show without the battery
@@ -404,8 +431,8 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                 </>
               ) : (
                 <>
-                  <b>Add a battery ({other.system.battery_kwh.toFixed(0)} kWh) for brownouts:</b> about {php0(other.price.total - shown.price.total)} more
-                  {other.economics && `, bill about ${php0(other.economics.bill_after_monthly)} a month, pays for itself in ${years(other.economics.payback_years, other.economics.analysis_years)}`}.{' '}
+                  <b>Add a battery ({other.system.battery_kwh.toFixed(0)} kWh{other.system.battery_note ? `, ${other.system.battery_note}` : ''}) for brownouts:</b> about {php0(other.price.total - shown.price.total)} more
+                  {other.economics && `, bill ${other.economics.bill_after_monthly < SMALL_BILL ? 'small' : `about ${php0(other.economics.bill_after_monthly)}`} a month, pays for itself in ${years(other.economics.payback_years, other.economics.analysis_years)}`}.{' '}
                   <button type="button" className="pld-link" onClick={() => setWithBattery(true)}>
                     Show with the battery
                   </button>
@@ -419,7 +446,10 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
             {leadSent ? (
               <div className="pld-thanks">
                 <p>
-                  Thank you, {lead.name.trim()}. {profile?.owner_name || 'We'} will message or call you {profile?.callback_promise || 'within one working day'} to pick a visit day; visits are usually within the week. Have a recent bill handy.
+                  Thank you, {firstName(lead.name)}. {profile?.owner_name || 'We'} will message or call you {profile?.callback_promise || 'within one working day'} to pick a day; visits are usually within the week.
+                </p>
+                <p>
+                  Then: the roof visit, about an hour and free; your roof check card the same evening; the energy audit over your bill and appliances; your proposal within two working days, valid {validDays} days. Have a recent bill handy.
                 </p>
                 <div className="pld-row">
                   {messengerHref && (
@@ -493,11 +523,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
               </div>
               <div>
                 <span>Installation and permits</span>
-                <b>{php0(shown.price.labor)}</b>
-              </div>
-              <div>
-                <span>Installation tools</span>
-                <b>{php0(shown.price.equipment)}</b>
+                <b>{php0(shown.price.labor + shown.price.equipment)}</b>
               </div>
               <div>
                 <span>VAT (12%)</span>
@@ -512,7 +538,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
             </div>
             {e && (
               <p>
-                Saved over {e.analysis_years} years: about {php0(e.lifetime_net)}, after paying for the system, upkeep and replacement parts. About {e.co2_t_per_year.toFixed(1)} tonnes of CO₂ avoided a year.
+                Saved over {e.analysis_years} years: about {phpAbout(e.lifetime_net)}, after paying for the system, upkeep and replacement parts. About {e.co2_t_per_year.toFixed(1)} tonnes of CO₂ avoided a year.
               </p>
             )}
             <ul>

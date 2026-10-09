@@ -311,7 +311,9 @@ def test_results_carry_the_meter_figures_faces_and_the_hourly_year(client):
     assert pdf.status_code == 200
     text_ = _pdf_text(pdf.content)
     assert "kWh a year at your meter" in text_ and "Inverter certificate" not in text_   # the eco-hybrid's certificate is not recorded yet
-    assert "Designed to carry 1 evening without sun; in the rainy season the grid covers the rest." in " ".join(text_.split())
+    flat = " ".join(text_.split())   # the battery is described by what it carries, from the hourly balance (round 3, C3)
+    assert "The battery takes over the moment the grid drops" in flat and ("whole night of your usual use" in flat or "hours of your evening use" in flat)
+    assert "Designed to carry" not in flat
     assert inverter_certificate(pr) == ""
     # the roof check prints the meter figures (built directly: the API refuses customer PDFs on test weather)
     roof = _pdf_text(build_customer_pdf(AssessmentDoc.model_validate(r.json()["doc"]), res, {"company_name": "Test"}))
@@ -332,7 +334,7 @@ def test_off_grid_results_and_proposal_say_how_often_the_battery_runs_out(client
     assert sizing["annual_import_kwh"] == pytest.approx(hy["unserved_kwh"]) if hy["loss_of_load_hours"] else sizing["annual_import_kwh"] == 0
     assert next(l for l in pr["lines"] if l["role"] == "inverter")["code"] == "FS-INV-008"
     line = battery_backup_line(sizing)
-    assert line.startswith("Designed to carry 1 evening without sun; the grid steps in only when the panels and the battery fall short, and nothing is sent back to it.")
+    assert line.startswith("Designed to carry one evening without sun; the grid steps in only when the panels and the battery fall short, and nothing is sent back to it.")
     if hy["loss_of_load_hours"] > 0:
         assert f"about {hy['loss_of_load_hours']} hours on" in line
     else:
@@ -340,7 +342,7 @@ def test_off_grid_results_and_proposal_say_how_often_the_battery_runs_out(client
     from tests.conftest import real_weather
     real_weather(aid, client)
     text_ = " ".join(_pdf_text(client.get(f"/api/assessments/{aid}/quotation.pdf").content).split())
-    assert "Designed to carry 1 evening without sun; the grid steps in only when" in text_ and "Inverter certificate" not in text_
+    assert "Designed to carry one evening without sun; the grid steps in only when" in text_ and "Inverter certificate" not in text_
 
 
 def test_quick_estimate_applies_the_losses_and_the_inverter_rule(imported, tmp_path):

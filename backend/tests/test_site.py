@@ -157,3 +157,49 @@ def test_lead_route_sends_the_line_by_line_notice(client, monkeypatch):
 def test_unavailable_message_leaves_the_contact_channel_to_the_page():
     from solarapp.api import quick_routes
     assert "Facebook" not in quick_routes.UNAVAILABLE
+
+
+# ---- the net-metering page's illustration figures are the engine's (the report's example: 500 kWh, Tanauan, mostly evening)
+
+NET_METERING_EXAMPLE = dict(goal="net_metering", town="Tanauan", province="Batangas", monthly_kwh=500, pattern="evening")
+
+
+def _tiles() -> list[str]:
+    import re
+    page = (SITE / "pages" / "net-metering.html").read_text(encoding="utf-8")
+    return re.findall(r'<div class="big">(.*?)</div><div class="lab">(.*?)</div>', page)
+
+
+def test_net_metering_page_names_its_example_and_four_tiles():
+    tiles = _tiles()
+    assert [lab for _, lab in tiles][:4] == ["7 panels", "installed, VAT included", "pays for itself", "off the bill"]
+    page = (SITE / "pages" / "net-metering.html").read_text(encoding="utf-8")
+    assert "500 kWh a month, mostly in the evening, net metering without a battery" in page
+    assert "three quarters" not in page and "about 3 years" not in page
+
+
+def test_net_metering_page_figures_match_the_engine():
+    """Runs the page's own example through the engine on the real weather (SOLARAPP_DATA_DIR, or <repo>/data); skipped on test weather."""
+    import os
+
+    from solarapp.core import quick
+    from solarapp.core.dataset import PvgisDataset
+    from solarapp.core.quick import quick_estimate
+    from solarapp.pricing.importer import read_workbook
+    from solarapp.pricing.job import PricingContext
+    from solarapp.schemas import QuickRequest
+
+    root = Path(os.environ.get("SOLARAPP_DATA_DIR") or ROOT / "data")
+    pvgis = PvgisDataset(root) if root.is_dir() else None
+    if pvgis is None or not pvgis.available or pvgis.synthetic:
+        pytest.skip("the page's figures are checked against the real PVGIS weather only")
+    quick._per_kwp_cache.clear()   # keyed by cell id: the synthetic datasets of the other tests share ids with the real one
+    imp = read_workbook(ROOT / "backend" / "data_seed" / "PLD_Materials_DB.xlsx")
+    q = quick_estimate(QuickRequest(**NET_METERING_EXAMPLE), pvgis, PricingContext(imp.catalog, imp.config))
+    big = {lab: val for val, lab in _tiles()}
+    assert big["7 panels"] == f"{q['system']['kwp']:.1f} kWp" and q["system"]["panels"] == 7
+    assert big["installed, VAT included"] == f"about ₱{q['price']['total']:,.0f}"
+    e = q["economics"]
+    assert big["pays for itself"] == "under 4 years" and e["payback_years"] < 4
+    cut = (1 - e["bill_after_monthly"] / e["bill_before_monthly"]) * 100
+    assert big["off the bill"] == "about two thirds" and 60 <= cut <= 72

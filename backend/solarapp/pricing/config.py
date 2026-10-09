@@ -305,6 +305,9 @@ class ProgramConfig(BaseModel):
     min_task_minutes: dict[str, int] = Field(default_factory=lambda: {"commissioning": 120, "battery": 60, "inverter": 60})
     late_finish_max_minutes: int = 120   # the last priced day may run this long past the usual end before a new day is added
     payment: PaymentPlan = Field(default_factory=PaymentPlan)
+    # Hours the customer's power is off on installation day (the inverter is cut over at the panel board): the owner's figure from
+    # the crew's practice, printed on the proposal; 0 (blank) prints no length. Not computed anywhere.
+    installation_outage_hours: float = Field(default=0, ge=0, le=24)
 
 
 class SystemLosses(BaseModel):
