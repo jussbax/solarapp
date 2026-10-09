@@ -1,32 +1,113 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { api, type Me, type Person } from '../api'
-import { fmtDateTime } from '../fmt'
-import Field from './Field'
+import { Link, useLocation } from 'react-router-dom'
+import { api, ApiError, type Me, type Person } from '../api'
+import { suggestUsername, useToast } from '../accounts'
+import { CopyBox, Dialog, Menu, type MenuItem } from './Dialog'
+import '../accounts.css'
 
-/** Settings card for owners: who may sign in. A new person gets a temporary password, shown once. */
-export default function PeopleCard({ me }: { me: Me }) {
+/** "JD" from "Juan dela Cruz". */
+function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return '?'
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase()
+}
+
+/** "juan.delacruz2" when juan.delacruz is taken, "juan.delacruz3" after that. */
+function nextUsername(taken: string): string {
+  const m = /^(.*?)(\d+)$/.exec(taken)
+  return m ? `${m[1]}${Number(m[2]) + 1}` : `${taken}2`
+}
+
+const USERNAME_OK = /^[a-z0-9][a-z0-9._-]{1,39}$/
+
+/** "signed in today 5:38 AM" · "last signed in 2 Oct, 4:10 PM" · "has not signed in yet". */
+function signInFact(iso: string | null): string {
+  if (!iso) return 'has not signed in yet'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return `last signed in ${iso}`
+  const now = new Date()
+  const time = d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }).replace(' ', '\u00a0') // "6:23 AM" stays on one line
+  if (d.toDateString() === now.toDateString()) return `signed in today ${time}`
+  const date = d.toLocaleDateString('en-PH', { day: 'numeric', month: 'short', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) })
+  return `last signed in ${date}, ${time}`
+}
+
+const keysText = (n: number) => `${n} security key${n === 1 ? '' : 's'}`
+
+/** The third line of a card: how the person signs in. */
+function method(p: Person): { text: string; bad: boolean } {
+  if (p.must_change_password) return { text: 'Temporary password', bad: true }
+  const parts: string[] = []
+  if (p.two_factor) parts.push('Two-step verification on')
+  if (p.passkeys > 0) parts.push(keysText(p.passkeys))
+  if (parts.length === 0) return { text: 'Password only', bad: false }
+  if (!p.two_factor) parts.unshift('Password')
+  return { text: parts.join(' · '), bad: false }
+}
+
+const firstName = (p: Person) => p.display_name.trim().split(/\s+/)[0] || p.display_name
+
+type Open =
+  | { kind: 'add' }
+  | { kind: 'secret'; title: string; who: string; password: string }
+  | { kind: 'rename'; p: Person }
+  | { kind: 'role'; p: Person }
+  | { kind: 'reset'; p: Person }
+  | { kind: 'twostep'; p: Person }
+  | { kind: 'remove'; p: Person }
+
+/** Settings › People, for owners: who can sign in, as a list of person cards; every action is a dialog of the app's own. */
+export default function PeopleCard({ me, heading = true }: { me: Me; heading?: boolean }) {
   const [people, setPeople] = useState<Person[] | null>(null)
-  const [username, setUsername] = useState('')
-  const [displayName, setDisplayName] = useState('')
-  const [role, setRole] = useState<Person['role']>('engineer')
-  const [secret, setSecret] = useState<{ who: string; password: string } | null>(null)
-  const [msg, setMsg] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [open, setOpen] = useState<Open | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const { toast, show } = useToast()
+  const location = useLocation()
+  // the old one-page Settings reaches the account section by its hash; the account page by its route
+  const accountHref = location.pathname === '/settings' ? '/settings#account' : '/settings/account'
 
-  const load = () => {
-    api.users().then(setPeople).catch((e) => setError((e as Error).message))
+  // the Add a person form
+  const [name, setName] = useState('')
+  const [username, setUsername] = useState('')
+  const [usernameTouched, setUsernameTouched] = useState(false)
+  const [role, setRole] = useState<Person['role']>('engineer')
+  const [taken, setTaken] = useState<string | null>(null)
+  // the Rename form
+  const [newName, setNewName] = useState('')
+
+  const load = () => api.users().then(setPeople).catch((e) => setLoadError((e as Error).message))
+  useEffect(() => {
+    load()
+  }, [])
+
+  const close = () => {
+    setOpen(null)
+    setError(null)
+    setTaken(null)
   }
-  useEffect(load, [])
+  const start = (o: Open) => {
+    setError(null)
+    setTaken(null)
+    if (o.kind === 'add') {
+      setName('')
+      setUsername('')
+      setUsernameTouched(false)
+      setRole('engineer')
+    }
+    if (o.kind === 'rename') setNewName(o.p.display_name)
+    setOpen(o)
+  }
 
-  const run = async (fn: () => Promise<unknown>, done?: string) => {
+  /** Runs one action; the server's refusal prints inside the dialog, never in a banner outside it. */
+  const run = async (fn: () => Promise<void>) => {
     setBusy(true)
     setError(null)
-    setMsg(null)
     try {
       await fn()
-      if (done) setMsg(done)
-      load()
+      await load()
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -34,158 +115,401 @@ export default function PeopleCard({ me }: { me: Me }) {
     }
   }
 
+  const usernameValid = USERNAME_OK.test(username)
   const add = (e: FormEvent) => {
     e.preventDefault()
+    if (!usernameValid) return
     run(async () => {
-      const p = await api.createUser(username.trim().toLowerCase(), displayName.trim(), role)
-      setSecret({ who: p.display_name, password: p.temporary_password })
-      setUsername('')
-      setDisplayName('')
-      setRole('engineer')
+      try {
+        const p = await api.createUser(username, name.trim(), role)
+        setOpen({ kind: 'secret', title: `${p.display_name} is added`, who: p.display_name, password: p.temporary_password })
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409) {
+          setTaken(nextUsername(username))
+          return
+        }
+        throw err
+      }
     })
   }
-  const resetPassword = (p: Person) => {
-    if (!window.confirm(`Give ${p.display_name} a new temporary password? Their other sessions end and they must change it at sign-in.`)) return
+  const rename = (e: FormEvent, p: Person) => {
+    e.preventDefault()
+    const next = newName.trim()
+    if (!next) return
+    run(async () => {
+      await api.patchUser(p.id, { display_name: next })
+      setOpen(null)
+      show(`Renamed to ${next}.`)
+    })
+  }
+  const setRoleOf = (p: Person) => {
+    const next: Person['role'] = p.role === 'owner' ? 'engineer' : 'owner'
+    run(async () => {
+      await api.patchUser(p.id, { role: next })
+      setOpen(null)
+      show(`${p.display_name} is now ${next === 'owner' ? 'an owner' : 'an engineer'}.`)
+    })
+  }
+  const resetPassword = (p: Person) =>
     run(async () => {
       const r = await api.resetUserPassword(p.id)
-      setSecret({ who: r.display_name, password: r.temporary_password })
+      setOpen({ kind: 'secret', title: `New temporary password for ${r.display_name}`, who: r.display_name, password: r.temporary_password })
     })
+  const turnOffTwoStep = (p: Person) =>
+    run(async () => {
+      await api.resetUserAuthenticator(p.id)
+      setOpen(null)
+      show(`Two-step verification is off for ${p.display_name}.`)
+    })
+  const removeAccess = (p: Person) =>
+    run(async () => {
+      await api.patchUser(p.id, { active: false })
+      setOpen(null)
+      show(`${p.display_name}'s access is removed.`)
+    })
+  const restoreAccess = (p: Person) =>
+    run(async () => {
+      await api.patchUser(p.id, { active: true })
+      show(`${p.display_name} can sign in again.`)
+    })
+
+  const menuFor = (p: Person): MenuItem[] => {
+    if (!p.active) return [{ label: 'Restore access', onSelect: () => restoreAccess(p) }]
+    const items: MenuItem[] = [
+      { label: 'Rename…', onSelect: () => start({ kind: 'rename', p }) },
+      { label: p.role === 'owner' ? 'Make an engineer' : 'Make an owner', onSelect: () => start({ kind: 'role', p }) },
+      { label: 'Reset password…', onSelect: () => start({ kind: 'reset', p }) },
+    ]
+    if (p.two_factor || p.passkeys > 0) items.push({ label: 'Turn off two-step verification…', onSelect: () => start({ kind: 'twostep', p }) })
+    items.push({ label: 'Remove access…', onSelect: () => start({ kind: 'remove', p }), danger: true })
+    return items
   }
-  const resetAuthenticator = (p: Person) => {
-    if (!window.confirm(`Turn off the authenticator and remove every security key of ${p.display_name}? They sign in with the password alone and set them up again.`)) return
-    run(() => api.resetUserAuthenticator(p.id), `Authenticator and keys reset for ${p.display_name}.`)
-  }
-  const setActive = (p: Person, active: boolean) => {
-    if (!active && !window.confirm(`Deactivate ${p.display_name}? They are signed out everywhere and cannot sign in until reactivated.`)) return
-    run(() => api.patchUser(p.id, { active }), `${p.display_name} ${active ? 'reactivated' : 'deactivated'}.`)
-  }
-  const rename = (p: Person) => {
-    const next = window.prompt(`Name shown in the app for ${p.username}:`, p.display_name)
-    if (next === null || next.trim() === '' || next.trim() === p.display_name) return
-    run(() => api.patchUser(p.id, { display_name: next.trim() }), `Renamed to ${next.trim()}.`)
-  }
-  const setRoleOf = (p: Person, next: Person['role']) => {
-    if (next === 'owner' && !window.confirm(`Make ${p.display_name} an owner? Owners manage people, the company profile and pricing.`)) return
-    run(() => api.patchUser(p.id, { role: next }), `${p.display_name} is now ${next === 'owner' ? 'an owner' : 'an engineer'}.`)
+
+  const sorted = people ? [...people.filter((p) => p.active), ...people.filter((p) => !p.active)] : []
+  const onlyMe = people !== null && people.length === 1 && people[0].username === me.username
+  const addButton = (
+    <button type="button" className="primary" onClick={() => start({ kind: 'add' })} data-testid="add-person">
+      Add a person
+    </button>
+  )
+
+  /** What "Turn off two-step verification" removes for this person, in words. */
+  const removed = (p: Person) => {
+    const what: string[] = []
+    if (p.two_factor) what.push('their authenticator app')
+    if (p.passkeys > 0) what.push(keysText(p.passkeys))
+    const text = what.join(' and ')
+    return `${text.charAt(0).toUpperCase()}${text.slice(1)} ${what.length > 1 || p.passkeys > 1 ? 'are' : 'is'} removed.`
   }
 
   return (
     <div className="card settings-section" id="people" data-testid="section-people">
-      <h2>People</h2>
-      <div className="lead">
-        Who may sign in. Everyone has their own username and password and sets up their own authenticator app and security keys. An engineer works on
-        projects and the outputs; only an owner changes the company profile, pricing and the materials list, and manages people.
+      <div className="people-head">
+        <div>
+          {heading && <h2>People</h2>}
+          <div className="lead">Who can sign in to the back office.</div>
+        </div>
+        {addButton}
       </div>
-      {people === null ? (
+      {loadError && <div className="banner bad">{loadError}</div>}
+      {people === null && !loadError ? (
         <div className="muted">Loading…</div>
       ) : (
-        <div className="table-wrap">
-        <table className="people">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Username</th>
-              <th>Role</th>
-              <th>Sign-in</th>
-              <th>Last sign-in</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {people.map((p) => {
-              const self = p.username === me.username
-              return (
-                <tr key={p.id} className={p.active ? '' : 'muted'} data-testid={`person-${p.username}`}>
-                  <td className="cell-main" data-label="Name">
-                    {p.display_name}
-                    {self && <span className="muted"> (you)</span>}
-                    {!p.active && <span className="badge neutral" style={{ marginLeft: 6 }}>deactivated</span>}
-                  </td>
-                  <td data-label="Username">{p.username}</td>
-                  <td data-label="Role">
-                    {self ? (
-                      p.role
-                    ) : (
-                      <select value={p.role} disabled={busy} onChange={(e) => setRoleOf(p, e.target.value as Person['role'])} style={{ width: 'auto' }}>
-                        <option value="engineer">engineer</option>
-                        <option value="owner">owner</option>
-                      </select>
-                    )}
-                  </td>
-                  <td data-label="Sign-in">
-                    {p.must_change_password ? (
-                      <span className="badge bad">temporary password</span>
-                    ) : (
-                      <>
-                        {p.two_factor ? <span className="badge good">authenticator on</span> : <span className="badge neutral">password only</span>}
-                        {p.passkeys > 0 && <span className="muted"> + {p.passkeys} key{p.passkeys === 1 ? '' : 's'}</span>}
-                      </>
-                    )}
-                  </td>
-                  <td data-label="Last sign-in" className="cell-when">{p.last_login_at ? fmtDateTime(p.last_login_at) : 'never'}</td>
-                  <td className="cell-actions">
-                    <button type="button" className="toggle link" disabled={busy} onClick={() => rename(p)}>
-                      Rename
-                    </button>
-                    {!self && (
-                      <>
-                        <button type="button" className="toggle link" disabled={busy} onClick={() => resetPassword(p)}>
-                          Reset password
-                        </button>
-                        {(p.two_factor || p.passkeys > 0) && (
-                          <button type="button" className="toggle link" disabled={busy} onClick={() => resetAuthenticator(p)}>
-                            Reset authenticator
-                          </button>
-                        )}
-                        <button type="button" className="toggle link" disabled={busy} onClick={() => setActive(p, !p.active)}>
-                          {p.active ? 'Deactivate' : 'Reactivate'}
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <div className="people-list" data-testid="people-list">
+          {sorted.map((p) => {
+            const self = p.username === me.username
+            const m = method(p)
+            return (
+              <div key={p.id} className={`person ${p.active ? '' : 'removed'} ${self ? 'self' : ''}`.replace(/\s+/g, ' ').trim()} data-testid={`person-${p.username}`}>
+                <div className="avatar" aria-hidden="true">
+                  {initials(p.display_name)}
+                </div>
+                <div className="person-top">
+                  <span className="person-name">{p.display_name}</span>
+                  {self && <span className="person-you">(you)</span>}
+                  <span className={`badge ${p.role === 'owner' ? 'gold' : 'neutral'}`}>{p.role === 'owner' ? 'Owner' : 'Engineer'}</span>
+                </div>
+                <div className="person-line">
+                  {p.username} · {p.active ? signInFact(p.last_login_at) : 'access removed'}
+                </div>
+                {p.active && <div className={`person-line ${m.bad ? 'bad' : ''}`.trim()}>{m.bad ? <span className="bad">{m.text}</span> : m.text}</div>}
+                <div className="person-side">
+                  {self ? (
+                    <Link to={accountHref} data-testid="your-account-link">
+                      Your account ›
+                    </Link>
+                  ) : (
+                    <Menu label={`Actions for ${p.display_name}`} title={p.display_name} items={menuFor(p)} testId={`menu-${p.username}`} />
+                  )}
+                </div>
+              </div>
+            )
+          })}
+          {onlyMe && (
+            <div className="people-empty" data-testid="people-empty">
+              <div>Only you so far. Add an engineer so they can open projects on their own phone.</div>
+              {addButton}
+            </div>
+          )}
         </div>
       )}
-      {secret && (
-        <div className="banner info" style={{ marginTop: 10 }} data-testid="temporary-password">
-          <strong>Temporary password for {secret.who}, shown once:</strong> <code style={{ fontSize: 16, userSelect: 'all' }}>{secret.password}</code>
-          <div style={{ marginTop: 4 }}>
-            Give it to them in person or by a call, not in the same message as the address. They change it at their first sign-in; it opens nothing else.
-          </div>
-          <button type="button" className="small" style={{ marginTop: 6 }} onClick={() => setSecret(null)}>
-            I have passed it on
-          </button>
-        </div>
-      )}
-      {msg && <div className="banner info" style={{ marginTop: 10 }}>{msg}</div>}
-      {error && <div className="banner bad" style={{ marginTop: 10 }}>{error}</div>}
-      <h3>Add a person</h3>
-      <form onSubmit={add} data-testid="add-person">
-        <div className="form-grid person-row">
-          <Field label="Username">
-            {(id) => <input id={id} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g. juan.delacruz" autoComplete="off" maxLength={40} />}
-          </Field>
-          <Field label="Name">{(id) => <input id={id} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="As shown in the app" maxLength={80} />}</Field>
-          <Field label="Role">
-            {(id) => (
-              <select id={id} value={role} onChange={(e) => setRole(e.target.value as Person['role'])}>
-                <option value="engineer">engineer</option>
-                <option value="owner">owner</option>
-              </select>
-            )}
-          </Field>
-          <div className="field-action">
-            <button className="primary" type="submit" disabled={busy || username.trim().length < 2}>
+      {error && !open && <div className="banner bad" style={{ marginTop: 10 }}>{error}</div>}
+      {toast}
+
+      {/* Add a person, step 1 */}
+      <Dialog
+        open={open?.kind === 'add'}
+        title="Add a person"
+        onClose={close}
+        tall
+        testId="dialog-add"
+        footer={
+          <>
+            <button type="button" onClick={close}>
+              Cancel
+            </button>
+            <button type="submit" form="add-person-form" className="primary" disabled={busy || name.trim().length === 0 || !usernameValid} data-testid="add-submit">
               Add
             </button>
+          </>
+        }
+      >
+        <form id="add-person-form" onSubmit={add}>
+          <div className="field">
+            <label htmlFor="add-name">Name</label>
+            <input
+              id="add-name"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value)
+                if (!usernameTouched) setUsername(suggestUsername(e.target.value))
+                setTaken(null)
+              }}
+              placeholder="Juan dela Cruz"
+              maxLength={80}
+              autoComplete="off"
+              autoFocus
+              data-testid="add-name"
+            />
           </div>
-          <div className="help row-help">Username: lower-case letters, digits, dots, dashes or underscores. It is what they type to sign in.</div>
-        </div>
-      </form>
+          <div className="field">
+            <label htmlFor="add-username">Username</label>
+            <input
+              id="add-username"
+              value={username}
+              onChange={(e) => {
+                setUsernameTouched(true)
+                setUsername(e.target.value.toLowerCase())
+                setTaken(null)
+              }}
+              maxLength={40}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              data-testid="add-username"
+            />
+            {taken ? (
+              <div className="taken" role="alert" data-testid="username-taken">
+                Taken; try{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUsernameTouched(true)
+                    setUsername(taken)
+                    setTaken(null)
+                  }}
+                >
+                  {taken}
+                </button>
+              </div>
+            ) : (
+              <div className="help">What they type to sign in</div>
+            )}
+          </div>
+          <div className="field">
+            <div className="field-head">
+              <span className="field-label">Role</span>
+            </div>
+            <div className="role-tiles" role="radiogroup" aria-label="Role">
+              <label className="role-tile">
+                <input type="radio" name="add-role" value="engineer" checked={role === 'engineer'} onChange={() => setRole('engineer')} />
+                <span className="role-name">Engineer</span>
+                <span className="role-what">Projects, calculations and documents</span>
+              </label>
+              <label className="role-tile">
+                <input type="radio" name="add-role" value="owner" checked={role === 'owner'} onChange={() => setRole('owner')} />
+                <span className="role-name">Owner</span>
+                <span className="role-what">Everything, including pricing, materials and people</span>
+              </label>
+            </div>
+          </div>
+          {error && (
+            <div className="dlg-error" role="alert" data-testid="dialog-error">
+              {error}
+            </div>
+          )}
+        </form>
+      </Dialog>
+
+      {/* The temporary password, shown once: after Add a person (step 2) and after Reset password */}
+      {open?.kind === 'secret' && (
+        <Dialog
+          open
+          title={open.title}
+          onClose={close}
+          testId="dialog-secret"
+          footer={
+            <button type="button" className="primary" onClick={close} data-testid="secret-done">
+              Done
+            </button>
+          }
+        >
+          <p>Give them this temporary password in person or by a call, not in the same message as the address.</p>
+          <CopyBox value={open.password} label={`Temporary password for ${open.who}`} />
+          <p className="muted">They choose their own password at their first sign-in. It opens nothing else.</p>
+        </Dialog>
+      )}
+
+      {open?.kind === 'rename' && (
+        <Dialog
+          open
+          title={`Rename ${open.p.display_name}`}
+          onClose={close}
+          testId="dialog-rename"
+          footer={
+            <>
+              <button type="button" onClick={close}>
+                Cancel
+              </button>
+              <button type="submit" form="rename-form" className="primary" disabled={busy || newName.trim().length === 0}>
+                Save
+              </button>
+            </>
+          }
+        >
+          <form id="rename-form" onSubmit={(e) => rename(e, open.p)}>
+            <div className="field">
+              <label htmlFor="rename-name">Name</label>
+              <input id="rename-name" value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={80} autoFocus data-testid="rename-name" />
+            </div>
+            {error && (
+              <div className="dlg-error" role="alert">
+                {error}
+              </div>
+            )}
+          </form>
+        </Dialog>
+      )}
+
+      {open?.kind === 'role' && (
+        <Dialog
+          open
+          title={open.p.role === 'owner' ? `Make ${open.p.display_name} an engineer?` : `Make ${open.p.display_name} an owner?`}
+          onClose={close}
+          testId="dialog-role"
+          footer={
+            <>
+              <button type="button" onClick={close}>
+                Cancel
+              </button>
+              <button type="button" className="primary" disabled={busy} onClick={() => setRoleOf(open.p)} data-testid="role-confirm">
+                {open.p.role === 'owner' ? 'Make an engineer' : 'Make an owner'}
+              </button>
+            </>
+          }
+        >
+          <p>
+            {open.p.role === 'owner'
+              ? 'They keep projects and documents and lose Settings, Materials and People.'
+              : `Owners change pricing, materials and people. ${firstName(open.p)} keeps every project.`}
+          </p>
+          {error && (
+            <div className="dlg-error" role="alert">
+              {error}
+            </div>
+          )}
+        </Dialog>
+      )}
+
+      {open?.kind === 'reset' && (
+        <Dialog
+          open
+          title={`Reset ${open.p.display_name}'s password?`}
+          onClose={close}
+          testId="dialog-reset"
+          footer={
+            <>
+              <button type="button" onClick={close}>
+                Cancel
+              </button>
+              <button type="button" className="primary" disabled={busy} onClick={() => resetPassword(open.p)} data-testid="reset-confirm">
+                Reset password
+              </button>
+            </>
+          }
+        >
+          <p>They are signed out everywhere and get a temporary password to change at their next sign-in.</p>
+          {error && (
+            <div className="dlg-error" role="alert">
+              {error}
+            </div>
+          )}
+        </Dialog>
+      )}
+
+      {open?.kind === 'twostep' && (
+        <Dialog
+          open
+          title={`Turn off two-step verification for ${open.p.display_name}?`}
+          onClose={close}
+          testId="dialog-twostep"
+          footer={
+            <>
+              <button type="button" onClick={close}>
+                Cancel
+              </button>
+              <button type="button" className="primary" disabled={busy} onClick={() => turnOffTwoStep(open.p)} data-testid="twostep-confirm">
+                Turn off
+              </button>
+            </>
+          }
+        >
+          <p>
+            {removed(open.p)} Their password alone signs them in until they set them up again under Your account.
+          </p>
+          {error && (
+            <div className="dlg-error" role="alert">
+              {error}
+            </div>
+          )}
+        </Dialog>
+      )}
+
+      {open?.kind === 'remove' && (
+        <Dialog
+          open
+          title={`Remove ${open.p.display_name}'s access?`}
+          onClose={close}
+          testId="dialog-remove"
+          footer={
+            <>
+              <button type="button" onClick={close}>
+                Cancel
+              </button>
+              <button type="button" className="danger-fill" disabled={busy} onClick={() => removeAccess(open.p)} data-testid="remove-confirm">
+                Remove access
+              </button>
+            </>
+          }
+        >
+          <p>They are signed out everywhere and cannot sign in. Their projects stay.</p>
+          {error && (
+            <div className="dlg-error" role="alert">
+              {error}
+            </div>
+          )}
+        </Dialog>
+      )}
     </div>
   )
 }

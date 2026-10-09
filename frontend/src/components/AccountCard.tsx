@@ -1,291 +1,515 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { api, type Me, type Passkey } from '../api'
-import { fmtDateTime } from '../fmt'
+import { fmtDateShort } from '../fmt'
 import { createPasskey, passkeyProblem, passkeySupported } from '../passkeys'
-import ChangePassword from './ChangePassword'
-import Field from './Field'
+import ChangePassword, { PasswordInput } from './ChangePassword'
+import { stepUpProblem, useToast } from '../accounts'
+import { CopyBox, CopyButton, Dialog } from './Dialog'
+import { useNarrow } from './responsive'
+import '../accounts.css'
 
 type Setup = { secret: string; uri: string; qr: string }
+type Open = 'password' | 'totp' | 'totp-off' | 'add-key' | 'signout' | { kind: 'remove-key'; key: Passkey } | null
 
-/** Settings card: the signed-in person's password, authenticator app, security keys and sessions. */
-export default function AccountCard({ user, onUser }: { user: Me; onUser: (me: Me) => void }) {
+/** "added 9 Oct · last used today". */
+function keyMeta(k: Passkey): string {
+  const parts: string[] = []
+  if (k.created_at) parts.push(`added ${fmtDateShort(k.created_at)}`)
+  if (k.last_used_at) {
+    const d = new Date(k.last_used_at)
+    parts.push(d.toDateString() === new Date().toDateString() ? 'last used today' : `last used ${fmtDateShort(k.last_used_at)}`)
+  } else parts.push('never used')
+  return parts.join(' · ')
+}
+
+/** Settings › Your account: password, two-step verification, security keys and devices, each one row; the password
+ *  (and a fresh code when two-step is on) is asked inside the dialog at the moment of the action. */
+export default function AccountCard({ user, onUser, heading = true }: { user: Me; onUser: (me: Me) => void; heading?: boolean }) {
   const [keys, setKeys] = useState<Passkey[] | null>(null)
-  const [name, setName] = useState('')
+  const [open, setOpen] = useState<Open>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
+  const [keyName, setKeyName] = useState('')
+  // the two-step set-up: confirm, scan, keep the backup codes
+  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [setup, setSetup] = useState<Setup | null>(null)
   const [setupCode, setSetupCode] = useState('')
-  const [backupCodes, setBackupCodes] = useState<string[] | null>(null)
-  const [msg, setMsg] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [backupCodes, setBackupCodes] = useState<string[]>([])
+  const [saved, setSaved] = useState(false)
+  const { toast, show } = useToast()
+  const narrow = useNarrow()
   const twoFactor = !!user.two_factor
-  const confirm = { password, code }
-  const confirmed = password.length > 0 && (!twoFactor || code.length > 0)
+  const switchId = useId()
+  const twoStepTitle = useId()
 
-  const load = () => {
-    api.passkeys().then(setKeys).catch(() => setKeys([]))
-  }
-  useEffect(load, [])
+  const loadKeys = () => api.passkeys().then(setKeys).catch(() => setKeys([]))
+  useEffect(() => {
+    loadKeys()
+  }, [])
   const refreshMe = () => api.me().then(onUser).catch(() => undefined)
 
-  const needConfirm = () => {
-    setMsg('Enter your password' + (twoFactor ? ' and a fresh code' : '') + ' under "Confirm it\'s you" first.')
+  const start = (o: Open) => {
+    setError(null)
+    setPassword('')
+    setCode('')
+    setStep(1)
+    setSetup(null)
+    setSetupCode('')
+    setBackupCodes([])
+    setSaved(false)
+    if (o === 'add-key') setKeyName(narrow ? 'This phone' : 'Security key')
+    setOpen(o)
+  }
+  const close = () => {
+    // Escape at the last step: the server already has two-step on, so the switch follows it
+    if (open === 'totp' && step === 3) refreshMe()
+    setOpen(null)
+    setError(null)
+    setPassword('')
+    setCode('')
   }
 
-  const fail = (err: unknown) => setMsg(err instanceof Error && 'status' in err ? err.message : passkeyProblem(err))
-
-  // --- authenticator app
-  const beginTotp = async () => {
-    if (!confirmed) return needConfirm()
+  /** Runs one action; a refusal prints inside the dialog, which stays open. */
+  const run = async (fn: () => Promise<void>) => {
     setBusy(true)
-    setMsg(null)
+    setError(null)
     try {
+      await fn()
+    } catch (err) {
+      setError(err instanceof Error && 'status' in err ? stepUpProblem(err, twoFactor) : passkeyProblem(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const confirm = { password, code }
+
+  // --- two-step verification
+  const totpBegin = () =>
+    run(async () => {
       setSetup(await api.totpBegin(confirm))
       setSetupCode('')
-    } catch (err) {
-      fail(err)
-    } finally {
-      setBusy(false)
-    }
-  }
-  const confirmTotp = async () => {
-    setBusy(true)
-    setMsg(null)
-    try {
-      const r = await api.totpConfirm(setupCode)
-      setSetup(null)
-      setSetupCode('')
-      setCode('')
+      setStep(2)
+    })
+  const totpConfirm = () =>
+    run(async () => {
+      const r = await api.totpConfirm(setupCode.trim())
       setBackupCodes(r.backup_codes)
-      await refreshMe()
-    } catch (err) {
-      fail(err)
-    } finally {
-      setBusy(false)
-    }
+      setStep(3)
+    })
+  // Done wakes up after Copy or Download, or after five seconds
+  useEffect(() => {
+    if (open !== 'totp' || step !== 3) return
+    const t = window.setTimeout(() => setSaved(true), 5000)
+    return () => window.clearTimeout(t)
+  }, [open, step])
+  const totpDone = async () => {
+    await refreshMe()
+    setOpen(null)
+    show('Two-step verification is on.')
   }
-  const disableTotp = async () => {
-    if (!confirmed) return needConfirm()
-    if (!window.confirm('Turn the authenticator off? Your password alone will open the back office again until you turn it back on.')) return
-    setBusy(true)
-    setMsg(null)
-    try {
+  const totpDisable = () =>
+    run(async () => {
       await api.totpDisable(confirm)
-      setCode('')
-      setBackupCodes(null)
-      setMsg('Authenticator turned off.')
       await refreshMe()
-    } catch (err) {
-      fail(err)
-    } finally {
-      setBusy(false)
-    }
+      setOpen(null)
+      show('Two-step verification is off. Your password alone signs you in.')
+    })
+  const downloadCodes = () => {
+    const blob = new Blob([`Backup codes for ${user.username}\nEach signs you in once if the phone is lost.\n\n${backupCodes.join('\n')}\n`], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'backup-codes.txt'
+    a.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    setSaved(true)
   }
 
   // --- security keys
-  const add = async () => {
-    if (!confirmed) return needConfirm()
-    setBusy(true)
-    setMsg(null)
-    try {
+  const addKey = () =>
+    run(async () => {
       const { challenge_id, options } = await api.passkeyRegisterOptions(confirm)
       const credential = await createPasskey(options)
-      const key = await api.passkeyRegister(challenge_id, name || 'Security key', credential)
-      setName('')
-      setCode('')
-      setMsg(`"${key.name}" added. It can sign you in from now on. Add a second key, or keep your backup codes somewhere safe.`)
-      load()
+      const key = await api.passkeyRegister(challenge_id, keyName.trim() || 'Security key', credential)
+      await loadKeys()
       await refreshMe()
-    } catch (err) {
-      fail(err)
-    } finally {
-      setBusy(false)
-    }
-  }
-  const remove = async (k: Passkey) => {
-    if (!confirmed) return needConfirm()
-    if (!window.confirm(`Remove "${k.name}"? It will no longer sign you in.`)) return
-    try {
+      setOpen(null)
+      show(`${key.name} added.`)
+    })
+  const removeKey = (k: Passkey) =>
+    run(async () => {
       await api.passkeyDelete(k.id, confirm)
-      setCode('')
-      setMsg(`"${k.name}" removed.`)
-      load()
+      await loadKeys()
       await refreshMe()
-    } catch (err) {
-      setMsg((err as Error).message)
-    }
-  }
+      setOpen(null)
+      show(`${k.name} removed.`)
+    })
 
-  const signOutEverywhere = async () => {
-    if (!window.confirm('Sign out every phone and laptop, including this one? You sign in again afterwards.')) return
-    try {
+  const signOutEverywhere = () =>
+    run(async () => {
       await api.signOutEverywhere()
       window.location.assign('/login')
-    } catch (err) {
-      setMsg((err as Error).message)
-    }
-  }
+    })
 
+  const supported = passkeySupported()
   const insecure = typeof window !== 'undefined' && !window.isSecureContext
+  const keysBlocked = !supported ? 'This browser does not support security keys.' : insecure ? 'Keys need https and a real hostname.' : null
+  const backupLeft = typeof user.backup_codes_left === 'number' ? user.backup_codes_left : null
+
+  /** The password (and code) fields every step-up dialog asks for. */
+  const stepUpFields = (autoFocus = true) => (
+    <>
+      <div className="field">
+        <label htmlFor="stepup-password">Password</label>
+        <PasswordInput id="stepup-password" value={password} onChange={setPassword} autoComplete="current-password" autoFocus={autoFocus} testId="stepup-password" />
+      </div>
+      {twoFactor && (
+        <div className="field">
+          <label htmlFor="stepup-code">Code from your authenticator</label>
+          <input id="stepup-code" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits or a backup code" data-testid="stepup-code" />
+        </div>
+      )}
+    </>
+  )
+  const stepUpReady = password.length > 0 && (!twoFactor || code.trim().length > 0)
+  const errorBox = error && (
+    <div className="dlg-error" role="alert" data-testid="dialog-error">
+      {error}
+    </div>
+  )
+  const cancel = (
+    <button type="button" onClick={close}>
+      Cancel
+    </button>
+  )
 
   return (
     <div className="card settings-section" id="account" data-testid="section-account">
-      <h2>Your account</h2>
-      <div className="lead">
-        Signed in as <strong>{user.display_name || user.username}</strong> ({user.username}, {user.role === 'owner' ? 'owner' : 'engineer'}): your password, authenticator app, security keys and sessions.
-        {user.role === 'owner' ? ' An owner also manages people, the company profile and pricing.' : ' The owner manages people, the company profile and pricing.'}
+      {heading && <h2>Your account</h2>}
+      <div className="acct-head" data-testid="account-head">
+        {user.display_name || user.username} · {user.username} · {user.role === 'owner' ? 'Owner' : 'Engineer'}
       </div>
 
-      <h3>Confirm it's you</h3>
-      <div className="muted" style={{ marginBottom: 6 }}>
-        Turning the authenticator on or off and adding or removing a key ask for your password{twoFactor ? ' and a fresh code' : ''} again, so a stolen
-        session cannot do it.
-      </div>
-      <div className="form-grid">
-        <Field label="Password">
-          {(id) => <input id={id} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" data-testid="confirm-password" />}
-        </Field>
-        {twoFactor && (
-          <Field label="Authenticator code">
-            {(id) => <input id={id} value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits" data-testid="confirm-code" />}
-          </Field>
-        )}
-      </div>
-
-      <h3>Authenticator app</h3>
-      {twoFactor ? (
-        <>
-          <div className="muted">
-            On. The password alone no longer opens the back office; a 6-digit code or a backup code is needed too.
-            {typeof user.backup_codes_left === 'number' && ` ${user.backup_codes_left} backup code${user.backup_codes_left === 1 ? '' : 's'} left.`}
+      <div className="acct-section">
+        <div className="acct-row">
+          <div className="acct-main">
+            <h3>Password</h3>
+            <div className="acct-line">Changing it signs out your other phones and laptops.</div>
           </div>
-          <div style={{ marginTop: 8 }}>
-            <button className="danger" type="button" disabled={busy} onClick={disableTotp} data-testid="totp-disable">
-              Turn the authenticator off
+          <div className="acct-action">
+            <button type="button" onClick={() => start('password')} data-testid="change-password-open">
+              Change…
             </button>
-          </div>
-        </>
-      ) : setup ? (
-        <div className="banner info" data-testid="totp-setup">
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <img src={setup.qr} alt="QR code for the authenticator app" width={168} height={168} style={{ background: '#fff', borderRadius: 6 }} />
-            <div style={{ flex: '1 1 220px' }}>
-              <div>
-                Scan this with Google Authenticator, Microsoft Authenticator, Aegis or 1Password. If scanning is not possible, enter the key by hand:
-              </div>
-              <code style={{ display: 'block', margin: '6px 0', wordBreak: 'break-all' }}>{setup.secret}</code>
-              <div className="form-grid cols-2" style={{ marginTop: 8 }}>
-                <Field label="Then the 6-digit code it shows">
-                  {(id) => <input id={id} value={setupCode} onChange={(e) => setSetupCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits" data-testid="totp-setup-code" />}
-                </Field>
-              </div>
-              <div className="row">
-                <button className="primary narrow" type="button" disabled={busy || setupCode.trim().length < 6} onClick={confirmTotp} data-testid="totp-confirm">
-                  Turn the authenticator on
-                </button>
-                <button className="narrow" type="button" disabled={busy} onClick={() => setSetup(null)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
           </div>
         </div>
-      ) : (
-        <>
-          <div className="banner warn">Off. Your password alone opens the back office. Turn it on: an authenticator app on your phone adds a code that changes every 30 seconds.</div>
-          <div style={{ marginTop: 8 }}>
-            <button className="primary" type="button" disabled={busy} onClick={beginTotp} data-testid="totp-begin">
-              Set up the authenticator app
-            </button>
+      </div>
+
+      <div className="acct-section">
+        <div className="acct-row">
+          <div className="acct-main">
+            <h3 id={twoStepTitle}>Two-step verification</h3>
+            {twoFactor ? (
+              <>
+                <div className="acct-line">A code from your authenticator app is asked at sign-in.</div>
+                {backupLeft !== null && (
+                  <div className="acct-line" data-testid="backup-left">
+                    {backupLeft} backup code{backupLeft === 1 ? '' : 's'} left
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="acct-line">Off. Your password alone signs you in.</div>
+            )}
           </div>
-        </>
-      )}
-      {backupCodes && (
-        <div className="banner info" style={{ marginTop: 10 }} data-testid="backup-codes">
-          <strong>Authenticator on. These backup codes are shown once.</strong> Write them down or keep them in a password manager; each signs you in one time if the
-          phone is lost.
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 4, margin: '8px 0' }}>
-            {backupCodes.map((c) => (
-              <code key={c}>{c}</code>
+          <div className="acct-action">
+            <span className="switch-wrap">
+              <button
+                id={switchId}
+                type="button"
+                role="switch"
+                aria-checked={twoFactor}
+                aria-labelledby={twoStepTitle}
+                className="switch"
+                disabled={busy}
+                onClick={() => start(twoFactor ? 'totp-off' : 'totp')}
+                data-testid="totp-switch"
+              >
+                <span className="knob" />
+              </button>
+              <span className="switch-text" aria-hidden="true">
+                {twoFactor ? 'On' : 'Off'}
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="acct-section">
+        <h3>Security keys</h3>
+        {keys === null ? (
+          <div className="acct-line muted">Loading…</div>
+        ) : keys.length === 0 ? (
+          <div className="acct-line muted" data-testid="keys-empty">
+            No security key yet. A key or your phone's passkey signs you in with one touch.
+          </div>
+        ) : (
+          <ul className="acct-keys" data-testid="keys-list">
+            {keys.map((k) => (
+              <li key={k.id}>
+                <div>
+                  <div className="key-name">{k.name}</div>
+                  <div className="key-meta">{keyMeta(k)}</div>
+                </div>
+                <button type="button" className="danger" onClick={() => start({ kind: 'remove-key', key: k })} aria-label={`Remove ${k.name}`}>
+                  Remove
+                </button>
+              </li>
             ))}
+          </ul>
+        )}
+        <div className="acct-add">
+          <div style={{ flex: '1 1 auto' }} className="acct-line">
+            {keysBlocked}
           </div>
-          <button type="button" className="small" onClick={() => setBackupCodes(null)}>
-            I have saved them
+          <button type="button" disabled={!!keysBlocked} onClick={() => start('add-key')} data-testid="add-passkey">
+            Add a key…
           </button>
         </div>
-      )}
-
-      <h3>Security keys and passkeys</h3>
-      <div className="muted" style={{ marginBottom: 8 }}>
-        A hardware key (YubiKey or similar) or a passkey on your phone signs you in with one touch, no password and no code. Its PIN or fingerprint is
-        the second factor, and it only works on this exact address, so a look-alike site gets nothing.
       </div>
-      {keys === null ? (
-        <div className="muted">Loading…</div>
-      ) : keys.length === 0 ? (
-        <div className="muted">No key registered yet.</div>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Added</th>
-              <th>Last used</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {keys.map((k) => (
-              <tr key={k.id}>
-                <td>
-                  {k.name}
-                  {k.backed_up && <span className="muted"> (synced passkey)</span>}
-                </td>
-                <td>{k.created_at ? fmtDateTime(k.created_at) : '-'}</td>
-                <td>{k.last_used_at ? fmtDateTime(k.last_used_at) : 'never'}</td>
-                <td>
-                  <button className="danger" type="button" onClick={() => remove(k)}>
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {!passkeySupported() ? (
-        <div className="muted">This browser does not support passkeys.</div>
-      ) : insecure ? (
-        <div className="muted">Passkeys need https and a real hostname. Open the back office by its name to add one.</div>
-      ) : (
-        <div className="form-grid key-row" style={{ marginTop: 8 }}>
-          <Field label="Name for the new key">
-            {(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. YubiKey on the keyring, or My phone" maxLength={60} />}
-          </Field>
-          <div className="field-action">
-            <button className="primary" type="button" disabled={busy} onClick={add} data-testid="add-passkey">
-              Add a security key
+
+      <div className="acct-section">
+        <div className="acct-row">
+          <div className="acct-main">
+            <h3>Devices</h3>
+            <div className="acct-line">Signed in on this device.</div>
+          </div>
+          <div className="acct-action">
+            <button type="button" className="danger" onClick={() => start('signout')} data-testid="signout-everywhere">
+              Sign out everywhere…
             </button>
           </div>
         </div>
-      )}
-      {msg && (
-        <div className="banner info" style={{ marginTop: 10 }} data-testid="account-msg">
-          {msg}
-        </div>
-      )}
-
-      <h3>Password</h3>
-      <ChangePassword user={user} onDone={onUser} />
-
-      <h3>Lost a phone or laptop?</h3>
-      <div className="muted" style={{ marginBottom: 8 }}>
-        Signing out everywhere ends every session of yours at once. Then check the key list above and remove any key you do not recognize. If the phone
-        with the authenticator is gone and you have no backup code, the owner resets your authenticator under People.
       </div>
-      <button className="danger" type="button" onClick={signOutEverywhere} data-testid="signout-everywhere">
-        Sign out everywhere
-      </button>
+      {toast}
+
+      {/* Password › Change… */}
+      <Dialog open={open === 'password'} title="Change your password" onClose={close} testId="dialog-password">
+        <ChangePassword
+          user={user}
+          formId="change-password-form"
+          onDone={(me) => {
+            onUser(me)
+            setOpen(null)
+            show('Password changed. Other phones and laptops were signed out.')
+          }}
+          actions={({ busy: b, ready }) => (
+            <div className="dlg-foot inline">
+              {cancel}
+              <button type="submit" className="primary" disabled={b || !ready} data-testid="change-password-submit">
+                Change password
+              </button>
+            </div>
+          )}
+        />
+      </Dialog>
+
+      {/* Two-step verification: off → on, three steps in one dialog */}
+      <Dialog
+        open={open === 'totp'}
+        title={step === 1 ? "Confirm it's you" : step === 2 ? 'Scan this with your authenticator app' : 'Two-step verification is on'}
+        onClose={close}
+        wide={step === 2}
+        testId="dialog-totp"
+        footer={
+          step === 1 ? (
+            <>
+              {cancel}
+              <button type="submit" form="totp-step1" className="primary" disabled={busy || password.length === 0} data-testid="totp-continue">
+                Continue
+              </button>
+            </>
+          ) : step === 2 ? (
+            <>
+              <button type="button" onClick={() => setStep(1)} disabled={busy}>
+                Back
+              </button>
+              <button type="submit" form="totp-step2" className="primary" disabled={busy || setupCode.trim().length < 6} data-testid="totp-confirm">
+                Turn on
+              </button>
+            </>
+          ) : (
+            <button type="button" className="primary" disabled={!saved} onClick={totpDone} data-testid="totp-done">
+              Done
+            </button>
+          )
+        }
+      >
+        {step === 1 && (
+          <form
+            id="totp-step1"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (password) totpBegin()
+            }}
+          >
+            <p className="muted">Your password first, so a stolen session cannot change how you sign in.</p>
+            {stepUpFields()}
+            {errorBox}
+          </form>
+        )}
+        {step === 2 && setup && (
+          <form
+            id="totp-step2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (setupCode.trim().length >= 6) totpConfirm()
+            }}
+          >
+            <div className="qr-row">
+              <img src={setup.qr} alt="QR code for the authenticator app" width={168} height={168} />
+              <div className="qr-side">
+                <div className="muted">Google Authenticator, Microsoft Authenticator, Aegis or 1Password.</div>
+                <div style={{ marginTop: 8 }}>Can't scan? Type this key</div>
+                <CopyBox value={setup.secret} small label="Authenticator key" />
+              </div>
+            </div>
+            <div className="field dlg-code">
+              <label htmlFor="totp-code">Code it shows now</label>
+              <input id="totp-code" value={setupCode} onChange={(e) => setSetupCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 digits" maxLength={8} autoFocus data-testid="totp-setup-code" />
+            </div>
+            {errorBox}
+          </form>
+        )}
+        {step === 3 && (
+          <div data-testid="backup-codes">
+            <p>These eight backup codes are shown once.</p>
+            <div className="codes-grid">
+              {backupCodes.map((c) => (
+                <code key={c}>{c}</code>
+              ))}
+            </div>
+            <div className="codes-actions">
+              <CopyButton value={backupCodes.join('\n')} label="Copy all" onCopied={() => setSaved(true)} />
+              <button type="button" onClick={downloadCodes} data-testid="download-codes">
+                Download
+              </button>
+            </div>
+            <p className="muted">Each code signs you in once if the phone is lost. Keep them outside the phone.</p>
+          </div>
+        )}
+      </Dialog>
+
+      {/* Two-step verification: on → off */}
+      <Dialog
+        open={open === 'totp-off'}
+        title="Turn off two-step verification?"
+        onClose={close}
+        testId="dialog-totp-off"
+        footer={
+          <>
+            {cancel}
+            <button type="submit" form="totp-off-form" className="danger-fill" disabled={busy || !stepUpReady} data-testid="totp-off-confirm">
+              Turn off
+            </button>
+          </>
+        }
+      >
+        <form
+          id="totp-off-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (stepUpReady) totpDisable()
+          }}
+        >
+          <p>Your password alone will sign you in.</p>
+          {stepUpFields()}
+          {errorBox}
+        </form>
+      </Dialog>
+
+      {/* Security keys › Add a key… */}
+      <Dialog
+        open={open === 'add-key'}
+        title="Add a security key"
+        onClose={close}
+        testId="dialog-add-key"
+        footer={
+          <>
+            {cancel}
+            <button type="submit" form="add-key-form" className="primary" disabled={busy || !stepUpReady} data-testid="add-key-confirm">
+              Add
+            </button>
+          </>
+        }
+      >
+        <form
+          id="add-key-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (stepUpReady) addKey()
+          }}
+        >
+          <div className="field">
+            <label htmlFor="key-name">Name</label>
+            <input id="key-name" value={keyName} onChange={(e) => setKeyName(e.target.value)} maxLength={60} autoFocus data-testid="key-name" />
+            <div className="help">So you know which one to remove if it is lost.</div>
+          </div>
+          {stepUpFields(false)}
+          <p className="muted">Then the browser asks for the key's PIN or your fingerprint and a touch.</p>
+          {errorBox}
+        </form>
+      </Dialog>
+
+      {/* Security keys › Remove */}
+      {open !== null && typeof open === 'object' && open.kind === 'remove-key' && (
+        <Dialog
+          open
+          title={`Remove '${open.key.name}'?`}
+          onClose={close}
+          testId="dialog-remove-key"
+          footer={
+            <>
+              {cancel}
+              <button type="submit" form="remove-key-form" className="danger-fill" disabled={busy || !stepUpReady} data-testid="remove-key-confirm">
+                Remove
+              </button>
+            </>
+          }
+        >
+          <form
+            id="remove-key-form"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (stepUpReady) removeKey(open.key)
+            }}
+          >
+            <p>It will no longer sign you in.</p>
+            {stepUpFields()}
+            {errorBox}
+          </form>
+        </Dialog>
+      )}
+
+      {/* Devices › Sign out everywhere… */}
+      <Dialog
+        open={open === 'signout'}
+        title="Sign out every phone and laptop, including this one?"
+        onClose={close}
+        testId="dialog-signout"
+        footer={
+          <>
+            {cancel}
+            <button type="button" className="danger-fill" disabled={busy} onClick={signOutEverywhere} data-testid="signout-confirm">
+              Sign out everywhere
+            </button>
+          </>
+        }
+      >
+        <p>You sign in again afterwards. If a phone with the authenticator is lost and you have no backup code, the owner can turn two-step off under People.</p>
+        {errorBox}
+      </Dialog>
     </div>
   )
 }

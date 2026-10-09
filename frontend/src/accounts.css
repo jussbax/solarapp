@@ -1,0 +1,152 @@
+/* People and Your account: dialogs, the "⋯" menu, toasts, person cards and the account rows.
+   Imported by the components that use it (Dialog, PeopleCard, AccountCard, ChangePassword) so styles.css stays untouched.
+   Tokens come from styles.css. Sections: dialog · menu · toast · copy box · password checks · people · account · phone. */
+
+/* ---------- dialog ---------- */
+.dlg-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(17, 17, 17, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.dlg { background: var(--card); color: var(--text); border-radius: 12px; width: 100%; max-width: 460px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28); outline: none; }
+.dlg.wide { max-width: 560px; }
+.dlg-head { padding: 18px 20px 0; }
+.dlg-head h2 { margin: 0; font-size: 17px; font-weight: 700; color: var(--ink); line-height: 1.3; border: 0; padding: 0; display: block; }
+.dlg-body { padding: 10px 20px 4px; overflow: auto; font-size: var(--fs-body); line-height: 1.5; }
+.dlg-body p { margin: 0 0 10px; }
+.dlg-body .field { margin-bottom: 12px; }
+.dlg-body .field > label, .dlg-body .field-head > label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+.dlg-body input, .dlg-body select { min-height: 44px; font-size: 15px; }
+.dlg-body .help { margin-top: 4px; }
+.dlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 18px; flex-wrap: wrap; }
+.dlg-foot button, .dlg-body .btn-44 { min-height: 44px; padding: 8px 16px; font-size: 14.5px; }
+.dlg-foot .spacer { flex: 1 1 auto; }
+.dlg-body .dlg-foot.inline { padding: 8px 0 14px; }
+.dlg-error { background: var(--bad-bg); color: var(--bad); font-weight: 600; border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; font-size: var(--fs-body); }
+.dlg-ok { background: var(--good-bg); color: var(--good); border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; font-size: var(--fs-body); }
+.dlg .field.dlg-code { margin-top: 6px; }
+button.danger-fill { background: var(--bad); color: #fff; border-color: var(--bad); }
+button.danger-fill:hover:not(:disabled) { background: #7f1616; border-color: #7f1616 !important; }
+
+/* the QR step */
+.qr-row { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 10px; }
+.qr-row img { width: 168px; height: 168px; background: #fff; border: 1px solid var(--line); border-radius: 8px; flex: 0 0 auto; }
+.qr-row .qr-side { flex: 1 1 180px; min-width: 0; }
+.qr-row .qr-side .muted { margin-bottom: 4px; }
+.codes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; margin: 8px 0 12px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; user-select: all; }
+.codes-grid code { font-size: 15px; letter-spacing: 0.04em; }
+.codes-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.codes-actions button { min-height: 44px; flex: 1 1 140px; }
+
+/* ---------- the "⋯" menu: a popover on the desk, a sheet on the phone (see the phone block) ---------- */
+.menu-wrap { position: relative; flex: 0 0 auto; }
+.menu-btn { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; font-size: 22px; line-height: 1; letter-spacing: 0.04em; color: var(--ink); background: transparent; border-color: transparent; }
+.menu-btn:hover, .menu-btn[aria-expanded='true'] { background: var(--bg); border-color: var(--line) !important; }
+.menu-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 50; min-width: 240px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16); padding: 6px; display: flex; flex-direction: column; }
+.menu-item { text-align: left; background: transparent; border-color: transparent; min-height: 44px; padding: 8px 12px; border-radius: 8px; font-weight: 500; font-size: 14.5px; width: 100%; }
+.menu-item:hover, .menu-item:focus-visible { background: var(--bg); border-color: transparent !important; }
+.menu-item.danger { color: var(--bad); }
+.menu-sep { height: 1px; background: var(--line-soft); margin: 4px 6px; }
+.menu-sheet .menu-item { border-bottom: 1px solid var(--line-soft); border-radius: 0; min-height: 52px; }
+.menu-sheet .menu-item:last-child { border-bottom: 0; }
+
+/* ---------- toast ---------- */
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 70; background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 999px; font-size: 14px; font-weight: 600; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); max-width: calc(100vw - 32px); text-align: center; }
+
+/* ---------- the copy box (a temporary password, the typed key) ---------- */
+.copy-box { display: flex; align-items: stretch; gap: 8px; margin: 10px 0 12px; }
+.copy-box .copy-value { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; padding: 8px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; letter-spacing: 0.04em; user-select: all; overflow-wrap: anywhere; word-break: break-all; }
+.copy-box .copy-value.small-mono { font-size: 14px; }
+.copy-box button { flex: 0 0 auto; min-height: 44px; min-width: 88px; }
+
+/* ---------- password fields ---------- */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 64px; }
+.pw-wrap .eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); min-height: 36px; height: 36px; padding: 0 10px; font-size: 12.5px; background: transparent; border-color: transparent; color: var(--gold-text); }
+.pw-wrap .eye:hover { border-color: var(--line) !important; }
+.checks { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: var(--fs-sm); color: var(--muted); }
+.checks li { white-space: nowrap; }
+.checks li.ok { color: var(--good); }
+.checks li .mark { display: inline-block; width: 14px; }
+.gate .checks { margin-bottom: 2px; }
+
+/* ---------- people ---------- */
+.people-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.people-head .lead { margin: 0; }
+.people-head > button { min-height: 44px; flex: 0 0 auto; }
+.people-list { display: flex; flex-direction: column; gap: 10px; }
+.person { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.person.removed { background: var(--bg); color: var(--muted); }
+.person.removed .person-name { color: var(--muted); }
+.person.removed .avatar { background: var(--neutral-bg); color: var(--muted); }
+.avatar { grid-row: 1 / span 3; width: 40px; height: 40px; border-radius: 50%; background: var(--ink); color: var(--gold); font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; letter-spacing: 0.02em; }
+.person-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 24px; }
+.person-name { font-size: 16px; font-weight: 700; color: var(--ink); }
+.person-you { font-weight: 500; color: var(--muted); font-size: 14px; }
+.person-line { font-size: 13.5px; color: var(--muted); overflow-wrap: anywhere; }
+.person-line .bad { color: var(--bad); font-weight: 600; }
+.person-side { grid-row: 1 / span 3; grid-column: 3; display: flex; align-items: center; justify-content: flex-end; min-height: 44px; }
+.person-side a { font-weight: 600; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; padding: 0 6px; white-space: nowrap; }
+.people-empty { border: 2px dashed var(--line); border-radius: 10px; padding: 18px 16px; text-align: center; color: var(--muted); font-size: 14.5px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.people-empty button { min-height: 44px; }
+.role-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.role-tile { display: block; cursor: pointer; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-height: 44px; }
+.role-tile:has(input:checked) { border-color: var(--ink); background: var(--bg); box-shadow: inset 0 0 0 1px var(--ink); }
+.role-tile:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 1px; }
+.role-tile input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.role-tile .role-name { display: block; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+.role-tile .role-what { display: block; font-size: var(--fs-sm); color: var(--muted); line-height: 1.35; }
+.taken { color: var(--bad); font-size: var(--fs-sm); margin-top: 4px; font-weight: 600; }
+.taken button { font: inherit; color: var(--gold-text); background: none; border: 0; padding: 0; min-height: 0; text-decoration: underline; cursor: pointer; }
+
+/* ---------- your account ---------- */
+.acct-head { margin: 0 0 6px; font-size: 14px; color: var(--muted); }
+.acct-section { padding: 12px 0; border-top: 1px solid var(--line-soft); }
+.acct-section:first-of-type { border-top: 0; padding-top: 4px; }
+.acct-section h3 { margin: 0 0 4px; font-size: var(--fs-md); }
+.acct-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
+.acct-row .acct-main { min-width: 0; flex: 1 1 auto; }
+.acct-row .acct-line { font-size: 13.5px; color: var(--muted); }
+.acct-row .acct-line.bad { color: var(--bad); }
+.acct-row .acct-action { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+.acct-row .acct-action button:not(.switch) { min-height: 44px; }
+.acct-keys { list-style: none; margin: 0; padding: 0; }
+.acct-keys li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); min-height: 44px; }
+.acct-keys li:last-child { border-bottom: 0; }
+.acct-keys .key-name { font-weight: 600; color: var(--ink); }
+.acct-keys .key-meta { font-size: 13px; color: var(--muted); }
+.acct-keys button { min-height: 44px; flex: 0 0 auto; }
+.acct-add { margin-top: 8px; display: flex; justify-content: flex-end; }
+.acct-add button { min-height: 44px; }
+.switch { position: relative; width: 56px; height: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; cursor: pointer; flex: 0 0 auto; border-radius: 999px; }
+.switch::before { content: ''; position: absolute; left: 2px; top: 6px; width: 52px; height: 32px; border-radius: 999px; background: #cfcfc8; border: 1px solid var(--line); transition: background 0.15s; }
+.switch .knob { position: absolute; top: 10px; left: 6px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: left 0.15s; }
+.switch[aria-checked='true']::before { background: var(--good); border-color: var(--good); }
+.switch[aria-checked='true'] .knob { left: 26px; }
+.switch:hover:not(:disabled)::before { border-color: var(--gold); }
+.switch-wrap { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+.switch-text { font-weight: 600; font-size: 14px; min-width: 24px; }
+
+/* ---------- phone: dialogs become sheets from the bottom, the menu a sheet, rows stack ---------- */
+@media (max-width: 640px) {
+  .dlg-backdrop { align-items: flex-end; padding: 0; }
+  .dlg { max-width: none; max-height: 94vh; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.3); }
+  .dlg.tall { height: 100%; max-height: 100%; border-radius: 0; }
+  .dlg.tall .dlg-body { flex: 1 1 auto; } /* the buttons sit at the bottom of the sheet, under the thumb */
+  .dlg-head { padding: 16px 16px 0; }
+  .dlg-body { padding: 10px 16px 4px; }
+  .dlg-foot { flex-direction: column-reverse; padding: 10px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .dlg-foot button { width: 100%; }
+  .dlg-foot .spacer { display: none; }
+  .qr-row { flex-direction: column; align-items: center; }
+  .qr-row .qr-side { width: 100%; }
+  .copy-box .copy-value { font-size: 17px; }
+  .people-head > button { width: 100%; }
+  .person { grid-template-columns: 40px minmax(0, 1fr) 44px; padding: 12px 10px 12px 12px; }
+  /* the owner's own card: "Your account ›" is wider than the menu column, so it takes a row of its own under the lines */
+  .person.self { grid-template-columns: 40px minmax(0, 1fr); }
+  .person.self .person-side { grid-row: auto; grid-column: 2; justify-content: flex-start; min-height: 0; margin-top: 2px; }
+  .person.self .person-side a { padding: 0; }
+  .acct-row { flex-wrap: wrap; }
+  .acct-row .acct-action { flex: 1 1 100%; justify-content: flex-end; }
+  .acct-keys li { flex-wrap: wrap; }
+  .role-tiles { grid-template-columns: 1fr; }
+  .checks { flex-direction: column; gap: 2px; }
+  .checks li { white-space: normal; }
+}
