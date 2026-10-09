@@ -469,6 +469,8 @@ export interface AssessmentSummary {
   address: string
   has_results: boolean
   results_stale: boolean
+  /** The pricing settings moved since this price was calculated (its own reason, apart from stale inputs). */
+  pricing_settings_changed: boolean
   stage: JobStage
   contract_php: number | null
   system_kwp: number | null
@@ -765,6 +767,7 @@ export interface AssessmentOut {
   doc: AssessmentDoc
   results: Results | null
   results_stale: boolean
+  pricing_settings_changed: boolean
 }
 
 export interface DataStatus {

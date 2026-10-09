@@ -23,8 +23,8 @@ const PCT_KEYS = new Set([
 const TIME_KEYS = new Set(['depart_time', 'lunch_start'])
 // label, unit and one-line help for the keys the owner meets most; the rest are title-cased
 const META: Record<string, { label: string; unit?: string; help?: string }> = {
-  'job.agent_commission': { label: 'Commission', unit: '% of direct cost', help: 'Paid in cash after the job.' },
-  'job.vat': { label: 'VAT', unit: '%' },
+  'job.agent_commission': { label: 'Commission', unit: '% of direct cost', help: 'Paid in cash after the job. Every job carries it (no per-job switch); nothing of it reaches the customer documents.' },
+  'job.vat': { label: 'VAT', unit: '%', help: 'The proposal prints "VAT (12%)" from this figure, worked out on the rounded contract (VAT = total × rate ÷ (1 + rate)), so the before-VAT price, the VAT and the total agree to the peso.' },
   'job.freight_markup': { label: 'Freight markup', unit: '%' },
   'job.services_markup': { label: 'Services markup', unit: '%', help: 'On labor, permits and tools.' },
   'job.ppe_per_person_day': { label: 'Safety gear', unit: '₱ per person-day' },
@@ -98,8 +98,15 @@ const META: Record<string, { label: string; unit?: string; help?: string }> = {
   'economics.degradation': { label: 'Panel output loss', unit: '% a year' },
   'economics.analysis_years': { label: 'Analysis period', unit: 'years' },
   'economics.discount_rate': { label: 'Discount rate', unit: '%' },
-  'economics.battery_life_years': { label: 'Battery life', unit: 'years' },
-  'economics.inverter_life_years': { label: 'Inverter life', unit: 'years' },
+  'economics.battery_life_years_override': {
+    label: 'Battery life, if not the warranty', unit: 'years',
+    help: '0 = the battery warranty years in the company profile (Settings › Company), 5 today: the battery datasheets give 5 years, though the supplier price list says 10 for the Felicity FLB line (verify). The savings view replaces the battery at this interval, at the customer price including VAT.',
+  },
+  'economics.inverter_life_years': {
+    label: 'Inverter life', unit: 'years',
+    help: 'Not the warranty (5 years from the maker, in the company profile): the years before the savings view replaces the inverter, at the customer price including VAT. 12 is the figure carried so far; verify against the datasheet.',
+  },
+  'economics.replacement_labor_php': { label: 'Labor per replacement', unit: '₱ including VAT', help: 'Added to each battery or inverter replacement in the savings view; 0 = none. Verify against your crew rates.' },
   'economics.om_share_per_year': { label: 'Upkeep', unit: '% of contract a year' },
   'economics.co2_kg_per_kwh': { label: 'Grid emission factor', unit: 'kg CO2 per kWh' },
   'quick.enabled': { label: 'Estimate page switched on' },

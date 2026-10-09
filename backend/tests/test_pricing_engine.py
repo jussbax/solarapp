@@ -103,3 +103,76 @@ def test_crew_options_and_far_site(imported):
     big = [BomLine("BC-PNL-004", 30), BomLine("FS-INV-002", 1), BomLine("FS-BAT-003", 2)] + [BomLine(c, q) for c, q in SAMPLE_BOM[3:]]
     lb = labor_for(takeoff_from_lines(price_lines(big, cat, cfg)), cfg, JobInputs(max_days=1, max_pairs=3))
     assert lb.pairs >= 1 and lb.days == 1 and lb.carry_crew == 5
+
+
+def test_vat_is_twelve_percent_of_the_rounded_contract_and_labels_follow_the_settings(imported):
+    """Finance 9 and 14: the customer's VAT is worked out on the rounded, VAT-inclusive contract (VAT = total x rate / (1 + rate)),
+    the base is the rest, the rounding pesos sit on the crew line, and the VAT labels come from the setting, not a literal."""
+    cat, cfg = imported.catalog, imported.config
+    bom = [BomLine(c, q) for c, q in SAMPLE_BOM]
+    res = price_job(bom, cat, cfg, JobInputs())
+    cust, tot = res["customer"], res["totals"]
+    rounded = tot["contract_rounded"]
+    assert cust["total"] == rounded == 329300
+    assert cust["vat"] == pytest.approx(rounded * 0.12 / 1.12)
+    assert cust["subtotal_ex_vat"] == pytest.approx(rounded - cust["vat"])
+    assert cust["subtotal_ex_vat"] * 0.12 == pytest.approx(cust["vat"])   # "VAT, 12% of the amounts above", to the peso
+    secs = {s["key"]: s for s in cust["sections"]}
+    assert secs["materials"]["amount"] + secs["labor"]["amount"] + secs["equipment"]["amount"] == pytest.approx(cust["subtotal_ex_vat"])
+    assert secs["tax"]["amount"] == pytest.approx(cust["vat"]) and sum(s["amount"] for s in cust["sections"]) == pytest.approx(rounded)
+    # the rounding pesos (85.41 on this job, VAT inside) sit on the crew line and nowhere else
+    crew, labor_line = secs["labor"]["items"][0], res["build_up"][2]
+    assert crew["key"] == "labor" and labor_line["key"] == "labor"
+    rounding = rounded - tot["contract"]
+    assert rounding == pytest.approx(329300 - 329214.590167201)
+    assert crew["amount"] - (labor_line["selling"] + tot["commission"] * labor_line["direct"] / tot["direct"]) == pytest.approx(rounding / 1.12, abs=0.01)
+    # the internal build-up stays the workbook's: VAT on the unrounded contract (JOB!B121)
+    assert tot["vat"] == pytest.approx(tot["contract_ex_vat"] * 0.12)
+    assert cust["vat_rate"] == 0.12 and cust["vat_label"] == "VAT (12%)"
+    # another rate: the labels and the arithmetic follow it
+    cfg10 = cfg.model_copy(deep=True)
+    cfg10.job.vat = 0.10
+    c10 = price_job(bom, cat, cfg10, JobInputs())["customer"]
+    tax10 = next(s for s in c10["sections"] if s["key"] == "tax")
+    assert tax10["label"] == "VAT (10%)" and tax10["items"][0]["name"] == "VAT, 10% of the amounts above" and c10["vat_label"] == "VAT (10%)"
+    assert c10["vat"] == pytest.approx(c10["total"] * 0.10 / 1.10) and c10["subtotal_ex_vat"] * 0.10 == pytest.approx(c10["vat"])
+
+
+def test_roof_closed_in_zero_days_prices_as_one_day(imported):
+    """Finance 8: the workbook's #DIV/0! case. The schema reads 0 as 1 and the engine floors it, so the job prices."""
+    from solarapp.schemas import PricingJob
+
+    assert PricingJob(roof_closed_days=0).roof_closed_days == 1
+    assert PricingJob(roof_closed_days=2).roof_closed_days == 2 and PricingJob().roof_closed_days is None
+    with pytest.raises(ValueError):
+        PricingJob(roof_closed_days=-1)
+    cat, cfg = imported.catalog, imported.config
+    bom = [BomLine(c, q) for c, q in SAMPLE_BOM]
+    zero = price_job(bom, cat, cfg, JobInputs(roof_closed_days=0))
+    one = price_job(bom, cat, cfg, JobInputs(roof_closed_days=1))
+    assert zero["totals"]["contract_rounded"] == one["totals"]["contract_rounded"] == 329300
+    assert zero["labor"]["detail"]["min_pairs"] == one["labor"]["detail"]["min_pairs"] == 1
+
+
+def test_settings_version_moves_only_with_settings_that_move_a_price(imported):
+    """Finance 1: the fingerprint a priced project stores. Any setting behind a price, the program or the savings moves it;
+    the website estimate's own knobs, the import stamp and the company label do not."""
+    from solarapp.pricing.config import settings_version
+
+    cfg = imported.config
+    v = settings_version(cfg)
+    assert len(v) == 16 and v == settings_version(cfg.model_copy(deep=True))
+    moved = cfg.model_copy(deep=True)
+    moved.job.services_markup = 0.35
+    assert settings_version(moved) != v
+    tier = cfg.model_copy(deep=True)
+    tier.category("Battery").markup_tier = 0.20
+    assert settings_version(tier) != v
+    eco = cfg.model_copy(deep=True)
+    eco.economics.replacement_labor_php = 500
+    assert settings_version(eco) != v
+    same = cfg.model_copy(deep=True)
+    same.quick.max_requests_per_hour = 99
+    same.imported_at = "2030-01-01T00:00:00"
+    same.company_base = "elsewhere"
+    assert settings_version(same) == v

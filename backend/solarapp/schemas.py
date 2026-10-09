@@ -142,7 +142,7 @@ class PricingJob(BaseModel):
     strings_override: Optional[int] = Field(default=None, ge=1)
     max_panels_per_string: Optional[int] = Field(default=None, ge=1)
     roof_factor: Optional[float] = Field(default=None, gt=0, le=1.5)
-    roof_closed_days: Optional[int] = Field(default=None, ge=0)
+    roof_closed_days: Optional[int] = Field(default=None, ge=1)   # at least a day; 0 reads as 1 (see below)
     max_days: Optional[int] = Field(default=None, ge=1)
     max_pairs: Optional[int] = Field(default=None, ge=1)
     owner_days: Optional[float] = Field(default=None, ge=0)
@@ -154,6 +154,12 @@ class PricingJob(BaseModel):
     conduit_m: Optional[float] = Field(default=None, ge=0)
     bom_edits: list[BomEdit] = Field(default_factory=list)     # overrides by code; qty 0 removes
     bom_extra: list[BomEdit] = Field(default_factory=list)     # added lines
+
+    @field_validator("roof_closed_days", mode="before")
+    @classmethod
+    def _closed_days_floor(cls, v):  # noqa: ANN001
+        """The roof closes in at least a day: a saved or typed 0 (the workbook's #DIV/0!) reads as 1, as the engine prices it."""
+        return 1 if v == 0 else v
 
 
 class PaymentMilestoneIn(BaseModel):
@@ -302,6 +308,7 @@ class AssessmentSummary(BaseModel):
     address: str
     has_results: bool
     results_stale: bool
+    pricing_settings_changed: bool = False   # the pricing settings moved since this price was calculated (its own reason, apart from stale inputs)
     stage: str = "assessed"
     contract_php: Optional[float] = None
     system_kwp: Optional[float] = None
@@ -321,6 +328,7 @@ class AssessmentOut(BaseModel):
     doc: AssessmentDoc
     results: Optional[dict[str, Any]] = None
     results_stale: bool = False
+    pricing_settings_changed: bool = False   # see AssessmentSummary
 
 
 class LoginIn(BaseModel):

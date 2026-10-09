@@ -6,10 +6,18 @@ rate from the latest bill (amount over kWh) when there is one.
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
+from ..profile import PROFILE_DEFAULTS
 from ..schemas import AssessmentDoc
 from .config import PricingConfig
+
+
+def _years(text: object) -> Optional[int]:
+    """A warranty field from the company profile ("5", "5 years", blank) as whole years, else None."""
+    m = re.search(r"\d+", str(text or ""))
+    return int(m.group()) if m and int(m.group()) > 0 else None
 
 
 def _npv(rate: float, flows: list[float]) -> float:
@@ -44,7 +52,8 @@ def _payback(cumulative: list[float]) -> Optional[float]:
     return None
 
 
-def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig) -> dict:
+def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig, profile: Optional[dict] = None) -> dict:
+    """`profile` is the company profile (Settings › Company): its battery warranty is the battery life unless overridden."""
     sizing = results.get("sizing")
     pricing = results.get("pricing") or {}
     if not sizing:
@@ -69,7 +78,20 @@ def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig) -> di
     deg = j.degradation if j.degradation is not None else e.degradation
     years = j.analysis_years or e.analysis_years
     disc = j.discount_rate if j.discount_rate is not None else e.discount_rate
-    bat_life = j.battery_life_years or e.battery_life_years
+    # Battery life: the job's own figure, else the settings override, else the battery warranty in the company
+    # profile. The supplier notes say the datasheets give 5 years (the price list says 10 for one line), so the
+    # warranty the owner stands behind is the honest replacement interval; the inverter life setting is a service
+    # life, not its warranty.
+    warranty = _years((profile or {}).get("warranty_battery_years"))
+    if j.battery_life_years:
+        bat_life, bat_life_source = j.battery_life_years, "entered"
+    elif e.battery_life_years_override > 0:
+        bat_life, bat_life_source = e.battery_life_years_override, "setting"
+    elif warranty:
+        bat_life, bat_life_source = warranty, "battery warranty"
+    else:
+        bat_life, bat_life_source = _years(PROFILE_DEFAULTS["warranty_battery_years"]) or 5, "assumed"
+        warnings.append({"code": "battery_life_verify", "message": f"The battery warranty is blank in the company profile, so the savings view replaces the battery every {bat_life} years (verify). Fill in the warranty under Settings."})
     inv_life = j.inverter_life_years or e.inverter_life_years
     contract = float(pricing["totals"]["contract_rounded"])
     om = j.om_per_year if j.om_per_year is not None else contract * e.om_share_per_year
@@ -79,8 +101,12 @@ def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig) -> di
 
     # year-1 months from the sizing balance
     cust_items = {i["key"]: i for s in pricing["customer"]["sections"] for i in s.get("items", [])}
-    battery_cost = float(cust_items["Battery"]["amount"]) if "Battery" in cust_items else 0.0
-    inverter_cost = float(cust_items["Inverter"]["amount"]) if "Inverter" in cust_items else 0.0
+    # Replacements cost the customer what the proposal's line costs today: the ex-VAT customer amount plus VAT, as
+    # they will pay it, plus the replacement-labor setting (0 by default).
+    vat = cfg.job.vat
+    repl_labor = float(e.replacement_labor_php or 0)
+    battery_cost = (float(cust_items["Battery"]["amount"]) * (1 + vat) + repl_labor) if "Battery" in cust_items else 0.0
+    inverter_cost = (float(cust_items["Inverter"]["amount"]) * (1 + vat) + repl_labor) if "Inverter" in cust_items else 0.0
     monthly = []
     for m in sizing["monthly"]:
         cons = float(m["consumption_kwh"])
@@ -153,8 +179,9 @@ def build_economics(doc: AssessmentDoc, results: dict, cfg: PricingConfig) -> di
         "warnings": warnings,
         "assumptions": {
             "tariff_php_per_kwh": tariff, "tariff_source": tariff_source, "export_rate_php_per_kwh": export_rate, "tariff_escalation": esc,
-            "degradation": deg, "analysis_years": years, "discount_rate": disc, "battery_life_years": bat_life, "inverter_life_years": inv_life,
-            "om_per_year": om, "battery_replacement_cost": battery_cost, "inverter_replacement_cost": inverter_cost, "co2_kg_per_kwh": e.co2_kg_per_kwh,
+            "degradation": deg, "analysis_years": years, "discount_rate": disc, "battery_life_years": bat_life, "battery_life_source": bat_life_source,
+            "inverter_life_years": inv_life, "om_per_year": om, "battery_replacement_cost": battery_cost, "inverter_replacement_cost": inverter_cost,
+            "replacement_labor_php": repl_labor, "replacement_vat": vat, "co2_kg_per_kwh": e.co2_kg_per_kwh,
             # the sizing's balance is at the meter (system losses applied), so savings and production here are too
             "loss_factor": float(sizing.get("loss_factor") or 1.0),
         },

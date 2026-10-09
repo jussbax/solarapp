@@ -95,3 +95,26 @@ def test_quick_battery_is_the_priced_unit_and_the_copy_reads_right(ctx, pvgis):
     home = quick_estimate(QuickRequest(goal="net_metering", town="Pila", province="Laguna", monthly_kwh=338, pattern="balanced"), pvgis, ctx)
     assert any(a == "Prices are from our current supplier list; no travel charge within Pila." for a in home["assumptions"])
     assert not any("0 km" in a for a in home["assumptions"])
+
+
+def test_quick_battery_part_is_the_proposals_battery_figure(ctx, pvgis, monkeypatch):
+    """Finance 6: one battery figure. The website's battery_part is the customer's battery line plus VAT, exactly what the
+    proposal prints beside the total, no longer the selling price rounded to the hundred."""
+    from solarapp.core import quick as quick_module
+    from solarapp.core.quick import battery_part_for
+
+    seen = []
+    original = quick_module.price_job
+    monkeypatch.setattr(quick_module, "price_job", lambda *a, **k: seen.append(original(*a, **k)) or seen[-1])
+    q = quick_estimate(QuickRequest(goal="combination", pattern="evening", monthly_kwh=338, monthly_php=3987.17, lat=14.086, lon=121.149), pvgis, ctx)
+    priced = seen[0]   # the first pricing is the main (combination) estimate; the no-battery alternative comes after
+    battery = [i for s in priced["customer"]["sections"] for i in s["items"] if i["key"] == "Battery"]
+    assert len(battery) == 1 and battery[0]["amount"] > 0
+    expected = battery[0]["amount"] * (1 + ctx.config.job.vat)
+    assert q["price"]["battery_part"] == pytest.approx(expected)
+    assert battery_part_for(priced, ctx.config.job.vat) == pytest.approx(expected)
+    # the customer line carries the battery's freight and commission shares, so it is more than the selling price alone
+    selling = sum(float(l["selling"]) for l in priced["lines"] if l["category"] == "Battery")
+    assert expected > selling * (1 + ctx.config.job.vat)
+    # the economics behind the website figures follow the same warranty rule as the proposal
+    assert q["economics"]["payback_years"] > 0

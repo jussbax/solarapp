@@ -16,6 +16,7 @@ from ..config import Settings, get_settings
 from ..core.dataset import NasaReference, PvgisDataset
 from ..db import get_session
 from ..models import Assessment, utcnow
+from ..pricing.config import settings_version
 from ..pricing.job import PricingContext
 from ..pricing.store import load_catalog, load_config
 from ..reports.card import build_client_card
@@ -48,17 +49,32 @@ def _get(session: Session, assessment_id: int) -> Assessment:
     return a
 
 
-def _out(a: Assessment) -> AssessmentOut:
+def _settings_changed(results: Optional[dict], current_version: str) -> bool:
+    """The price was calculated under other pricing settings than today's. A record priced before versions were
+    stored carries none and is not flagged; its next Calculate stores one."""
+    pricing = (results or {}).get("pricing") or {}
+    stored = pricing.get("settings_version")
+    return bool(pricing.get("available") and stored and stored != current_version)
+
+
+def _out(a: Assessment, settings_changed: bool = False) -> AssessmentOut:
     return AssessmentOut(
         id=a.id, created_at=a.created_at, updated_at=a.updated_at,
         doc=AssessmentDoc.model_validate(a.doc), results=a.results, results_stale=a.results_stale,
+        pricing_settings_changed=settings_changed,
     )
+
+
+def _out_live(session: Session, a: Assessment) -> AssessmentOut:
+    """The record with the settings-changed flag judged against the pricing settings as they are now."""
+    return _out(a, _settings_changed(a.results, settings_version(load_config(session))))
 
 
 @router.get("", response_model=list[AssessmentSummary])
 def list_assessments(session: Session = Depends(get_session)) -> list[AssessmentSummary]:
     """The project list: engineering facts only. The lead's contact, source and what they saw live on the leads inbox (/api/leads)."""
     rows = session.exec(select(Assessment).order_by(Assessment.updated_at.desc())).all()
+    current_version = settings_version(load_config(session))
     out = []
     for a in rows:
         results = a.results or {}
@@ -78,6 +94,7 @@ def list_assessments(session: Session = Depends(get_session)) -> list[Assessment
         out.append(AssessmentSummary(
             id=a.id, created_at=a.created_at, updated_at=a.updated_at, customer_name=a.customer_name,
             address=a.address, has_results=a.results is not None, results_stale=a.results_stale,
+            pricing_settings_changed=_settings_changed(results, current_version),
             stage=stage if stage in JOB_STAGES else "assessed",
             contract_php=(pricing.get("totals") or {}).get("contract_rounded") if pricing.get("available") else None,
             system_kwp=prod.get("system_kwp"), annual_kwh=prod.get("annual_kwh"), panel_count=prod.get("total_panels"),
@@ -99,7 +116,7 @@ def create_assessment(doc: AssessmentDoc, session: Session = Depends(get_session
 
 @router.get("/{assessment_id}", response_model=AssessmentOut)
 def get_assessment(assessment_id: int, session: Session = Depends(get_session)) -> AssessmentOut:
-    return _out(_get(session, assessment_id))
+    return _out_live(session, _get(session, assessment_id))
 
 
 @router.put("/{assessment_id}", response_model=AssessmentOut)
@@ -118,7 +135,7 @@ def update_assessment(assessment_id: int, doc: AssessmentDoc, session: Session =
         session.commit()
         session.refresh(a)
         remember_appliances(session, doc)
-    return _out(a)
+    return _out_live(session, a)
 
 
 @router.delete("/{assessment_id}", status_code=204)
@@ -130,25 +147,50 @@ def delete_assessment(assessment_id: int, session: Session = Depends(get_session
     return Response(status_code=204)
 
 
+REPRICE_DETAIL = "Pricing settings changed since this price was quoted (was ₱{was:,.0f}). Re-pricing a quoted job needs your confirmation."
+
+
+def _needs_reprice_confirmation(a: Assessment, stage: str, current_version: str) -> Optional[float]:
+    """From stage quoted onward a price calculated under other pricing settings stays until the re-price is confirmed:
+    returns the quoted contract when confirmation is needed, else None."""
+    if not _settings_changed(a.results, current_version):
+        return None
+    if stage not in JOB_STAGES or JOB_STAGES.index(stage) < JOB_STAGES.index("quoted"):
+        return None
+    return float(((a.results or {}).get("pricing") or {}).get("totals", {}).get("contract_rounded") or 0)
+
+
 @router.post("/{assessment_id}/compute", response_model=AssessmentOut)
 def compute_assessment(
     assessment_id: int,
     doc: Optional[AssessmentDoc] = None,
+    confirm_reprice: bool = False,
     session: Session = Depends(get_session),
     pvgis: PvgisDataset = Depends(get_pvgis),
     nasa: NasaReference = Depends(get_nasa),
+    settings: Settings = Depends(get_settings),
 ) -> AssessmentOut:
-    """Save the document (if sent) and compute results."""
+    """Save the document (if sent) and compute results. The pricing settings' version is stored with a priced result;
+    when the settings have moved since, a job from stage quoted onward is re-priced only with `confirm_reprice`."""
     a = _get(session, assessment_id)
     if doc is not None:
         a.doc = doc.model_dump(mode="json")
         a.customer_name, a.address = doc.customer_name, doc.address
     parsed = AssessmentDoc.model_validate(a.doc)
-    ctx = PricingContext(load_catalog(session), load_config(session))
+    cfg = load_config(session)
+    current_version = settings_version(cfg)
+    was = _needs_reprice_confirmation(a, parsed.program.stage, current_version)
+    if was is not None and not confirm_reprice:
+        raise HTTPException(status_code=409, detail=REPRICE_DETAIL.format(was=was))
+    ctx = PricingContext(load_catalog(session), cfg, company_settings(session, settings))
     try:
         a.results = compute_results(parsed, pvgis, nasa, ctx)
     except ComputeError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    if (a.results.get("pricing") or {}).get("available"):
+        a.results["pricing"]["settings_version"] = current_version
+    if was is not None:
+        log.info("assessment re-priced under new pricing settings id=%s stage=%s was=%s", assessment_id, parsed.program.stage, was)
     a.results_stale = False
     a.updated_at = utcnow()
     session.add(a)

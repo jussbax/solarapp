@@ -15,7 +15,7 @@ from sqlmodel import Session, func, select
 from ..auth import require_owner, require_user
 from ..db import get_session
 from ..models import MaterialItem, MaterialSupplier, utcnow
-from ..pricing.config import PricingConfig
+from ..pricing.config import PricingConfig, settings_version
 from ..pricing.importer import read_workbook
 from ..pricing.store import SEED_PATH, catalog_status, load_config, persist_import, save_config
 from ..schemas import MaterialItemIn, MaterialItemPatch
@@ -28,7 +28,8 @@ router = APIRouter(prefix="/api/pricing", tags=["pricing"], dependencies=[Depend
 
 @router.get("/status")
 def status(session: Session = Depends(get_session)) -> dict:
-    return catalog_status(session)
+    # settings_version: the fingerprint a priced project stores; a project whose stored one differs is flagged in the list
+    return {**catalog_status(session), "settings_version": settings_version(load_config(session))}
 
 
 @router.get("/config", response_model=PricingConfig)
@@ -41,6 +42,9 @@ def put_config(cfg: PricingConfig, session: Session = Depends(get_session)) -> P
     old = load_config(session)
     cfg.imported_from, cfg.imported_at = old.imported_from, old.imported_at
     save_config(session, cfg)
+    before, after = settings_version(old), settings_version(cfg)
+    if before != after:  # every priced project now carries the old version and is flagged; quoted jobs re-price only on confirmation
+        log.info("pricing settings changed version %s -> %s", before, after)
     return cfg
 
 

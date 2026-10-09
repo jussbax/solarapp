@@ -120,7 +120,7 @@ router = APIRouter(prefix="/api/quick", tags=["quick"], dependencies=[Depends(in
 
 
 def _ctx(session: Session) -> PricingContext:
-    return PricingContext(load_catalog(session), load_config(session))
+    return PricingContext(load_catalog(session), load_config(session), company_profile(session, get_settings()))
 
 
 def _log_estimate(row: QuickEstimateLog) -> None:

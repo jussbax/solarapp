@@ -121,7 +121,12 @@ export default function AssessmentListPage() {
               <div className="title">
                 {a.customer_name || <span className="muted">Unnamed</span>}{' '}
                 <span className="badge neutral">{JOB_STAGES.find((s) => s.id === a.stage)?.label ?? a.stage}</span>{' '}
-                {a.results_stale && <span className="badge neutral">needs recalculating</span>}
+                {a.results_stale && <span className="badge neutral">needs recalculating</span>}{' '}
+                {a.pricing_settings_changed && (
+                  <span className="badge neutral" title="Calculate asks before re-pricing a quoted job">
+                    pricing settings changed since this price
+                  </span>
+                )}
               </div>
               <div className="muted">{facts(a)}</div>
             </Link>

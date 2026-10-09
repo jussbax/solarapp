@@ -16,6 +16,7 @@ from .engine import BomLine, JobInputs, landed_cost, price_job
 class PricingContext:
     catalog: Catalog
     config: PricingConfig
+    profile: Optional[dict] = None   # the company profile (Settings): its battery warranty is the economics' battery life
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

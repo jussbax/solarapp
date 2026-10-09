@@ -882,3 +882,74 @@ chart, and the engineering build order in the plan.
   arrange the visit) and "Start project" creates the project from one, as
   "Start assessment" did. The e-mail notice links there. Nothing else about
   a booking can be changed from the engineering app.
+
+## Money, round three (finance findings 1, 2, 4, 5, 6, 8, 9, 14)
+
+- A quoted price does not move under the customer. Every priced result
+  stores a fingerprint of the pricing settings (`settings_version`: a hash
+  of the configuration without the website estimate's own knobs, the
+  company label and the import stamp). When the settings no longer match,
+  the project list and the project page say "pricing settings changed since
+  this price", its own reason beside "needs recalculating", and the stored
+  price stays. From stage quoted onward Calculate refuses to re-price
+  (409) unless it is sent with `confirm_reprice`; the page asks "Pricing
+  settings changed since this price was quoted (was ₱X). Re-price now?"
+  before sending it, and asks again if the server refuses because the
+  settings moved after the page loaded. An assessed job re-prices freely.
+  A result priced before versions existed carries none and is not flagged;
+  its next Calculate stores one. The materials list (item prices) is not
+  versioned yet: a price edit on the Materials page still re-prices
+  silently on the next Calculate, a follow-up with the same mechanism.
+- Warranty terms are the owner's (9 Oct 2026) and are the company
+  profile's defaults: panel product 12 years, battery 5, inverter 5,
+  workmanship 2; the panel performance warranty stays blank until the
+  datasheet is in. A database that already stored blanks keeps them until
+  the owner types the figures on the Settings page.
+- The battery life in the customer economics is the battery warranty from
+  the company profile (5 years, so a replacement every 5 years in the
+  25-year view) unless the owner types a figure under Pricing settings ›
+  Savings ("Battery life, if not the warranty", 0 = follow the warranty) or
+  per job. The reason: the supplier notes say the battery datasheets give 5
+  years, while the price list says 10 for one line; the warranty the owner
+  stands behind is the honest interval. The old fixed 10-year setting is
+  dropped when a stored configuration is read, so the rule applies to every
+  database. A blank warranty falls back to the profile default with a
+  "verify" warning in the economics, never a silent number. The inverter
+  life stays the 12-year setting, with help text saying it is a service
+  life and not the 5-year warranty. On the worked Tanauan job (contract
+  264,900 unchanged) the payback moves from 5.7 to 7.7 years, the IRR from
+  16.7 to 12.6 percent and the 25-year net from 976,229 to 742,286: four
+  battery replacements instead of two, each at the VAT-inclusive customer
+  price (102,417 instead of 91,443).
+- Replacement costs in the economics are what the customer will pay: the
+  proposal's battery and inverter lines (freight and commission shares
+  inside) plus VAT, plus an optional labor per replacement ("Labor per
+  replacement", pesos including VAT, default 0, verify). Earlier the
+  ex-VAT amounts were used, which overstated the 25-year net by 29,110 on
+  the worked job.
+- Agent commission is on every job at the settings' rate; there is no
+  per-job switch (the owner's decision 4). The customer block of a priced
+  job exposes the three figures the proposal prints as its own rows: the
+  contract price before VAT (`subtotal_ex_vat`), the VAT (`vat`, with
+  `vat_rate` and `vat_label`) and the VAT-inclusive total (`total`). The
+  proposal's printing of those rows is the customer-story batch's.
+- One battery figure: the website estimate's `battery_part` is the
+  customer's battery line plus VAT, the figure the proposal prints beside
+  the total ("battery for brownouts"), no longer the selling price rounded
+  to the hundred. The estimate page may round it as it rounds the total.
+- VAT is worked out on the rounded, VAT-inclusive contract: VAT = total ×
+  rate ÷ (1 + rate), the base is the rest, and the rounding pesos (less the
+  VAT inside them) sit on the crew line as before, so "VAT, 12 % of the
+  amounts above" is true to the peso and a VAT worked back from the total
+  gives the printed figure. The internal build-up keeps the workbook's VAT
+  on the unrounded contract (JOB!B121), so the sample job still reconciles
+  cell by cell; the two differ by the VAT inside the rounding pesos (0.07
+  on the worked job, 10.25 on the workbook's sample). The program's VAT
+  remittance still reads the build-up figure; it moves with the cashflow's
+  VAT-invoice decision (finance 3), which the owner has not made.
+- The roof closes in at least a day: a saved or typed 0 for "days the roof
+  is closed" (the workbook's #DIV/0!) reads as 1 in the schema and is
+  floored in the engine, so the job prices instead of failing.
+- The VAT labels on the customer sections ("VAT (12%)", "VAT, 12% of the
+  amounts above") are formatted from the VAT setting; the commission rate
+  in the owner's screens is the screens' batch.
