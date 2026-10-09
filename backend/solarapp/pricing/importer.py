@@ -317,9 +317,6 @@ def resolve_roles(cfg: PricingConfig, items: dict[str, Item], warnings: list[str
                  "ac_disconnect", "array_bonding_wire"):
         if getattr(r, role) not in items:
             warnings.append(f"Role {role}: default code {getattr(r, role)} is not in the DB; set it on the materials page.")
-    for role in ("placard", "monitoring", "l_foot_fastener"):
-        if not getattr(r, role):
-            warnings.append(f"Role {role}: no item yet; the BOM carries the line without a price until one is set on the materials page.")
     # the grid default: the first grid-interactive hybrid in the catalogue (code order), else blank = the cheapest that fits
     excluded = [w.lower() for w in r.inverter_exclude_words]
     grid_ok = sorted(

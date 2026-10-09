@@ -85,7 +85,9 @@ def price_lines(bom: list[BomLine], catalog: Catalog, cfg: PricingConfig) -> lis
     for line in bom:
         item = catalog.get(line.code)
         if item is None:
-            out.append(PricedLine(line.code, line.role, line.note, "Code not found", "", "", "", line.qty, 0, 0, 0, 0, 0, 0, 0, None, "", False, found=False))
+            # no such item: the line keeps its role's name so the crew and the PEE read what the design needs, and no price
+            name = line.role.replace("_", " ").capitalize() + (" (no item in the materials list)" if line.code.startswith("NO-ITEM-") else " (code not in the materials list)")
+            out.append(PricedLine(line.code, line.role, line.note, name, "", "", "", line.qty, 0, 0, 0, 0, 0, 0, 0, None, "", False, found=False))
             continue
         lc = landed_cost(item, catalog, cfg)
         delivers = catalog.supplier(item.supplier).delivers_free

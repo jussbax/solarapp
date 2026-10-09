@@ -257,16 +257,11 @@ class BoqRoles(BaseModel):
     ac_grid_breakers_per_inverter: int = 2        # grid side: the grid-to-inverter feed and the maintenance bypass, sized on the inverter's AC input rating
     ac_disconnect: str = "IAN-PRT-030"            # the visible, lockable AC disconnect for the electric company at the service (verify the DU's requirement)
     ac_disconnects: int = 1
-    placard: str = ""                             # PV system labels and placards (service, disconnect, inverter, DC box); blank = no item yet
-    placard_sets: int = 1
-    monitoring: str = ""                          # the inverter's monitoring dongle, one per inverter; it must match the inverter's brand; blank = no item yet
     export_limiter: str = ""                      # optional: the export limiter or CT for the weeks between switch-on and the two-way meter (verify with the DU)
     array_bonding_wire: str = "IAN-WIR-029"       # the equipment grounding conductor along the array (bare copper where the LGU asks; verify the gauge with the PEE)
     bonding_extra_m_per_row: float = 2            # jumpers between the rail lines of a row and to the next row, on top of the row's length
     bonding_lugs_per_panel: int = 1               # panel frame to rail (unless the clamps are listed as bonding clamps)
     bonding_lugs_per_rail_line: int = 1           # each rail line to the grounding conductor (two lines per row)
-    l_foot_fastener: str = ""                     # screws or bolts for the L-feet into the purlins; BC-MNT-006 lists none; blank = no item yet
-    fasteners_per_l_foot: int = 2                 # verify with the rail maker's manual and the roof sheet
 
     @model_validator(mode="before")
     @classmethod

@@ -11,7 +11,7 @@ checked against the voltage-drop limit; strings from a maximum panels per string
 battery breaker at 1.25 x the inverter's battery current with the battery cable's ampacity at or above the breaker
 (a failed coordination blocks the customer documents); one AC SPD per board, one DC SPD per MPPT input in use, one
 enclosure per inverter, no ATS on an inverter that carries its own transfer switch; array bonding, L-foot fasteners,
-placards, a visible AC disconnect, monitoring and (on net metering) an export limiter as roles. A role without an
+a visible AC disconnect and (on net metering) an export limiter as roles. A role without an
 item in the materials list still puts its line on the BOM with the quantity and no price, and a warning says so.
 """
 from __future__ import annotations
@@ -409,8 +409,6 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     ]
     if splices > 0:
         lines.append(BomLine(r.splice, splices, "splice", "1 per rail joint"))
-    lines.append(_role_line(r.l_foot_fastener, rails * r.l_feet_per_rail * r.fasteners_per_l_foot, "l_foot_fastener",
-                            f"{r.fasteners_per_l_foot} per L-foot into the purlins (verify with the rail maker's manual and the roof sheet)", warnings, "L-foot fasteners"))
 
     # strings and PV cable
     strings = req.strings_override or int(math.ceil(req.panel_count / max(r.max_panels_per_string, 1) - 1e-9))
@@ -557,7 +555,8 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     if disc is not None and b_grid and disc.amps_in_name() is not None and disc.amps_in_name() < b_grid - 1e-9:
         warnings.append({"code": "ac_disconnect_rating", "message": f"The AC disconnect {disc.code} is rated {disc.amps_in_name():g} A and the grid-side circuit needs {b_grid:g} A. Set a larger one under BOM item roles."})
 
-    # enclosures, raceways, grounding and bonding, consumables, monitoring, labels, the export limiter
+    # enclosures, raceways, grounding and bonding, consumables, the export limiter (fasteners come with the L-foot set,
+    # placards are consumables and monitoring is in the inverter: the owner's rule, round 4)
     conduit = req.conduit_m if req.conduit_m is not None else w.conduit_m
     row_len = sum(x.length_m for x in req.rows if x.panels > 0)
     bonding_m = row_len + r.bonding_extra_m_per_row * n_rows
@@ -572,8 +571,6 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
                    warnings, "Array bonding conductor"),
         BomLine(r.earth_lug, lugs, "earth_lug", f"{r.earth_lugs} at the boxes and the rod + {r.bonding_lugs_per_panel} per panel + {r.bonding_lugs_per_rail_line} per rail line ({2 * n_rows} lines)"),
         BomLine(r.sealant, r.sealants, "sealant", ""),
-        _role_line(r.monitoring, units, "monitoring", "monitoring dongle, 1 per inverter; it must match the inverter's brand", warnings, "Monitoring"),
-        _role_line(r.placard, r.placard_sets, "placard", "PV system labels and placards at the service, the disconnect, the inverter and the DC box (verify what the LGU and the DU ask for)", warnings, "Placards and labels"),
     ]
     if grid_job:
         if r.export_limiter:

@@ -272,28 +272,32 @@ def test_omitted_roles_are_on_the_bom_with_quantities_and_never_an_invented_pric
     rows = [r for r in res.choices["rows"] if r["panels"] > 0]
     assert roles["array_bonding"].code == "IAN-WIR-029" and roles["array_bonding"].qty == pytest.approx(sum(r["length_m"] for r in rows) + 2 * len(rows), abs=0.1)
     assert roles["earth_lug"].qty == 4 + 11 * 1 + 2 * len(rows) * 1
-    # fasteners per L-foot, placards, monitoring: no item in the seed list, so the line carries the quantity and no price
-    assert roles["l_foot_fastener"].code == f"{NO_ITEM_PREFIX}L-FOOT-FASTENER" and roles["l_foot_fastener"].qty == roles["l_foot"].qty * 2
-    assert roles["placard"].qty == 1 and roles["monitoring"].qty == 1
-    assert all(l.code.startswith(NO_ITEM_PREFIX) for l in (roles["placard"], roles["monitoring"], roles["l_foot_fastener"]))
-    labels = {w["message"].split(":")[0] for w in res.warnings if w["code"] == "role_without_item"}
-    assert labels == {"L-foot fasteners", "Placards and labels", "Monitoring"}
+    # fasteners come with the L-foot set, placards are consumables and monitoring is in the inverter (the owner, round 4):
+    # no NO-ITEM line and no "role without item" warning on the seed list
+    assert not any(l.code.startswith(NO_ITEM_PREFIX) for l in res.lines)
+    assert not [w for w in res.warnings if w["code"] == "role_without_item"]
     # the visible AC disconnect, rated for the grid side; the export limiter as an optional role with its warning on net metering
     assert roles["ac_disconnect"].code == "IAN-PRT-030" and "lockable" in roles["ac_disconnect"].note
     assert "export_limiter" in _codes(res) and "export_limiter" not in roles
     cfg2 = cfg.model_copy(deep=True)
     cfg2.roles.export_limiter = "IAN-ACC-008"
-    cfg2.roles.placard = "IAN-GND-002"
     res2 = generate_boq(_req("net_metering", required=4.95, panels=11), cat, cfg2)
     roles2 = {l.role: l for l in res2.lines}
-    assert roles2["export_limiter"].code == "IAN-ACC-008" and "export_limiter" not in _codes(res2) and roles2["placard"].code == "IAN-GND-002"
+    assert roles2["export_limiter"].code == "IAN-ACC-008" and "export_limiter" not in _codes(res2)
     off = generate_boq(_req("off_grid", required=4.95, battery=13.6, panels=11), cat, cfg)
     assert "export_limiter" not in _codes(off) and not any(l.role == "export_limiter" for l in off.lines)
     # priced: the NO-ITEM lines cost nothing and are not "missing codes" in the warnings
     from solarapp.pricing.engine import JobInputs, price_job
     priced = price_job(res.lines, cat, cfg, JobInputs(net_metering=True))
-    no_item = [l for l in priced["lines"] if l["code"].startswith(NO_ITEM_PREFIX)]
-    assert len(no_item) == 3 and all(l["landed"] == 0 and l["selling"] == 0 and not l["found"] for l in no_item)
+    assert not [l for l in priced["lines"] if l["code"].startswith(NO_ITEM_PREFIX)]
+    # a role the owner blanks still puts its line on the BOM, named by its role, with the quantity and no price
+    cfg3 = cfg.model_copy(deep=True)
+    cfg3.roles.ac_disconnect = ""
+    res3 = generate_boq(_req("net_metering", required=4.95, panels=11), cat, cfg3)
+    priced3 = price_job(res3.lines, cat, cfg3, JobInputs(net_metering=True))
+    no_item = [l for l in priced3["lines"] if l["code"].startswith(NO_ITEM_PREFIX)]
+    assert len(no_item) == 1 and no_item[0]["name"] == "Ac disconnect (no item in the materials list)"
+    assert no_item[0]["landed"] == 0 and no_item[0]["selling"] == 0 and not no_item[0]["found"]
 
 
 def test_old_per_inverter_counts_migrate_once(imported):

@@ -102,7 +102,7 @@ def test_tanauan_like_job_prices(imported):
     assert tot["kwp"] == pytest.approx(9 * 585 / 1000)
     assert tot["contract_rounded"] % 100 == 0 and tot["contract_rounded"] > 200000
     assert priced["labor"]["pairs"] >= 1 and priced["freight"]["trips"] == 1
-    assert all(c.startswith("NO-ITEM-") for c in priced["missing_codes"])   # roles without an item yet (fasteners, monitoring, placards) carry no price
+    assert priced["missing_codes"] == []   # every role on the seed list has its item
     # a battery-less net-metering job has no battery lines
     res2 = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=0), cat, cfg)
     assert not {"battery", "battery_cable", "battery_breaker"} & {l.role for l in res2.lines}
