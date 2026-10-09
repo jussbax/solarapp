@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import Settings, get_settings
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-ALLOWED_QUICK = {"status", "estimate", "lead"}
+ALLOWED_QUICK = {"status", "towns", "estimate", "lead"}
 FORWARDED_HEADERS = ("content-type", "x-visitor", "x-source", "user-agent", "accept-language", "cf-ipcountry")
 MAX_BODY = 16_384
 ESTIMATES_IN_FLIGHT = 4      # sizings the private app may run at once for the public

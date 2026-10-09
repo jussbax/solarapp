@@ -23,7 +23,7 @@ PROFILE_FIELDS: list[tuple[str, str, str]] = [
     ("owner_name", "Owner's name (signs the proposal)", ""),
     ("pee_name", "Professional Electrical Engineer (name)", ""),
     ("pee_license", "PEE licence number (PRC)", ""),
-    ("service_area", "Where you install", "Laguna and Batangas"),
+    ("service_area", "Where you install", "the whole Philippines"),
     ("brands", "Brands you install (one line)", ""),
     # The owner's warranty terms (9 Oct 2026): panel product 12, battery 5, inverter 5, workmanship 2. The panel
     # performance warranty waits for the datasheet. The battery warranty is also the battery life the savings view

@@ -73,7 +73,8 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    with the company's own branding, carries the charges, savings, payment
    stub, details and schedule.
 10. Free estimate for the company website at `/estimate`, no login: goal,
-    town (Laguna and Batangas) or the phone's location, monthly use, usage
+    town (any city or municipality in the Philippines) or the phone's
+    location, monthly use, usage
     pattern. Returns the bill before and after, payback, price and the
     system from the same engines with typical-roof assumptions, shows the
     battery as a priced add-on, and books the free roof visit as a website

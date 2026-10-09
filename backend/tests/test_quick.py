@@ -56,7 +56,8 @@ def test_quick_estimate_end_to_end(ctx, pvgis):
         quick_estimate(QuickRequest(goal="off_grid", lat=14.09, lon=121.15, pattern="balanced"), pvgis, ctx)
 
 
-def test_quick_estimate_by_town_with_battery_alternative(ctx, pvgis):
+def test_quick_estimate_by_town_with_battery_alternative(ctx, pvgis, monkeypatch):
+    from solarapp.core import quick as quick_module
     from solarapp.core.quick import quick_estimate
     from solarapp.schemas import QuickRequest
     q = quick_estimate(QuickRequest(goal="combination", town="Tanauan", province="Batangas", monthly_kwh=338, pattern="evening"), pvgis, ctx)
@@ -64,9 +65,13 @@ def test_quick_estimate_by_town_with_battery_alternative(ctx, pvgis):
     alt = q["alternative"]
     assert alt and alt["goal"] == "net_metering" and alt["system"]["battery_kwh"] == 0 and alt["price"]["total"] < q["price"]["total"]
     assert q["price"]["battery_part"] > 0 and q["production"]["production_vs_use_pct"] > 0
-    # a pin far from any listed town is flagged, not refused
-    far = quick_estimate(QuickRequest(goal="net_metering", lat=14.65, lon=121.03, monthly_kwh=338, pattern="balanced"), pvgis, ctx)
-    assert not far["inputs"]["in_area"] and any("outside Laguna and Batangas" in w for w in far["warnings"])
+    # the whole country is on the map: a pin in Quezon City reads as such
+    near = quick_estimate(QuickRequest(goal="net_metering", lat=14.65, lon=121.03, monthly_kwh=338, pattern="balanced"), pvgis, ctx)
+    assert near["inputs"]["in_area"] and near["inputs"]["place"].startswith("near Quezon City")
+    # a pin far from every town centre (here the middle of Laguna de Bay, with the radius shrunk) is flagged, not refused
+    monkeypatch.setattr(quick_module, "OUT_OF_AREA_KM", 1.0)
+    far = quick_estimate(QuickRequest(goal="net_metering", lat=14.40, lon=121.20, monthly_kwh=338, pattern="balanced"), pvgis, ctx)
+    assert not far["inputs"]["in_area"] and any("off the map of the Philippines" in w for w in far["warnings"])
     with pytest.raises(ValueError):
         quick_estimate(QuickRequest(goal="net_metering", town="Atlantis", monthly_kwh=338), pvgis, ctx)
 

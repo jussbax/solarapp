@@ -1213,3 +1213,29 @@ and built; the next sections record them.
   carries a header block (customer, project, date, system), the spec or
   model per line, the lines grouped by category and the pack rounding where
   an item is sold by the roll or box.
+
+## The service area is the whole Philippines
+
+- The owner's rule (9 October): "for the service area, just make it the
+  whole philippines". The estimate's town picker now lists every city and
+  municipality in the country (1,642, in 84 provinces with Metro Manila for
+  NCR), from the PSA's PSGC names with OCHA/NAMRIA area-weighted centroids
+  (CC BY-IGO), bundled in `backend/solarapp/core/towns_ph.json`; the server
+  still looks nothing up outside. The status call carries the provinces and
+  the page fetches one province's towns when it is picked, so a phone does
+  not download 1,600 rows for one estimate.
+- Independent and highly urbanised cities are listed under their geographic
+  province (Cebu City under Cebu, Lucena City under Quezon), by the PSGC
+  code, since that is where a visitor looks for them. A city keeps "City"
+  in its name when the bare name is a province's (Batangas City, Quezon
+  City) or when it is independent (Davao City); a component city reads as
+  people say it (Lipa, Tanauan, Santa Rosa); Metro Manila's cities are bare.
+- A pin more than 60 km from every town centre is "outside the Philippines"
+  (the sea, or abroad) and the estimate says so; the old "outside Laguna
+  and Batangas" label is still read on bookings saved before this change.
+  The company profile's "Where you install" defaults to "the whole
+  Philippines" and the website says so.
+- Known limit: the freight run and the crew transport are still priced from
+  the base in Pila with the pin's extra kilometres, so a far site carries a
+  long trip; a regional base, or a freight rule per island group, is the
+  owner's call when such jobs come.

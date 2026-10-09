@@ -34,7 +34,8 @@ export interface EstimateStatus {
   data: boolean
   profile: PublicProfile
   warranty: string[]
-  towns: Town[]
+  provinces: string[]   // the picker loads one province's towns on demand
+  towns?: Town[]        // older servers sent the whole list here
   public_url: string
   estimate_url: string   // the website's estimate page, for the copied summary
   proposal_valid_days?: number   // the pricing setting the thank-you page quotes

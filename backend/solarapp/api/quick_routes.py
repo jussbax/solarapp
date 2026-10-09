@@ -22,7 +22,7 @@ from ..auth import current_user
 from ..config import Settings, get_settings
 from ..core.dataset import PvgisDataset
 from ..core.quick import GOAL_LABEL, PATTERN_LABEL, quick_estimate
-from ..core.towns import towns_payload
+from ..core.towns import provinces, towns_payload
 from ..db import get_engine, get_session
 from ..models import Lead, QuickEstimateLog
 from ..notify import lead_notice, send_lead_notice, smtp_configured
@@ -133,6 +133,16 @@ def _log_estimate(row: QuickEstimateLog) -> None:
         logging.getLogger(__name__).warning("estimate not logged: %s", e)
 
 
+TOWNS_PER_HOUR = 120   # province picks per browser per hour; a visitor changes province a handful of times
+
+
+@router.get("/towns")
+def quick_towns(request: Request, province: str = "") -> list[dict]:
+    """One province's cities and municipalities for the picker (the whole country is 1,600 rows; a province is a few dozen)."""
+    _throttle(request, TOWNS_PER_HOUR)
+    return towns_payload(province)
+
+
 @router.get("/status")
 def quick_status(session: Session = Depends(get_session), settings: Settings = Depends(get_settings), pvgis: PvgisDataset = Depends(get_pvgis)) -> dict:
     """What the public page needs before the first question: whether the estimate works, who you are, and the towns."""
@@ -143,7 +153,7 @@ def quick_status(session: Session = Depends(get_session), settings: Settings = D
         "data": pvgis.available,
         "profile": profile,
         "warranty": warranty_lines(profile),
-        "towns": towns_payload(),
+        "provinces": provinces(),        # the picker loads one province's towns on demand (/api/quick/towns)
         "public_url": settings.public_url,
         "estimate_url": settings.estimate_url,
         "proposal_valid_days": cfg.job.quotation_validity_days,   # the thank-you page's "valid N days" is the pricing setting

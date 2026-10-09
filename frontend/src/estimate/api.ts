@@ -1,4 +1,4 @@
-import type { EstimateRequest, EstimateResult, EstimateStatus, LeadRequest, LeadSource } from './types'
+import type { EstimateRequest, EstimateResult, EstimateStatus, LeadRequest, LeadSource, Town } from './types'
 
 /** A random id per browser so the rate limit tells visitors apart behind one shared mobile address. */
 function visitorId(): string {
@@ -78,6 +78,7 @@ export function makeApi(base: string, source: LeadSource) {
   }
   return {
     status: () => call<EstimateStatus>('/api/quick/status'),
+    towns: (province: string) => call<Town[]>(`/api/quick/towns?province=${encodeURIComponent(province)}`),
     estimate: (body: EstimateRequest) => call<EstimateResult>('/api/quick/estimate', { method: 'POST', body: JSON.stringify(body) }),
     lead: (body: LeadRequest) => call<{ ok: boolean; id?: number }>('/api/quick/lead', { method: 'POST', body: JSON.stringify(body) }),
   }

@@ -78,7 +78,7 @@ def test_website_lead_lands_in_the_inbox_not_the_project_list(client, caplog):
 def test_pin_leads_keep_the_pin_and_say_near(client):
     lid = book(client, town="", province="", lat=14.09, lon=121.15, name="Pin Person", address="Brgy. Sambat, beside the chapel")
     lead = client.get(f"/api/leads/{lid}").json()
-    assert lead["lat"] == 14.09 and lead["lon"] == 121.15 and lead["town"] == "Tanauan" and lead["place"] == "near Tanauan, Batangas"
+    assert lead["lat"] == 14.09 and lead["lon"] == 121.15 and lead["town"] == "Santo Tomas" and lead["place"] == "near Santo Tomas, Batangas"
     assert "pin placed by the customer" in lead["notes"] and lead["address"] == "Brgy. Sambat, beside the chapel"
 
 
@@ -123,7 +123,7 @@ def test_start_assessment_creates_the_project_from_the_lead(client, caplog):
     a = client.get(f"/api/assessments/{pid}").json()
     doc = a["doc"]
     assert doc["customer_name"] == "Maria Santos" and doc["address"] == "Tanauan, Batangas"
-    assert doc["lat"] == pytest.approx(14.086) and doc["lon"] == pytest.approx(121.150)  # the town's coordinates, since the visitor gave no pin
+    assert doc["lat"] == pytest.approx(14.0944) and doc["lon"] == pytest.approx(121.0988)  # the town's centroid, since the visitor gave no pin
     assert doc["audit"]["bills"] == [{"id": "lead", "billing_month": datetime.now(timezone.utc).strftime("%Y-%m"), "kwh": 333.0, "days": None, "amount_php": 4000.0, "utility": ""}]
     assert doc["audit"]["system"]["kind"] == "net_metering" and doc["program"]["stage"] == "assessed" and doc["lead_id"] == lid
     assert doc["notes"] == "From the website estimate. Visit Saturday 9am."
@@ -244,7 +244,7 @@ def test_migration_moves_lead_stage_assessments_to_the_inbox(tmp_path_factory, c
             assert t["address"] == "Town Lead St"
             p = leads["Pin Contacted"]
             assert p["status"] == "contacted" and p["town"] == "Tanauan" and p["lat"] == 14.1 and p["place"] == "near Tanauan, Batangas" and p["address"] == ""
-            assert leads["Far Away"]["town"] == "" and leads["Far Away"]["lat"] == 14.65 and leads["Far Away"]["place"] == "outside Laguna and Batangas"
+            assert leads["Far Away"]["town"] == "" and leads["Far Away"]["lat"] == 14.65 and leads["Far Away"]["place"] == "outside the Philippines"
             assert leads["Gone Already"]["anonymised"] and not leads["Town Lead"]["anonymised"]
             # idempotent: a second run moves nothing
             with Session(get_engine()) as s:
@@ -253,7 +253,7 @@ def test_migration_moves_lead_stage_assessments_to_the_inbox(tmp_path_factory, c
             # the migrated lead converts like any other, with the bill from the old record
             pid = c.post(f"/api/leads/{t['id']}/convert").json()["project_id"]
             doc = c.get(f"/api/assessments/{pid}").json()["doc"]
-            assert doc["audit"]["bills"][0]["kwh"] == 338 and doc["audit"]["bills"][0]["amount_php"] == 4056 and doc["lat"] == pytest.approx(14.233)
+            assert doc["audit"]["bills"][0]["kwh"] == 338 and doc["audit"]["bills"][0]["amount_php"] == 4056 and doc["lat"] == pytest.approx(14.231)
 
 
 # ---- retention

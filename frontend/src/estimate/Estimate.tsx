@@ -96,9 +96,32 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
   )
   const unavailableText = contactHref ? "The estimate isn't available right now. Please try again later or message us on Facebook." : "The estimate isn't available right now. Please try again later."
   const showError = (e: unknown) => setError(isUnavailable(e) ? unavailableText : (e as Error).message)
-  const towns: Town[] = status && status !== 'down' ? status.towns : []
-  const provinces = useMemo(() => Array.from(new Set(towns.map((t) => t.province))), [towns])
-  const townsHere = useMemo(() => towns.filter((t) => t.province === province).sort((a, b) => a.name.localeCompare(b.name)), [towns, province])
+  // every province of the country; a province's towns are fetched when it is picked (1,600 rows in all, a few dozen each)
+  const provinces = useMemo(() => {
+    if (!status || status === 'down') return []
+    return status.provinces ?? Array.from(new Set((status.towns ?? []).map((t) => t.province)))
+  }, [status])
+  const [fetched, setFetched] = useState<Record<string, Town[]>>({})
+  const townsHere = useMemo(() => {
+    if (!province) return []
+    const local = status && status !== 'down' ? (status.towns ?? []).filter((t) => t.province === province) : []
+    return (local.length ? local : (fetched[province] ?? [])).slice().sort((a, b) => a.name.localeCompare(b.name))
+  }, [province, status, fetched])
+  useEffect(() => {
+    if (!province || townsHere.length || fetched[province]) return
+    let live = true
+    api
+      .towns(province)
+      .then((rows) => {
+        if (live) setFetched((f) => ({ ...f, [province]: rows }))
+      })
+      .catch(() => {
+        if (live) setFetched((f) => ({ ...f, [province]: [] }))
+      })
+    return () => {
+      live = false
+    }
+  }, [province, townsHere.length, fetched, api])
   const kwhNum = parseFloat(kwh.replace(/,/g, ''))
   const phpNum = parseFloat(php.replace(/,/g, ''))
   const hasUse = (Number.isFinite(kwhNum) && kwhNum > 0) || (Number.isFinite(phpNum) && phpNum > 0)

@@ -256,7 +256,7 @@ def test_quick_estimate_and_lead(client):
     assert not any(a["customer_name"] == "Lead Person" for a in client.get("/api/assessments").json())
     lead = next(l for l in client.get("/api/leads").json() if l["name"] == "Lead Person")
     assert lead["status"] == "new" and lead["estimate"]["goal"] == "combination" and lead["estimate"]["monthly_kwh"] == 338 and "0917" in lead["notes"]
-    assert lead["address"] == "Tanauan" and lead["lat"] == 14.65 and lead["place"] == "outside Laguna and Batangas"
+    assert lead["address"] == "Tanauan" and lead["lat"] == 14.65 and lead["place"] == "near Quezon City, Metro Manila"   # the whole country is on the map
 
 
 def test_quick_throttle_tells_browsers_apart_behind_one_address():
@@ -290,7 +290,9 @@ def test_quick_throttle_tells_browsers_apart_behind_one_address():
 def test_website_lead_carries_source_and_snapshot_and_feeds_the_funnel(client):
     client.post("/api/auth/logout")
     st = client.get("/api/quick/status").json()
-    assert st["towns"] and any(t["name"] == "Pila" for t in st["towns"]) and "company_name" in st["profile"] and isinstance(st["warranty"], list)
+    assert "Laguna" in st["provinces"] and len(st["provinces"]) > 80 and "company_name" in st["profile"] and isinstance(st["warranty"], list)
+    towns = client.get("/api/quick/towns?province=Laguna").json()
+    assert any(t["name"] == "Pila" for t in towns) and all(t["province"] == "Laguna" for t in towns)
     body = {
         "goal": "net_metering", "town": "Tanauan", "province": "Batangas", "monthly_php": 4000, "pattern": "evening",
         "name": "Web Visitor", "contact": "0917 555 1234", "address": "", "preferred_time": "Evening",
@@ -389,7 +391,7 @@ def test_public_process_serves_the_site_and_forwards_only_the_estimate(tmp_path)
         assert "default-src 'self'" in h["content-security-policy"] and h["x-content-type-options"] == "nosniff"
         # the estimate calls cross with the token; the back office never does
         st = pub.get("/api/quick/status")
-        assert st.status_code == 200 and "towns" in st.json()
+        assert st.status_code == 200 and "provinces" in st.json()
         assert pub.get("/api/assessments").status_code == 404
         assert pub.post("/api/auth/login", json={"username": "u", "password": "p"}).status_code == 404
         assert pub.get("/api/quick/anything").status_code == 404

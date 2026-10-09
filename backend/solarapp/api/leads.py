@@ -31,7 +31,8 @@ from ..schemas import (
 
 log = logging.getLogger("solarapp.audit")
 
-OUT_OF_AREA = "outside Laguna and Batangas"   # the label the estimate gives a pin far from every listed town
+OUT_OF_AREA = "outside the Philippines"   # the label the estimate gives a pin far from every town centre
+LEGACY_OUT_OF_AREA = "outside Laguna and Batangas"   # the label before the service area became the whole country
 SYSTEM_KINDS = ("off_grid", "net_metering", "combination")
 
 router = APIRouter(prefix="/api/leads", tags=["leads"], dependencies=[Depends(require_user)])
@@ -235,7 +236,7 @@ def _parse_place(label: str) -> tuple[str, str, bool]:
     if "," in label:
         town, _, province = label.partition(",")
         return town.strip(), province.strip(), False
-    return ("", "", True) if label == OUT_OF_AREA else (label, "", False)
+    return ("", "", True) if label in (OUT_OF_AREA, LEGACY_OUT_OF_AREA) else (label, "", False)
 
 
 def lead_from_legacy_assessment(a: Assessment) -> Lead:

@@ -793,7 +793,7 @@ export const PROFILE_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: 'owner_name', label: "Owner's name", hint: 'Signs the proposal; named in the booking thank-you.' },
   { key: 'pee_name', label: 'Professional Electrical Engineer' },
   { key: 'pee_license', label: 'PEE licence number (PRC)' },
-  { key: 'service_area', label: 'Where you install', hint: 'e.g. Laguna and Batangas' },
+  { key: 'service_area', label: 'Where you install', hint: 'e.g. the whole Philippines' },
   { key: 'brands', label: 'Brands you install', hint: 'One line, e.g. Blue Carbon TOPCon panels, Felicity hybrid inverters, LiFePO4 batteries' },
   { key: 'warranty_workmanship_years', label: 'Workmanship warranty (years)' },
   { key: 'warranty_panels_product_years', label: 'Panel product warranty (years)' },

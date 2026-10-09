@@ -32,7 +32,7 @@ SHAPES = {
 PATTERN_LABEL = {"morning": "mostly in the morning", "balanced": "spread through the day", "evening": "mostly in the evening"}
 GOAL_LABEL = {"net_metering": "solar with net metering, no battery", "combination": "solar with a battery and net metering", "off_grid": "battery first, nothing sold back (the grid as backup)"}
 NIGHT_HOURS = list(range(18, 24)) + list(range(0, 6))   # 6 pm to 6 am, the night the battery is asked to carry
-OUT_OF_AREA_KM = 25.0
+OUT_OF_AREA_KM = 60.0   # farther than this from every town centre is off the map (the sea, or abroad)
 # Under this a system is one panel and a ₱180,000 inverter: refused with a plain message instead of a silly figure.
 MIN_MONTHLY_KWH = 60.0
 TOO_LITTLE = "That's very little usage; a solar system would not pay for itself. If the kWh on your bill is higher, enter that figure."
@@ -89,7 +89,7 @@ def resolve_location(req: QuickRequest) -> dict:
         raise ValueError("Tell us where the house is: pick your town or use your phone's location.")
     t, km = nearest_town(req.lat, req.lon)
     in_area = km <= OUT_OF_AREA_KM
-    label = f"near {t[0]}, {t[1]}" if in_area else "outside Laguna and Batangas"
+    label = f"near {t[0]}, {t[1]}" if in_area else "outside the Philippines"
     return {"lat": req.lat, "lon": req.lon, "town": t[0] if in_area else "", "province": t[1] if in_area else "", "label": label, "in_area": in_area, "km_to_listed_town": km}
 
 
@@ -221,7 +221,7 @@ def quick_estimate(req: QuickRequest, pvgis: PvgisDataset, ctx: PricingContext) 
     if main["system"]["roof_limited"]:
         warnings.append(f"Your usage needs more than {q.max_panels} panels. We capped the estimate at {q.max_panels}. On the roof visit we'll see how many your roof can really take.")
     if not where["in_area"]:
-        warnings.append("This address is outside Laguna and Batangas, where we usually install. Message us and we'll tell you if we can come.")
+        warnings.append("This location is off the map of the Philippines, where we install. Check the pin, or pick your town instead.")
     facing = "south" if q.azimuth_deg == 180 else f"{q.azimuth_deg:g}°"
     road = main["location"]["road_km"]
     if road is None:
