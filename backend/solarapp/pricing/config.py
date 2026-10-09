@@ -131,8 +131,8 @@ class GroundRates(BaseModel):
     ])
 
     def mh(self, key: str) -> float:
-        t = next(x for x in self.tasks if x.key == key)
-        return t.mounting_weight * self.mounting_mh_per_unit + t.wiring_weight * self.wiring_mh_per_unit
+        t = next((x for x in self.tasks if x.key == key), None)  # a task the owner removed from the table counts no hours
+        return 0.0 if t is None else t.mounting_weight * self.mounting_mh_per_unit + t.wiring_weight * self.wiring_mh_per_unit
 
 
 class HaulingConfig(BaseModel):

@@ -27,20 +27,20 @@ const GRID_TITLE: Record<string, string> = {
 /** Datasheet figures per category (contract C4): panels for the string design, inverters for the string and
  *  circuit design and the net-metering rule, batteries for the current check against the inverter. */
 function ElectricalFields({ it, set }: { it: ItemDraft; set: (p: Partial<ItemDraft>) => void }) {
-  const num = (key: keyof ItemDraft, label: string, width = 120, step = 0.1) => (
-    <Field label={label} width={width}>
-      <NumberInput value={(it[key] as number | null | undefined) ?? null} onChange={(v) => set({ [key]: v } as Partial<ItemDraft>)} allowEmpty step={step} />
+  const num = (key: keyof ItemDraft, label: string, unit: string, decimals: number, width = 130) => (
+    <Field label={label} width={width} unit={unit}>
+      <NumberInput value={(it[key] as number | null | undefined) ?? null} onChange={(v) => set({ [key]: v } as Partial<ItemDraft>)} allowEmpty decimals={decimals} />
     </Field>
   )
   if (it.category === 'Solar Panel') {
     return (
       <div className="row" style={{ marginTop: 6 }}>
-        {num('voc_v', 'Voc (V)', 100)}
-        {num('vmp_v', 'Vmp (V)', 100)}
-        {num('isc_a', 'Isc (A)', 100)}
-        {num('imp_a', 'Imp (A)', 100)}
-        {num('temp_coeff_voc_pct', 'Voc temp. coeff. (%/°C)', 170, 0.01)}
-        {num('temp_coeff_isc_pct', 'Isc temp. coeff. (%/°C)', 170, 0.01)}
+        {num('voc_v', 'Voc', 'V', 1, 110)}
+        {num('vmp_v', 'Vmp', 'V', 1, 110)}
+        {num('isc_a', 'Isc', 'A', 2, 110)}
+        {num('imp_a', 'Imp', 'A', 2, 110)}
+        {num('temp_coeff_voc_pct', 'Voc temperature coefficient', '%/°C', 2, 200)}
+        {num('temp_coeff_isc_pct', 'Isc temperature coefficient', '%/°C', 2, 200)}
         <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>From the datasheet at STC; the string design uses Voc at the coldest cell and Vmp at the hottest.</div>
       </div>
     )
@@ -48,21 +48,21 @@ function ElectricalFields({ it, set }: { it: ItemDraft; set: (p: Partial<ItemDra
   if (isInverter(it.category)) {
     return (
       <div className="row" style={{ marginTop: 6 }}>
-        {num('max_pv_voltage_v', 'Max PV voltage (V)', 140, 1)}
-        {num('mppt_min_v', 'MPPT min (V)', 110, 1)}
-        {num('mppt_max_v', 'MPPT max (V)', 110, 1)}
-        {num('mppt_count', 'MPPT inputs', 100, 1)}
-        {num('mppt_max_a', 'Max A per MPPT', 120)}
-        {num('ac_input_a', 'AC input (A)', 110)}
-        {num('battery_max_a', 'Battery max (A)', 120)}
-        <Field label="Grid-interactive" width={140}>
+        {num('max_pv_voltage_v', 'Max PV voltage', 'V', 0, 140)}
+        {num('mppt_min_v', 'MPPT min', 'V', 0, 120)}
+        {num('mppt_max_v', 'MPPT max', 'V', 0, 120)}
+        {num('mppt_count', 'MPPT inputs', 'pcs', 0, 110)}
+        {num('mppt_max_a', 'Max per MPPT', 'A', 0, 120)}
+        {num('ac_input_a', 'AC input', 'A', 0, 110)}
+        {num('battery_max_a', 'Battery max', 'A', 0, 120)}
+        <Field label="Grid-interactive" width={200}>
           <select
             value={it.grid_interactive === true ? 'yes' : it.grid_interactive === false ? 'no' : ''}
             onChange={(e) => set({ grid_interactive: e.target.value === 'yes' ? true : e.target.value === 'no' ? false : null })}
           >
-            <option value="">unknown</option>
-            <option value="yes">yes: may export (anti-islanding listed)</option>
-            <option value="no">no: off-grid type</option>
+            <option value="">Unknown</option>
+            <option value="yes">Yes, may export (anti-islanding listed)</option>
+            <option value="no">No, off-grid type</option>
           </select>
         </Field>
         <Field label="Certifications" width={260}>
@@ -73,9 +73,9 @@ function ElectricalFields({ it, set }: { it: ItemDraft; set: (p: Partial<ItemDra
             value={it.has_transfer_switch === true ? 'yes' : it.has_transfer_switch === false ? 'no' : ''}
             onChange={(e) => set({ has_transfer_switch: e.target.value === 'yes' ? true : e.target.value === 'no' ? false : null })}
           >
-            <option value="">unknown (an ATS is priced)</option>
-            <option value="yes">built in: no external ATS</option>
-            <option value="no">none: an ATS is priced</option>
+            <option value="">Unknown (an ATS is priced)</option>
+            <option value="yes">Built in, no external ATS</option>
+            <option value="no">None (an ATS is priced)</option>
           </select>
         </Field>
         <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>
@@ -88,7 +88,7 @@ function ElectricalFields({ it, set }: { it: ItemDraft; set: (p: Partial<ItemDra
   if (it.category === 'Battery') {
     return (
       <div className="row" style={{ marginTop: 6 }}>
-        {num('continuous_a', 'Continuous discharge (A)', 180, 1)}
+        {num('continuous_a', 'Continuous discharge', 'A', 0, 170)}
         <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>Checked against the inverter's battery current: the bank must deliver the inverter's rated output, and the battery breaker stays at or below this rating.</div>
       </div>
     )
@@ -122,14 +122,17 @@ function electricalSummary(it: MaterialItem): React.ReactNode {
   return ''
 }
 
-/** A fixed-width cell in an item form row: the label is attached to the single control inside it. */
-function Field({ label, width = 160, children }: { label: string; width?: number; children: React.ReactNode }) {
+/** A fixed-width cell in an item form row: the label is attached to the single control inside it, the unit beside it. */
+function Field({ label, width = 160, unit, children }: { label: string; width?: number; unit?: React.ReactNode; children: React.ReactNode }) {
   const id = useId()
   const control = isValidElement(children) ? cloneElement(children as ReactElement<{ id?: string }>, { id }) : children
   return (
     <div className={width ? 'narrow field' : 'field'} style={width ? { width } : { flex: '2 1 260px' }}>
       <label htmlFor={id}>{label}</label>
-      <div className="control">{control}</div>
+      <div className="control">
+        {control}
+        {unit && <span className="unit">{unit}</span>}
+      </div>
     </div>
   )
 }
@@ -161,31 +164,28 @@ function ItemForm({ it, set, codeEditable }: { it: ItemDraft; set: (p: Partial<I
         <Field label="Sold as" width={100}>
           <input value={it.sold_as} onChange={(e) => set({ sold_as: e.target.value })} />
         </Field>
-        <Field label="List price (₱)" width={130}>
-          <NumberInput value={it.list_price} onChange={(v) => set({ list_price: v ?? 0 })} min={0} />
+        <Field label="List price" width={140} unit="₱">
+          <NumberInput value={it.list_price} onChange={(v) => set({ list_price: v ?? 0 })} min={0} decimals={2} />
         </Field>
-        <Field label="Rating" width={100}>
-          <NumberInput value={it.rating} onChange={(v) => set({ rating: v })} allowEmpty />
-        </Field>
-        <Field label="Rating unit" width={100}>
-          <input value={it.rating_unit} onChange={(e) => set({ rating_unit: e.target.value })} placeholder="W, kW, kWh, A" />
+        <Field label="Rating" width={210} unit={<input value={it.rating_unit} onChange={(e) => set({ rating_unit: e.target.value })} placeholder="W, kW, kWh, A" aria-label="Rating unit" style={{ width: 92 }} />}>
+          <NumberInput value={it.rating} onChange={(v) => set({ rating: v })} allowEmpty decimals={2} />
         </Field>
       </div>
       <div className="row" style={{ marginTop: 6 }}>
-        <Field label="Weight (kg)" width={110}>
-          <NumberInput value={it.weight_kg} onChange={(v) => set({ weight_kg: v ?? 0 })} min={0} />
+        <Field label="Weight" width={120} unit="kg">
+          <NumberInput value={it.weight_kg} onChange={(v) => set({ weight_kg: v ?? 0 })} min={0} decimals={2} />
         </Field>
-        <Field label="Volume (m³)" width={110}>
-          <NumberInput value={it.volume_m3} onChange={(v) => set({ volume_m3: v ?? 0 })} min={0} step={0.0001} />
+        <Field label="Volume" width={120} unit="m³">
+          <NumberInput value={it.volume_m3} onChange={(v) => set({ volume_m3: v ?? 0 })} min={0} decimals={it.volume_m3 > 0 && it.volume_m3 < 0.01 ? 3 : 2} />
         </Field>
-        <Field label="Storage (₱)" width={100}>
-          <NumberInput value={it.storage} onChange={(v) => set({ storage: v ?? 0 })} min={0} />
+        <Field label="Storage" width={110} unit="₱">
+          <NumberInput value={it.storage} onChange={(v) => set({ storage: v ?? 0 })} min={0} decimals={0} />
         </Field>
-        <Field label="Panel length (m)" width={130}>
-          <NumberInput value={it.panel_length_m} onChange={(v) => set({ panel_length_m: v })} allowEmpty step={0.001} />
+        <Field label="Panel length" width={130} unit="m">
+          <NumberInput value={it.panel_length_m} onChange={(v) => set({ panel_length_m: v })} allowEmpty decimals={3} />
         </Field>
-        <Field label="Panel width (m)" width={130}>
-          <NumberInput value={it.panel_width_m} onChange={(v) => set({ panel_width_m: v })} allowEmpty step={0.001} />
+        <Field label="Panel width" width={130} unit="m">
+          <NumberInput value={it.panel_width_m} onChange={(v) => set({ panel_width_m: v })} allowEmpty decimals={3} />
         </Field>
         <Field label="Price list date" width={130}>
           <input value={it.price_list_date} onChange={(e) => set({ price_list_date: e.target.value })} />
@@ -444,7 +444,7 @@ export default function MaterialsPage({ user }: { user: Me }) {
                       {it.category === 'Solar Panel'
                         ? it.panel_length_m && it.panel_width_m
                           ? `${it.panel_length_m} × ${it.panel_width_m} m`
-                          : <span className="badge bad">no size</span>
+                          : <span className="badge bad">No size</span>
                         : ''}
                     </td>
                     <td data-label="Electrical">{electricalSummary(it)}</td>

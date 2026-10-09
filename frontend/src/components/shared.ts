@@ -2,16 +2,47 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { PricingBlock, PricingChoices, PricingConfig, Results, SizingBlock } from '../types'
 
-/** The pricing settings in the groups the owner looks for them under; a section the map does not name lands in
- * "Other settings" at the end, so a section added later is never lost. The ids are the Settings index's anchors. */
-export const PRICING_GROUPS: { id: string; label: string; lead: string; sections: string[] }[] = [
-  { id: 'pricing-materials', label: 'Materials and markup tiers', lead: 'What each item sells for: the markup tier and wastage per category, the job-level markups, VAT and rounding, the parts the generator picks, and the wiring rules.', sections: ['categories', 'job', 'roles', 'wiring'] },
-  { id: 'pricing-labor', label: 'Labor and crew', lead: 'Day rates, the roof and ground work rates behind the man-hours, hauling, crew transport, tools, and the job defaults a project starts from.', sections: ['labor', 'job_defaults', 'roof', 'ground', 'hauling', 'mobdemob', 'tools'] },
-  { id: 'pricing-freight', label: 'Freight and the truck', lead: 'The base, the truck and its running cost, handling at base, and the route with its km and toll matrices.', sections: ['company_base', 'truck', 'handling', 'route'] },
-  { id: 'pricing-program', label: 'Program of works', lead: 'The site day, the durations the schedule assumes, when money moves, and the payment terms a proposal starts from.', sections: ['program'] },
-  { id: 'pricing-economics', label: 'Economics and warranties', lead: 'Tariff, export credit, price rise, the analysis period and the lifetimes the customer savings count on.', sections: ['economics'] },
-  { id: 'pricing-system', label: 'System design and the website estimate', lead: 'Losses after the panels, how many evenings the battery must carry, and the typical roof the public estimate assumes.', sections: ['system_losses', 'sizing', 'quick'] },
+/** Settings is a menu of pages, one route each: picking an entry shows that page alone. The six pricing entries share
+ * one draft of the pricing config; a pricing section the entries do not name lands at the end of System design under
+ * "Other settings", so a section added later is never lost. `owner` entries are hidden from an engineer. */
+export interface SettingsEntry {
+  id: string
+  route: string
+  label: string
+  /** One line under the title (the phone list shows it under the label). */
+  lead: string
+  owner?: boolean
+  /** The pricing config sections this page edits, in page order. */
+  sections?: string[]
+}
+
+export const SETTINGS_ENTRIES: SettingsEntry[] = [
+  { id: 'company', route: '/settings/company', label: 'Company', lead: 'Who you are on the documents: profile, contact line, warranties, where to pay.' },
+  { id: 'website', route: '/settings/website', label: 'Website', lead: 'The estimate page and the booking form: links, brands, privacy line, and what the public estimate assumes.', owner: true },
+  { id: 'materials', route: '/settings/pricing/materials', label: 'Materials and markup', lead: 'What each item sells for: markup and wastage by category, the job-level fees and VAT, the wiring rules and the items the generator picks.', owner: true, sections: ['categories', 'job', 'wiring', 'roles'] },
+  { id: 'labor', route: '/settings/pricing/labor', label: 'Labor and crew', lead: 'Day rates, the roof and ground work behind the man-hours, hauling, crew transport, tools, and the job defaults a project starts from.', owner: true, sections: ['labor', 'job_defaults', 'roof', 'ground', 'hauling', 'mobdemob', 'tools'] },
+  { id: 'freight', route: '/settings/pricing/freight', label: 'Freight and the truck', lead: 'The base, the truck and its running cost, handling at base, and the route with its km and toll between stops.', owner: true, sections: ['company_base', 'truck', 'handling', 'route'] },
+  { id: 'program', route: '/settings/pricing/program', label: 'Program of works', lead: 'The site day, the durations the schedule assumes, the payment terms a proposal starts from, and when money moves.', owner: true, sections: ['program'] },
+  { id: 'savings', route: '/settings/pricing/savings', label: 'Customer savings', lead: 'Tariff, export credit, price rise, the analysis period and the lifetimes the customer savings count on.', owner: true, sections: ['economics'] },
+  { id: 'system', route: '/settings/pricing/system', label: 'System design', lead: 'Losses after the panels and how many evenings the battery must carry.', owner: true, sections: ['system_losses', 'sizing'] },
+  { id: 'account', route: '/settings/account', label: 'Your account', lead: 'Your password, two-step verification, security keys and devices.' },
+  { id: 'people', route: '/settings/people', label: 'People', lead: 'Who can sign in to the back office.', owner: true },
+  { id: 'data', route: '/settings/data', label: 'Weather and data', lead: 'The weather dataset every calculation runs on.' },
 ]
+
+/** The pricing section the Website page edits beside the profile fields (the public estimate's assumptions). */
+export const WEBSITE_SECTION = 'quick'
+
+/** The entry a settings path belongs to, for the top bar's page name and the menu's current mark. */
+export function settingsEntryFor(pathname: string): SettingsEntry | undefined {
+  return SETTINGS_ENTRIES.find((e) => pathname === e.route || pathname.startsWith(e.route + '/'))
+}
+
+/** Round for display: a value shown with `decimals` places, trailing zeros dropped (12.5, 12, 0.89). */
+export const roundTo = (v: number, decimals: number) => {
+  const f = 10 ** decimals
+  return Math.round(v * f) / f
+}
 
 /** Axis ticks in thousands: "1.5k" when the step is under a thousand, "2k" otherwise. */
 export const kTick = (v: number) => (Math.abs(v) < 1000 ? String(v) : Number.isInteger(v / 1000) ? `${v / 1000}k` : `${(v / 1000).toFixed(1)}k`)

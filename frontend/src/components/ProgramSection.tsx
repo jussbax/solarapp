@@ -1,17 +1,17 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { PaymentMilestone, PaymentPlan, PricingConfig, ProgramBlock, ProgramJob } from '../types'
 import NumberInput from './NumberInput'
 import Field from './Field'
 import { Gantt } from './Gantt'
 import { useElementWidth } from './responsive'
-import { fillWeeks, kTick, usePricingDefaults } from './shared'
+import { fillWeeks, kTick, roundTo, usePricingDefaults } from './shared'
 import { fmtDate, fmtDateShort, php0 } from '../fmt'
 
 const d = fmtDate
-const EVENTS: { id: string; label: string }[] = [
-  { id: 'signing', label: 'Signing' }, { id: 'materials_on_site', label: 'Delivery to site' }, { id: 'installation_done', label: 'End of installation' },
-  { id: 'commissioning', label: 'Switch-on' }, { id: 'cfei', label: 'Final inspection certificate' }, { id: 'meter_installed', label: 'Meter installed' },
+const EVENTS: { id: string; label: string; on: string }[] = [
+  { id: 'signing', label: 'Signing', on: 'signing' }, { id: 'materials_on_site', label: 'Delivery to site', on: 'delivery' }, { id: 'installation_done', label: 'End of installation', on: 'the end of installation' },
+  { id: 'commissioning', label: 'Switch-on', on: 'switch-on' }, { id: 'cfei', label: 'Final inspection certificate', on: 'the final inspection' }, { id: 'meter_installed', label: 'Meter installed', on: 'the meter' },
 ]
 // colours validated for colour-blind separation and contrast on the light surface; as text the gold is --gold-text (4.9:1)
 const C_IN = '#C9A227'
@@ -21,9 +21,9 @@ const GOLD_TEXT = 'var(--gold-text)'
 
 const same = (a: number | null | undefined, b: number | null | undefined) => a != null && b != null && Math.abs(a - b) < 1e-9
 
-/** A project number whose value in force is always visible: the job's own value, or the default shown filled and
- * tagged "default". Typing a value makes it an override (tagged, with the way back); typing the default itself, or
- * clearing the field, goes back to the default. `fallback` undefined means the default is not known yet. */
+/** A project number whose value in force is always visible: the job's own value, or the company default shown
+ * filled and untagged. Typing a value makes it an override (tagged, with the way back); typing the default itself,
+ * or clearing the field, goes back to the default. `fallback` undefined means the default is not known yet. */
 export function DefaultNum({
   label,
   value,
@@ -31,6 +31,7 @@ export function DefaultNum({
   onChange,
   unit,
   help,
+  about,
   unknownHelp,
   step,
   min,
@@ -43,23 +44,26 @@ export function DefaultNum({
   onChange: (v: number | null) => void
   unit?: string
   help?: string
+  /** The long explanation, behind the "?" beside the label. */
+  about?: string
   /** Help while the default is not known yet (before the first calculation). */
   unknownHelp?: string
   step?: number
   min?: number
   max?: number
-  /** The default is shown rounded to this many decimals (a bill-derived tariff carries many more). */
+  /** Decimals shown for the quantity kind; the default is rounded the same way (a bill-derived tariff carries many more). */
   decimals?: number
 }) {
   const isDefault = value == null
   const known = fallback != null
-  const rounded: number | null = known ? Math.round(fallback * 10 ** decimals) / 10 ** decimals : null
+  const rounded: number | null = known ? roundTo(fallback, decimals) : null
   const shown: number | null = isDefault ? rounded : value
   return (
     <Field
       label={label}
       unit={unit}
-      help={isDefault && !known ? (unknownHelp ?? 'From the settings; shown after the first calculation.') : help}
+      help={isDefault && !known ? (unknownHelp ?? 'Shown after the first calculation') : help}
+      about={about}
       state={isDefault ? (known ? 'default' : undefined) : 'override'}
       onUseDefault={() => onChange(null)}
     >
@@ -67,6 +71,7 @@ export function DefaultNum({
         <NumberInput
           id={id}
           value={shown}
+          decimals={decimals}
           onChange={(v) => onChange(same(v, rounded) || same(v, fallback) ? null : v)}
           allowEmpty
           placeholder={known ? undefined : 'from the settings'}
@@ -79,11 +84,64 @@ export function DefaultNum({
   )
 }
 
-function Num({ label, value, onChange, hint, step, min }: { label: string; value: number | null; onChange: (v: number | null) => void; hint?: string; step?: number; min?: number }) {
-  return <Field label={label}>{(id) => <NumberInput id={id} value={value} onChange={onChange} allowEmpty placeholder={hint} step={step} min={min} />}</Field>
+/** The inputs a job rarely changes, folded under one line; the fold opens itself while it holds an override. */
+export function AdjustFold({ changed, children, testId = 'adjust' }: { changed: number; children: ReactNode; testId?: string }) {
+  const [open, setOpen] = useState(changed > 0)
+  return (
+    <details className="more adjust" open={open} onToggle={(e) => setOpen(e.currentTarget.open)} data-testid={testId}>
+      <summary>
+        Adjust for this job
+        {changed > 0 && <span className="muted"> · {changed} changed</span>}
+      </summary>
+      {children}
+    </details>
+  )
 }
 
-export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = false }: { plan: PaymentPlan | null; defaults: PaymentPlan | undefined; onChange: (p: PaymentPlan | null) => void; hideDefaultLink?: boolean }) {
+/** "50% on signing, 40% on delivery, 10% on switch-on; then 6 payments of 10% every 30 days". */
+function describePlan(p: PaymentPlan): string {
+  const parts = p.milestones.map((m) => `${roundTo(m.share * 100, 1)}% on ${EVENTS.find((e) => e.id === m.event)?.on ?? m.event}${m.offset_days ? ` + ${m.offset_days} days` : ''}`)
+  const text = parts.join(', ')
+  if (p.installments > 0) return `${text}; then ${p.installments} payments of ${roundTo((p.installment_share / p.installments) * 100, 1)}% every ${p.installment_interval_days} days`
+  return text
+}
+
+/** The payment terms as one line ("Company terms: 50% on signing, ...") with Change; the editor opens only on Change. */
+export function PaymentTermsLine({ plan, defaults, onChange }: { plan: PaymentPlan | null; defaults: PaymentPlan | undefined; onChange: (p: PaymentPlan | null) => void }) {
+  const [editing, setEditing] = useState(false)
+  const shown = plan ?? defaults
+  if (editing) {
+    return (
+      <div className="terms-editor" data-testid="payment-terms">
+        <PaymentPlanEditor plan={plan} defaults={defaults} onChange={onChange} />
+        <div style={{ marginTop: 4 }}>
+          <button type="button" className="toggle link" onClick={() => setEditing(false)}>
+            Done
+          </button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="terms-line" data-testid="payment-terms">
+      <b>Payment terms</b>
+      <span>
+        {plan ? 'This job: ' : 'Company terms: '}
+        {shown ? describePlan(shown) : 'shown after the first calculation'}
+      </span>
+      <button type="button" className="toggle link" onClick={() => setEditing(true)}>
+        Change
+      </button>
+      {plan && (
+        <button type="button" className="toggle link" onClick={() => onChange(null)}>
+          Use company terms
+        </button>
+      )}
+    </div>
+  )
+}
+
+export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = false, heading = true }: { plan: PaymentPlan | null; defaults: PaymentPlan | undefined; onChange: (p: PaymentPlan | null) => void; hideDefaultLink?: boolean; heading?: boolean }) {
   const base: PaymentPlan = plan ?? defaults ?? { milestones: [], installments: 0, installment_share: 0, installment_interval_days: 30, installment_start_event: 'commissioning', installment_first_offset_days: 30 }
   const set = (p: Partial<PaymentPlan>) => onChange({ ...base, ...p })
   const setM = (i: number, p: Partial<PaymentMilestone>) => set({ milestones: base.milestones.map((m, j) => (j === i ? { ...m, ...p } : m)) })
@@ -91,23 +149,25 @@ export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = 
   const known = plan != null || defaults != null // before the first compute the company default is not loaded yet
   return (
     <div className="set-card">
-      <div className="card-head">
-        <b>Payment terms</b>
-        <span className="muted">
-          {hideDefaultLink ? '' : plan ? (
-            <>
-              <span className="field-tag override" style={{ cursor: 'default' }}>override</span>{' '}
-              <button type="button" className="toggle link" onClick={() => onChange(null)}>
-                use default
-              </button>
-            </>
-          ) : known ? (
-            <span className="field-tag">default</span>
-          ) : (
-            'company default (shown after the first calculation)'
-          )}
-        </span>
-      </div>
+      {heading && (
+        <div className="card-head">
+          <b>Payment terms</b>
+          <span className="muted">
+            {hideDefaultLink ? '' : plan ? (
+              <>
+                <span className="field-tag override" style={{ cursor: 'default' }}>Override</span>{' '}
+                <button type="button" className="toggle link" onClick={() => onChange(null)}>
+                  Use company terms
+                </button>
+              </>
+            ) : known ? (
+              'The company terms'
+            ) : (
+              'Company terms, shown after the first calculation'
+            )}
+          </span>
+        </div>
+      )}
       {/* under 640 px the rows stack as cards (data-label headings) so the Due at select is not 40 px wide */}
       <table className="payments">
         <thead>
@@ -126,7 +186,7 @@ export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = 
                 <input value={m.label} onChange={(e) => setM(i, { label: e.target.value })} aria-label={`Milestone ${i + 1} name`} />
               </td>
               <td className="num" style={{ width: 90 }} data-label="Share %">
-                <NumberInput value={Math.round(m.share * 1000) / 10} onChange={(v) => setM(i, { share: (v ?? 0) / 100 })} min={0} max={100} ariaLabel={`Milestone ${i + 1} share %`} />
+                <NumberInput value={Math.round(m.share * 1000) / 10} decimals={1} onChange={(v) => setM(i, { share: (v ?? 0) / 100 })} min={0} max={100} ariaLabel={`Milestone ${i + 1} share %`} />
               </td>
               <td data-label="Due at">
                 <select value={m.event} onChange={(e) => setM(i, { event: e.target.value })} aria-label={`Milestone ${i + 1} due at`}>
@@ -138,32 +198,35 @@ export function PaymentPlanEditor({ plan, defaults, onChange, hideDefaultLink = 
                 </select>
               </td>
               <td className="num" style={{ width: 80 }} data-label="Plus days">
-                <NumberInput value={m.offset_days} onChange={(v) => setM(i, { offset_days: v ?? 0 })} step={1} ariaLabel={`Milestone ${i + 1} plus days`} />
+                <NumberInput value={m.offset_days} decimals={0} onChange={(v) => setM(i, { offset_days: v ?? 0 })} ariaLabel={`Milestone ${i + 1} plus days`} />
               </td>
               <td className="cell-actions">
                 <button type="button" className="toggle link" onClick={() => set({ milestones: base.milestones.filter((_, j) => j !== i) })}>
-                  remove
+                  Remove
                 </button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <div className="form-grid fit" style={{ marginTop: 8 }}>
-        <div className="field-action">
-          <button type="button" onClick={() => set({ milestones: [...base.milestones, { key: `m${base.milestones.length + 1}`, label: 'Payment', share: 0, event: 'commissioning', offset_days: 0 }] })}>
-            Add milestone
-          </button>
-        </div>
-        <Num label="Installments" value={base.installments} onChange={(v) => set({ installments: v ?? 0 })} step={1} min={0} />
+      <div style={{ marginTop: 8 }}>
+        <button type="button" className="small" onClick={() => set({ milestones: [...base.milestones, { key: `m${base.milestones.length + 1}`, label: 'Payment', share: 0, event: 'commissioning', offset_days: 0 }] })}>
+          Add milestone
+        </button>
+      </div>
+      {/* the installments line on the same four columns as the lines above it */}
+      <div className="form-grid" style={{ marginTop: 8 }}>
+        <Field label="Installments" unit="payments" help="0 = none">
+          {(id) => <NumberInput id={id} value={base.installments} decimals={0} onChange={(v) => set({ installments: v ?? 0 })} min={0} />}
+        </Field>
         <Field label="Installment share" unit="%">
-          {(id) => <NumberInput id={id} value={Math.round(base.installment_share * 1000) / 10} onChange={(v) => set({ installment_share: (v ?? 0) / 100 })} min={0} allowEmpty />}
+          {(id) => <NumberInput id={id} value={Math.round(base.installment_share * 1000) / 10} decimals={1} onChange={(v) => set({ installment_share: (v ?? 0) / 100 })} min={0} allowEmpty />}
         </Field>
         <Field label="Every" unit="days">
-          {(id) => <NumberInput id={id} value={base.installment_interval_days} onChange={(v) => set({ installment_interval_days: v ?? 30 })} step={1} min={1} allowEmpty />}
+          {(id) => <NumberInput id={id} value={base.installment_interval_days} decimals={0} onChange={(v) => set({ installment_interval_days: v ?? 30 })} min={1} allowEmpty />}
         </Field>
         <Field label="First one after" unit="days">
-          {(id) => <NumberInput id={id} value={base.installment_first_offset_days} onChange={(v) => set({ installment_first_offset_days: v ?? 30 })} step={1} min={0} allowEmpty />}
+          {(id) => <NumberInput id={id} value={base.installment_first_offset_days} decimals={0} onChange={(v) => set({ installment_first_offset_days: v ?? 30 })} min={0} allowEmpty />}
         </Field>
         <Field label="Counted from">
           {(id) => (
@@ -197,7 +260,7 @@ function useTimeDefaults(cfg: PricingConfig | null, program: ProgramBlock | null
 function TimeField({ label, value, fallback, onChange }: { label: string; value: string | null; fallback: string; onChange: (v: string | null) => void }) {
   const isDefault = !value
   return (
-    <Field label={label} state={isDefault ? (fallback ? 'default' : undefined) : 'override'} onUseDefault={() => onChange(null)} help={isDefault && !fallback ? 'The program settings decide; shown after the first calculation.' : undefined}>
+    <Field label={label} state={isDefault ? (fallback ? 'default' : undefined) : 'override'} onUseDefault={() => onChange(null)} help={isDefault && !fallback ? 'Shown after the first calculation' : undefined}>
       {(id) => <input id={id} type="time" value={value ?? fallback} onChange={(e) => onChange(e.target.value && e.target.value !== fallback ? e.target.value : null)} />}
     </Field>
   )
@@ -216,31 +279,34 @@ export function ProgramInputs({ job, program, onChange }: { job: ProgramJob; pro
   const pc = cfg?.program ?? {}
   const today = localToday()
   const installDefault = job.install_date == null && program?.available ? program.install_start ?? '' : ''
+  const changed = [job.depart_time, job.lunch_start, job.lunch_minutes, job.permit_approval_days, job.netmeter_application_days, job.netmeter_meter_days].filter((v) => v != null).length
   return (
     <div>
-      <div className="lead">
-        A value tagged <span className="field-tag">default</span> comes from the program settings and is the one in force; type over it to change it for this job only. Permit and electric company durations are assumptions until you have data.
-      </div>
+      <div className="lead">All values are the company's program settings unless tagged; type over one to change it for this job only.</div>
       <div className="form-grid">
-        <Field label="Signing date" state={job.signing_date ? 'override' : 'default'} onUseDefault={() => set({ signing_date: null })} help={job.signing_date ? undefined : 'Today.'}>
+        <Field label="Signing date" state={job.signing_date ? 'override' : 'default'} onUseDefault={() => set({ signing_date: null })} help={job.signing_date ? undefined : 'Today'}>
           {(id) => <input id={id} type="date" value={job.signing_date ?? today} onChange={(e) => set({ signing_date: e.target.value && e.target.value !== today ? e.target.value : null })} />}
         </Field>
         <Field
           label="Installation start"
           state={job.install_date ? 'override' : installDefault ? 'default' : undefined}
           onUseDefault={() => set({ install_date: null })}
-          help={job.install_date ? undefined : installDefault ? 'The day after the permit is expected.' : 'The day after the permit is expected; shown after the first calculation.'}
+          help={job.install_date ? undefined : installDefault ? 'After the permit' : 'After the permit; shown after the first calculation'}
         >
           {(id) => <input id={id} type="date" value={job.install_date ?? installDefault} onChange={(e) => set({ install_date: e.target.value && e.target.value !== installDefault ? e.target.value : null })} />}
         </Field>
-        <TimeField label="Leave base at" value={job.depart_time} fallback={defaults.depart} onChange={(depart_time) => set({ depart_time })} />
-        <TimeField label="Lunch at" value={job.lunch_start} fallback={defaults.lunch} onChange={(lunch_start) => set({ lunch_start })} />
-        <DefaultNum label="Lunch" unit="minutes" value={job.lunch_minutes} fallback={pc.lunch_minutes} onChange={(v) => set({ lunch_minutes: v })} step={5} min={0} />
-        <DefaultNum label="Electrical permit approval" unit="days" value={job.permit_approval_days} fallback={pc.permit_approval_days} onChange={(v) => set({ permit_approval_days: v })} step={1} min={0} />
-        <DefaultNum label="Net metering application" unit="days" value={job.netmeter_application_days} fallback={pc.netmeter_application_days} onChange={(v) => set({ netmeter_application_days: v })} step={1} min={0} />
-        <DefaultNum label="Inspection and net metering meter" unit="days" value={job.netmeter_meter_days} fallback={pc.netmeter_meter_days} onChange={(v) => set({ netmeter_meter_days: v })} step={1} min={0} />
       </div>
-      <PaymentPlanEditor plan={job.payment} defaults={program?.payment_plan ?? cfg?.program?.payment} onChange={(payment) => set({ payment })} />
+      <AdjustFold changed={changed} testId="adjust-program">
+        <div className="form-grid">
+          <TimeField label="Leave base at" value={job.depart_time} fallback={defaults.depart} onChange={(depart_time) => set({ depart_time })} />
+          <TimeField label="Lunch at" value={job.lunch_start} fallback={defaults.lunch} onChange={(lunch_start) => set({ lunch_start })} />
+          <DefaultNum label="Lunch break" unit="minutes" value={job.lunch_minutes} fallback={pc.lunch_minutes} onChange={(v) => set({ lunch_minutes: v })} step={5} min={0} decimals={0} />
+          <DefaultNum label="Electrical permit approval" unit="days" value={job.permit_approval_days} fallback={pc.permit_approval_days} onChange={(v) => set({ permit_approval_days: v })} min={0} decimals={0} help="Assumption" about="An assumption until you have data from the LGU." />
+          <DefaultNum label="Net metering application" unit="days" value={job.netmeter_application_days} fallback={pc.netmeter_application_days} onChange={(v) => set({ netmeter_application_days: v })} min={0} decimals={0} help="Assumption" />
+          <DefaultNum label="Inspection and net metering meter" unit="days" value={job.netmeter_meter_days} fallback={pc.netmeter_meter_days} onChange={(v) => set({ netmeter_meter_days: v })} min={0} decimals={0} help="After switch-on" />
+        </div>
+      </AdjustFold>
+      <PaymentTermsLine plan={job.payment} defaults={program?.payment_plan ?? cfg?.program?.payment} onChange={(payment) => set({ payment })} />
     </div>
   )
 }
@@ -292,7 +358,7 @@ export function ProgramResults({ program }: { program: ProgramBlock }) {
               <th>Until</th>
               <th>Activity</th>
               <th className="num">Amount</th>
-              <th>Customer</th>
+              <th>Customer sees</th>
             </tr>
           </thead>
           <tbody>
@@ -302,7 +368,7 @@ export function ProgramResults({ program }: { program: ProgramBlock }) {
                 <td style={{ whiteSpace: 'nowrap' }}>{e.end && e.end !== e.date ? d(e.end) : ''}</td>
                 <td>{e.label}</td>
                 <td className="num">{e.amount != null ? php0(e.amount) : ''}</td>
-                <td>{e.customer ? 'sees this' : ''}</td>
+                <td>{e.customer ? <span aria-label="The customer sees this">✓</span> : ''}</td>
               </tr>
             ))}
           </tbody>
@@ -325,7 +391,7 @@ export function ProgramResults({ program }: { program: ProgramBlock }) {
             </button>
           ))}
           <button type="button" className={`toggle ${view === 'tasks' ? 'on' : ''}`} onClick={() => setView(view === 'tasks' ? 'hourly' : 'tasks')}>
-            task list
+            Task list
           </button>
         </span>
       </h3>

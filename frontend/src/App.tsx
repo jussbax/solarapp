@@ -9,6 +9,7 @@ import SettingsPage from './pages/SettingsPage'
 import MaterialsPage from './pages/MaterialsPage'
 import DataBanner from './components/DataBanner'
 import ChangePassword from './components/ChangePassword'
+import { settingsEntryFor } from './components/shared'
 
 /** The three places in the back office. The estimate page is a website preview and lives under Settings › Website; website bookings are the CRM's and only start projects here. */
 const NAV: { to: string; label: string; match: (path: string) => boolean }[] = [
@@ -49,7 +50,8 @@ export default function App() {
   }
 
   const current = NAV.find((n) => n.match(location.pathname))
-  const pageName = location.pathname.startsWith('/assessments/') ? 'Project' : (current?.label ?? '')
+  // on the phone the top bar names the settings page that is open (Settings is a menu of pages)
+  const pageName = location.pathname.startsWith('/assessments/') ? 'Project' : location.pathname.startsWith('/settings/') ? (settingsEntryFor(location.pathname)?.label ?? 'Settings') : (current?.label ?? '')
 
   // a temporary password (first sign-in, or after the owner reset it) opens nothing until the person chooses their own
   if (user?.must_change_password) {
@@ -100,7 +102,7 @@ export default function App() {
                 {n.label}
               </Link>
             ))}
-            <Link to="/settings#account" className="who" title={`Signed in as ${user.username}${user.role === 'owner' ? ' (owner)' : ''}`}>
+            <Link to="/settings/account" className="who" title={`Signed in as ${user.username}${user.role === 'owner' ? ' (owner)' : ''}`}>
               {user.display_name || user.username}
             </Link>
             <button onClick={logout}>Sign out</button>
@@ -114,7 +116,7 @@ export default function App() {
           <Route path="/" element={user ? <AssessmentListPage /> : <Navigate to="/login" />} />
           <Route path="/assessments/:id" element={user ? <AssessmentPage status={status} /> : <Navigate to="/login" />} />
           <Route path="/materials" element={user ? <MaterialsPage user={user} /> : <Navigate to="/login" />} />
-          <Route path="/settings" element={user ? <SettingsPage user={user} onUser={setUser} status={status} onRefresh={refreshStatus} /> : <Navigate to="/login" />} />
+          <Route path="/settings/*" element={user ? <SettingsPage user={user} onUser={setUser} status={status} onRefresh={refreshStatus} /> : <Navigate to="/login" />} />
           <Route
             path="*"
             element={

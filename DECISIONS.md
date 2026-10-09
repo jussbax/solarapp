@@ -1239,3 +1239,77 @@ and built; the next sections record them.
   the base in Pila with the pin's extra kilometres, so a far site carries a
   long trip; a regional base, or a freight rule per island group, is the
   owner's call when such jobs come.
+
+## Round 4, forms: the pattern on every field, Settings as a menu, the project's inputs folded
+
+- The owner's screenshots of round 4 (14 to 18 and 20) were not alignment
+  but content never designed for a form: 13-decimal workbook floats, a
+  JSON box, comma lists, units cut by a 45 % cap, 56 number settings with
+  no unit because they had no META entry, help texts of twelve lines
+  stretching their whole row, a block headed twice, two tables sitting
+  beside single fields, lowercase row names, "…" summaries. Nine rules
+  close them and the rules are now the form system's contract: a number
+  reads as a person says it (`NumberInput` takes `decimals`, rounds the
+  shown value and keeps the stored precision until the owner retypes;
+  money 0, rates per kWh or km 2, hours 2, percent 1, counts 0, metres 2,
+  km 1, factors 2, volts 1, coordinates and physical constants 4); a unit
+  sits beside the control at twelve characters or fewer and is never
+  clipped (a longer qualifier is the help line); the help under a field is
+  one line of at most 24 characters in a four-column cell and the long
+  text sits behind a "?" beside the label (`Field` takes `about`; the note
+  opens in a lane that spans the whole grid line under the row, the line
+  below moves down, one note at a time, Escape or a tap elsewhere closes
+  it; the form grid's subgrid has a fourth row for the lane); a table is a
+  block on a line of its own (`own-line`), never beside a single field;
+  a block has one heading; nothing is a JSON box (the ground tasks, the
+  route's stops, the breaker sizes, the word lists and every size table
+  are editors with Add and Remove; a shape the editor does not know says
+  "Set by the developer"); spinner arrows are nowhere (one CSS rule); labels,
+  options, row headers and link-buttons are sentence case; nothing ends in
+  "…" (Gantt labels wrap to two lines); the form never asks what the app
+  knows (a default is shown untagged, only an override is tagged).
+- Every one of the pricing settings has a META entry (label, unit,
+  decimals, one-line help, long text) in `pricingMeta.ts`, and a backend
+  test reads that map against `PricingConfig` so a setting added without
+  its entry fails the suite. The stored workbook floats are untouched:
+  rounding only the display moves no price. A ground task the owner
+  removes from the table counts no hours instead of crashing the engine.
+- The owner's words, mid-round: "instead of 1 continuous form, why not
+  show what's only relevant to the menu you already created?" Settings is
+  eleven pages, one route each (`/settings/company`, `/settings/website`,
+  six `/settings/pricing/...` pages, `/settings/account`,
+  `/settings/people`, `/settings/data`): on the desk a left menu with the
+  one page beside it, on the phone a list of cards that opens one page
+  with a way back; the browser's back button works and the top bar names
+  the page. The six pricing pages share one draft of the pricing config
+  (`PricingDraftProvider`), so an owner may edit Labor then Freight and
+  save once; each page's sticky bar names the edited pages, the menu marks
+  them with a dot, Discard stays in the bar and Reset to defaults lives at
+  the foot of Materials and markup (with the ten-second undo). The website
+  estimate's assumptions moved from Pricing to the Website page, whose Save
+  writes the profile and the `quick` section in one press; the company base
+  is a name and a map pin on the Freight page. "Find a setting" at the top
+  of the menu lists every match across the pages ("VAT · Materials and
+  markup › Fees, markups and VAT"); a result opens its page with `?find=`
+  in the address, opens the fold it sits in, scrolls the field under the
+  top and rings it for two seconds. Your account and People keep their
+  components and routes; their insides are the accounts batch's. Links
+  from before the menu (`/settings#account`) land on their page.
+- The project's Pricing step shows what a job decides (the inverter, the
+  battery, the strings and the extra distance; the tariff; the signing and
+  installation dates) and folds the company defaults under "Adjust for
+  this job", a line that opens itself while it holds an override and says
+  how many. The payment terms are one line ("Company terms: 50% on signing,
+  40% on delivery, 10% on switch-on · Change") and the editor opens only on
+  Change. The roof productivity factor reads as a percent on the step as
+  it does in Settings.
+- Measured on the seeded private app before and after (desk and phone,
+  the audit's scanner): raw floats 9 → 0 (the three left are the read-only
+  copper constant and the base coordinates at the spec's four decimals),
+  JSON boxes 1 → 0, comma lists 5 → 0, clipped units 12/14 → 0, number
+  settings without a unit 56 → 0, help texts over one line 47/49 → 0,
+  spin arrows drawn 252 → 0 (the inputs stay `type=number` for the numeric
+  keypad; the arrows are hidden), lowercase strings 8 → 0 in these files,
+  "…" 25 → 0, duplicated headings 1 → 0, off-grid lines 4 → 0. The scanner
+  still lists a "?" or an override tag as a cell's first button; measured
+  on the controls alone the lines are on one edge.

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { EconomicsBlock, EconomicsJob } from '../types'
-import { DefaultNum } from './ProgramSection'
+import { AdjustFold, DefaultNum } from './ProgramSection'
 import { kTick, usePricingDefaults } from './shared'
 import { php0 } from '../fmt'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -25,11 +25,11 @@ export function EconomicsInputs({ job, eco, onChange }: { job: EconomicsJob; eco
     return job[key] == null ? used : undefined
   }
   const tariffDefault = job.tariff_php_per_kwh == null ? a?.tariff_php_per_kwh : undefined
+  const changed = [job.export_rate_php_per_kwh, job.tariff_escalation, job.degradation, job.analysis_years, job.discount_rate, job.battery_life_years, job.inverter_life_years, job.om_per_year].filter((v) => v != null).length
+  const upkeepPct = typeof ec.om_share_per_year === 'number' ? `${(ec.om_share_per_year * 100).toFixed(1)}% of the contract a year` : undefined
   return (
     <div>
-      <div className="lead">
-        A value tagged <span className="field-tag">default</span> comes from the savings settings (the tariff from the latest bill) and is the one in force; type over it to change it for this customer only.
-      </div>
+      <div className="lead">All values are the company's savings settings unless tagged, the tariff from the latest bill; type over one to change it for this customer only.</div>
       <div className="form-grid">
         <DefaultNum
           label="Tariff"
@@ -39,28 +39,34 @@ export function EconomicsInputs({ job, eco, onChange }: { job: EconomicsJob; eco
           onChange={(v) => set({ tariff_php_per_kwh: v })}
           step={0.1}
           min={0}
-          help={a && job.tariff_php_per_kwh == null ? `From ${a.tariff_source}: the latest bill's amount over its kWh, the effective rate the customer pays.` : 'The latest bill’s amount over its kWh.'}
-          unknownHelp="From the latest bill (the settings' tariff when there is no bill); shown after the first calculation."
-        />
-        <DefaultNum label="Export credit" unit="₱ per kWh" value={job.export_rate_php_per_kwh} fallback={def('export_rate_php_per_kwh', ec.export_rate_php_per_kwh, a?.export_rate_php_per_kwh)} onChange={(v) => set({ export_rate_php_per_kwh: v })} step={0.1} min={0} help="The electric company's blended generation rate under net metering, not the retail rate; check it for the customer's utility." />
-        <DefaultNum label="Electricity price rise" unit="% a year" value={pctIn(job.tariff_escalation)} fallback={pctIn(def('tariff_escalation', ec.tariff_escalation, a?.tariff_escalation)) ?? undefined} onChange={(v) => set({ tariff_escalation: pctOut(v) })} step={0.5} />
-        <DefaultNum label="Panel output loss" unit="% a year" value={pctIn(job.degradation)} fallback={pctIn(def('degradation', ec.degradation, a?.degradation)) ?? undefined} onChange={(v) => set({ degradation: pctOut(v) })} step={0.1} min={0} />
-        <DefaultNum label="Analysis period" unit="years" value={job.analysis_years} fallback={def('analysis_years', ec.analysis_years, a?.analysis_years)} onChange={(v) => set({ analysis_years: v })} step={1} min={1} />
-        <DefaultNum label="Discount rate" unit="%" value={pctIn(job.discount_rate)} fallback={pctIn(def('discount_rate', ec.discount_rate, a?.discount_rate)) ?? undefined} onChange={(v) => set({ discount_rate: pctOut(v) })} step={0.5} min={0} />
-        <DefaultNum label="Battery life" unit="years" value={job.battery_life_years} fallback={def('battery_life_years', ec.battery_life_years, a?.battery_life_years)} onChange={(v) => set({ battery_life_years: v })} step={1} min={1} />
-        <DefaultNum label="Inverter life" unit="years" value={job.inverter_life_years} fallback={def('inverter_life_years', ec.inverter_life_years, a?.inverter_life_years)} onChange={(v) => set({ inverter_life_years: v })} step={1} min={1} />
-        <DefaultNum
-          label="Upkeep"
-          unit="₱ a year"
-          value={job.om_per_year}
-          fallback={job.om_per_year == null ? a?.om_per_year : undefined}
-          onChange={(v) => set({ om_per_year: v })}
-          step={100}
-          min={0}
-          help={typeof ec.om_share_per_year === 'number' ? `${(ec.om_share_per_year * 100).toFixed(1)}% of the contract a year, per the settings.` : undefined}
-          unknownHelp={typeof ec.om_share_per_year === 'number' ? `${(ec.om_share_per_year * 100).toFixed(1)}% of the contract a year; the peso figure follows the first calculation.` : undefined}
+          help={a && job.tariff_php_per_kwh == null ? `From ${a.tariff_source}` : 'The latest bill'}
+          about="The latest bill's amount over its kWh: the effective rate the customer pays, including every charge on the bill. Without a bill amount the savings settings' tariff is used."
+          unknownHelp="From the latest bill; shown after the first calculation"
         />
       </div>
+      <AdjustFold changed={changed} testId="adjust-savings">
+        <div className="form-grid">
+          <DefaultNum label="Export credit" unit="₱ per kWh" value={job.export_rate_php_per_kwh} fallback={def('export_rate_php_per_kwh', ec.export_rate_php_per_kwh, a?.export_rate_php_per_kwh)} onChange={(v) => set({ export_rate_php_per_kwh: v })} step={0.1} min={0} help="The DU's generation rate" about="The electric company's blended generation rate under net metering, not the retail rate; check it for the customer's utility." />
+          <DefaultNum label="Electricity price rise" unit="% a year" value={pctIn(job.tariff_escalation)} fallback={pctIn(def('tariff_escalation', ec.tariff_escalation, a?.tariff_escalation)) ?? undefined} onChange={(v) => set({ tariff_escalation: pctOut(v) })} step={0.5} decimals={1} />
+          <DefaultNum label="Panel output loss" unit="% a year" value={pctIn(job.degradation)} fallback={pctIn(def('degradation', ec.degradation, a?.degradation)) ?? undefined} onChange={(v) => set({ degradation: pctOut(v) })} step={0.1} min={0} decimals={1} />
+          <DefaultNum label="Analysis period" unit="years" value={job.analysis_years} fallback={def('analysis_years', ec.analysis_years, a?.analysis_years)} onChange={(v) => set({ analysis_years: v })} min={1} decimals={0} />
+          <DefaultNum label="Discount rate" unit="%" value={pctIn(job.discount_rate)} fallback={pctIn(def('discount_rate', ec.discount_rate, a?.discount_rate)) ?? undefined} onChange={(v) => set({ discount_rate: pctOut(v) })} step={0.5} min={0} decimals={1} />
+          <DefaultNum label="Battery life" unit="years" value={job.battery_life_years} fallback={def('battery_life_years', ec.battery_life_years, a?.battery_life_years)} onChange={(v) => set({ battery_life_years: v })} min={1} decimals={0} help="The warranty, unless set" />
+          <DefaultNum label="Inverter life" unit="years" value={job.inverter_life_years} fallback={def('inverter_life_years', ec.inverter_life_years, a?.inverter_life_years)} onChange={(v) => set({ inverter_life_years: v })} min={1} decimals={0} help="Not the warranty" />
+          <DefaultNum
+            label="Upkeep"
+            unit="₱ a year"
+            value={job.om_per_year}
+            fallback={job.om_per_year == null ? a?.om_per_year : undefined}
+            onChange={(v) => set({ om_per_year: v })}
+            step={100}
+            min={0}
+            decimals={0}
+            help={upkeepPct}
+            unknownHelp={upkeepPct ? `${upkeepPct}; shown after the first calculation` : undefined}
+          />
+        </div>
+      </AdjustFold>
     </div>
   )
 }
