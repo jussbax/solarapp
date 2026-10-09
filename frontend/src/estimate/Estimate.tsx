@@ -350,12 +350,12 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
           <div className="pld-field pld-field-btn">
             <span>Or</span>
             <button type="button" className="pld-btn" onClick={useGps} disabled={geoBusy}>
-              {geoBusy ? 'Finding you…' : "Use my phone's location"}
+              {geoBusy ? 'Finding you…' : 'Use my location'}
             </button>
           </div>
         </div>
         {pin && !townName && <div className="pld-hint">Location set from your phone. Pick a town instead if that's not where the house is.</div>}
-        {!pin && !townName && <div className="pld-hint">Not in the list? Use your phone's location at the house, or message us.</div>}
+        {!pin && !townName && <div className="pld-hint">Not in the list? Use your location at the house, or message us.</div>}
 
         <div className="pld-step">3. How much electricity do you use in a month?</div>
         <div className="pld-row">

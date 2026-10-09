@@ -85,7 +85,7 @@ export default function MapPicker({
         </div>
         <div className="narrow">
           <button type="button" onClick={useGps}>
-            Use my phone's location
+            Use my location
           </button>
         </div>
       </div>

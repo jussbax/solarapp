@@ -83,10 +83,10 @@ def resolve_location(req: QuickRequest) -> dict:
     if req.town:
         t = find_town(req.town, req.province)
         if t is None:
-            raise ValueError("Please pick your town from the list, or use your phone's location.")
+            raise ValueError("Please pick your town from the list, or use your location.")
         return {"lat": t[2], "lon": t[3], "town": t[0], "province": t[1], "label": f"{t[0]}, {t[1]}", "in_area": True, "km_to_listed_town": 0.0}
     if req.lat is None or req.lon is None:
-        raise ValueError("Tell us where the house is: pick your town or use your phone's location.")
+        raise ValueError("Tell us where the house is: pick your town or use your location.")
     t, km = nearest_town(req.lat, req.lon)
     in_area = km <= OUT_OF_AREA_KM
     label = f"near {t[0]}, {t[1]}" if in_area else "outside the Philippines"
