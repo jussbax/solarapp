@@ -211,15 +211,18 @@ table.appliances td.cell-sticky { position: sticky; left: 0; background: #fff; z
 table.appliances button.when-used { white-space: nowrap; }
 table.appliances tr.window-editor td.cell-full { position: static; }
 @media (max-width: 640px) {
-  table.appliances, table.materials, table.bills { display: block; }
-  table.appliances thead, table.materials thead, table.bills thead { display: none; }
-  table.appliances tbody, table.materials tbody, table.bills tbody { display: block; }
-  table.appliances tr, table.materials tr, table.bills tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 10px; padding: 10px 0; border-bottom: 2px solid var(--line); }
+  table.appliances, table.materials, table.bills, table.people { display: block; }
+  table.appliances thead, table.materials thead, table.bills thead, table.people thead { display: none; }
+  table.appliances tbody, table.materials tbody, table.bills tbody, table.people tbody { display: block; }
+  table.appliances tr, table.materials tr, table.bills tr, table.people tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 10px; padding: 10px 0; border-bottom: 2px solid var(--line); }
   table.appliances button.when-used { white-space: normal; }
-  table.appliances td, table.materials td, table.bills td { display: block; border: 0; padding: 0; text-align: left; }
+  table.appliances td, table.materials td, table.bills td, table.people td { display: block; border: 0; padding: 0; text-align: left; }
+  table.people td.cell-actions { white-space: normal !important; }
+  table.people td.cell-actions button { margin: 2px 8px 2px 0; }
   table.appliances td.cell-sticky { position: static; box-shadow: none; }
-  table.appliances td.cell-main, table.materials td.cell-main, table.appliances td.cell-full, table.appliances td.cell-actions, table.materials td.cell-actions { grid-column: 1 / -1; }
-  td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
+  table.appliances td.cell-main, table.materials td.cell-main, table.people td.cell-main, table.appliances td.cell-full, table.appliances td.cell-actions, table.materials td.cell-actions, table.people td.cell-actions { grid-column: 1 / -1; }
+  /* captions only on the tables laid out as cards: a plain table keeps its header row */
+  table.appliances td[data-label]::before, table.materials td[data-label]::before, table.bills td[data-label]::before, table.people td[data-label]::before, table.bom td[data-label]::before, table.payments td[data-label]::before, table.categories td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
   td.cell-main[data-label]::before { display: none; }
   table.appliances td input, table.appliances td select, table.bills td input { width: 100%; }
   table.appliances td.num button { width: 100%; }
@@ -407,3 +410,4 @@ table.categories td { padding: 4px 6px; }
   table.payments td input, table.payments td select, table.categories td input { width: 100% !important; }
 }
 .topbar .right .who { font-weight: 500; color: rgba(255,255,255,0.85); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-item.focus { background: var(--gold-bg); box-shadow: inset 3px 0 0 var(--gold); padding-left: 8px; }

@@ -78,7 +78,7 @@ export default function PeopleCard({ me }: { me: Me }) {
       {people === null ? (
         <div className="muted">Loading…</div>
       ) : (
-        <table>
+        <table className="people">
           <thead>
             <tr>
               <th>Name</th>
@@ -94,7 +94,7 @@ export default function PeopleCard({ me }: { me: Me }) {
               const self = p.username === me.username
               return (
                 <tr key={p.id} className={p.active ? '' : 'muted'} data-testid={`person-${p.username}`}>
-                  <td data-label="Name">
+                  <td className="cell-main" data-label="Name">
                     {p.display_name}
                     {self && <span className="muted"> (you)</span>}
                     {!p.active && <span className="badge neutral" style={{ marginLeft: 6 }}>deactivated</span>}
@@ -161,28 +161,30 @@ export default function PeopleCard({ me }: { me: Me }) {
       {msg && <div className="banner info" style={{ marginTop: 10 }}>{msg}</div>}
       {error && <div className="banner bad" style={{ marginTop: 10 }}>{error}</div>}
       <h3>Add a person</h3>
-      <form className="row" onSubmit={add} data-testid="add-person">
-        <div className="field">
-          <label>Username</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g. juan.delacruz" autoComplete="off" maxLength={40} />
-          <div className="hint">Lower-case letters, digits, dots, dashes or underscores. It is what they type to sign in.</div>
+      <form onSubmit={add} data-testid="add-person">
+        <div className="row">
+          <div className="field">
+            <label>Username</label>
+            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g. juan.delacruz" autoComplete="off" maxLength={40} />
+          </div>
+          <div className="field">
+            <label>Name</label>
+            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="As shown in the app" maxLength={80} />
+          </div>
+          <div className="field narrow" style={{ width: 140 }}>
+            <label>Role</label>
+            <select value={role} onChange={(e) => setRole(e.target.value as Person['role'])}>
+              <option value="engineer">engineer</option>
+              <option value="owner">owner</option>
+            </select>
+          </div>
+          <div className="field narrow">
+            <button className="primary" type="submit" disabled={busy || username.trim().length < 2}>
+              Add
+            </button>
+          </div>
         </div>
-        <div className="field">
-          <label>Name</label>
-          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="As shown in the app" maxLength={80} />
-        </div>
-        <div className="narrow" style={{ width: 140 }}>
-          <label>Role</label>
-          <select value={role} onChange={(e) => setRole(e.target.value as Person['role'])}>
-            <option value="engineer">engineer</option>
-            <option value="owner">owner</option>
-          </select>
-        </div>
-        <div className="narrow inline" style={{ paddingBottom: 4 }}>
-          <button className="primary" type="submit" disabled={busy || username.trim().length < 2}>
-            Add
-          </button>
-        </div>
+        <div className="hint">Username: lower-case letters, digits, dots, dashes or underscores. It is what they type to sign in.</div>
       </form>
     </div>
   )

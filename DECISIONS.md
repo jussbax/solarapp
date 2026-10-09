@@ -866,3 +866,19 @@ chart, and the engineering build order in the plan.
   resets a password or an authenticator, deactivates, reactivates and
   changes roles, for the day every owner is locked out. It needs shell
   access to the server, which is the point.
+
+## The Leads tab leaves the engineering app
+
+- The owner's rule, round 3: "the leads tab should not be in the solar
+  engineering app"; the website is the starting line of the leads and CRM
+  pipeline, which is a separate build. So the Leads page (funnel, statuses,
+  notes, closing reasons) is gone from the back office. The bookings table
+  and `/api/leads` stay as they are: the website still writes a booking
+  there, the e-mail notice still goes out, and the CRM takes the router and
+  the table over unchanged.
+- The one hand-off stays, because a booking must be able to become a
+  project without retyping: Projects › "From a website booking" lists the
+  open bookings (name, place, when, what the visitor saw, the contact to
+  arrange the visit) and "Start project" creates the project from one, as
+  "Start assessment" did. The e-mail notice links there. Nothing else about
+  a booking can be changed from the engineering app.

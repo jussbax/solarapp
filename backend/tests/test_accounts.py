@@ -98,7 +98,8 @@ def test_engineer_cannot_touch_owner_only_things(client):
     assert client.delete("/api/pricing/items/BC-PNL-001").status_code == 403
     assert client.get("/api/users").status_code == 403
     assert client.post("/api/users", json={"username": "x", "role": "engineer"}).status_code == 403
-    assert client.get("/api/leads").status_code == 200                  # projects and leads are shared work
+    assert client.get("/api/leads").status_code == 403                  # the booking inbox is the owner's (the CRM's)
+    assert client.get("/api/leads/open").status_code == 200             # the hand-off list is everyone's
 
 
 def test_engineer_sets_up_an_authenticator_in_the_browser(client):

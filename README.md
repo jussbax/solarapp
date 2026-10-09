@@ -70,13 +70,15 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
     town (Laguna and Batangas) or the phone's location, monthly use, usage
     pattern. Returns the bill before and after, payback, price and the
     system from the same engines with typical-roof assumptions, shows the
-    battery as a priced add-on, and books the free roof visit as a lead in
-    the back office's Leads inbox (separate from the project list) with its
-    source (UTM tags, referrer) and what the visitor saw; "Start assessment"
-    turns a lead into a project with the customer, the town or pin and the
-    bill prefilled. The same page ships as an embeddable widget for the
-    website (see below). The Leads page shows the funnel for the last 30
-    days: estimates run, leads, visits booked, converted.
+    battery as a priced add-on, and books the free roof visit as a website
+    booking (a lead) with its source (UTM tags, referrer) and what the
+    visitor saw. The bookings are the CRM's data, not the engineering
+    app's: the back office only lists the open ones under Projects ›
+    "From a website booking" and starts a project from one with the
+    customer, the town or pin and the bill prefilled. The same page ships
+    as an embeddable widget for the website (see below). The booking
+    statuses, notes and the funnel (estimates run, leads, visits booked,
+    converted) stay behind `/api/leads` for the CRM to come.
 
 ## The website and the estimate
 
@@ -160,15 +162,16 @@ The script calls the server it was loaded from. From a different origin,
 list that origin in `SOLARAPP_PUBLIC_ORIGINS` on the private app and point
 the script at it with `data-api`. Links to the estimate can carry UTM tags
 (`?utm_source=fb&utm_medium=ad&utm_campaign=brownout1`); they are stored
-with the lead and counted on the Leads page. The widget raises a
+with the booking for the CRM. The widget raises a
 `pld-estimate` browser event (`estimate_shown`, `lead_submitted`) and pushes
 `pld_estimate_shown` / `pld_lead_submitted` to `window.dataLayer` when one
 exists, so a Meta Pixel or Google Tag on the website can fire Lead events.
 
 **Lead notices:** set `SOLARAPP_SMTP_*` and `SOLARAPP_NOTIFY_EMAIL` in `.env`
 to get an email for each booking (Gmail works with an app password); the
-email links to the lead in the Leads inbox. Without it, leads simply appear
-at the top of the inbox with their contact and what they saw.
+email carries the contact, what the visitor saw and a link that opens the
+booking under Projects. Without it, bookings simply wait under Projects ›
+"From a website booking" with their contact and what they saw.
 
 Messenger templates, ad angles and offer notes for the funnel are in
 `docs/marketing.md`.
@@ -303,8 +306,8 @@ the tunnels and the sign-in changes needs the extra ones marked "first time".
    ```
 
    The app updates its own database on start: new tables and columns are
-   added, and website leads that were saved as records move to the Leads
-   inbox (the log says how many).
+   added, and website leads that were saved as records move to the
+   bookings table (the log says how many).
 
 After the first update, in the browser:
 
@@ -321,7 +324,8 @@ After the first update, in the browser:
   under Settings › Your account, where the authenticator app and the keys
   are set up too. Add your engineer under Settings › People.
 - Check `https://solar.pldevinc.com` (login), `https://pldevinc.com` (site),
-  run the estimate and a test booking, and see it land under Leads.
+  run the estimate and a test booking, and see it under Projects › "From a
+  website booking".
 
 Backups: `data/solarapp.db` holds everything the app knows; `data/` as a
 whole adds the weather dataset (re-downloadable) and the secret key

@@ -290,3 +290,26 @@ def test_retention_anonymises_stale_leads_and_never_projects(client):
     r = client.get(f"/api/leads/{sid}").json()
     assert r["anonymised"] and r["name"] == "" and r["place"] == "near Pila, Laguna"
     assert client.post(f"/api/leads/{sid}/convert").status_code == 409
+
+
+def test_engineer_gets_the_hand_off_only(client):
+    """The inbox is the owner's (the CRM's): an engineer lists the open bookings and starts a project, nothing else."""
+    lid = book(client)
+    assert client.post("/api/users", json={"username": "ana", "display_name": "Ana", "role": "engineer"}).status_code == 201
+    temp = client.post("/api/users", json={"username": "ben", "display_name": "Ben", "role": "engineer"}).json()["temporary_password"]
+    eng = TestClient(client.app)
+    assert eng.post("/api/auth/login", json={"username": "ben", "password": temp}).status_code == 200
+    assert eng.get("/api/leads/open").status_code == 403   # the temporary password opens nothing
+    assert eng.post("/api/auth/password", json={"current_password": temp, "code": "", "new_password": "roof readings at noon"}).status_code == 200
+    assert eng.get("/api/leads").status_code == 403
+    assert eng.get("/api/leads/funnel").status_code == 403
+    assert eng.get(f"/api/leads/{lid}").status_code == 403
+    assert eng.patch(f"/api/leads/{lid}", json={"status": "contacted"}).status_code == 403
+    assert eng.delete(f"/api/leads/{lid}").status_code == 403
+    open_ids = [l["id"] for l in eng.get("/api/leads/open").json()]
+    assert lid in open_ids
+    r = eng.post(f"/api/leads/{lid}/convert")
+    assert r.status_code == 200 and r.json()["project_id"]
+    assert lid not in [l["id"] for l in eng.get("/api/leads/open").json()]
+    # the owner still has the whole inbox
+    assert client.get(f"/api/leads/{lid}").json()["status"] == "converted"

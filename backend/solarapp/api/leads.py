@@ -1,10 +1,11 @@
-"""The leads inbox: website bookings, kept apart from the project list.
+"""Website bookings: the CRM's data, kept apart from the project list.
 
-A lead is not a project. "Start assessment" (convert) creates the engineering
-project from it with the customer reference, the pin or town and the bill,
-and leaves ``lead_id`` on the project as the only link. The funnel counters
-live here too. A future CRM module takes this router and the ``leads`` table
-over; nothing in the engineering screens depends on them.
+A booking (lead) is not a project. The engineering app shows only the open
+ones on its Projects page and starts a project from one (convert): the
+customer reference, the pin or town and the bill are copied, and ``lead_id``
+on the project is the only link. The statuses, notes, closing reasons and
+the funnel counters served here are for the CRM, which takes this router
+and the ``leads`` table over; no engineering screen depends on them.
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ from pydantic import ValidationError
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from ..auth import require_user
+from ..auth import require_owner, require_user
 from ..core.towns import find_town
 from ..db import get_session
 from ..models import Assessment, Lead, QuickEstimateLog, utcnow
@@ -82,7 +83,7 @@ def _get(session: Session, lead_id: int) -> Lead:
 
 # ---- the inbox
 
-@router.get("", response_model=list[LeadOut])
+@router.get("", response_model=list[LeadOut], dependencies=[Depends(require_owner)])
 def list_leads(status: Optional[str] = None, q: str = "", limit: int = 500, session: Session = Depends(get_session)) -> list[LeadOut]:
     """Newest first. ``status`` narrows to one status; ``q`` searches name, contact, town, address and notes."""
     stmt = select(Lead).order_by(Lead.created_at.desc(), Lead.id.desc())
@@ -97,10 +98,18 @@ def list_leads(status: Optional[str] = None, q: str = "", limit: int = 500, sess
     return [lead_out(r) for r in rows[: max(1, min(int(limit), 5000))]]
 
 
+@router.get("/open", response_model=list[LeadOut])
+def open_bookings(session: Session = Depends(get_session)) -> list[LeadOut]:
+    """The hand-off list for the engineering app: bookings that have no project yet and were not closed, newest first.
+    Anyone signed in may start a project from one; everything else about a booking is the owner's (the CRM's)."""
+    stmt = select(Lead).where(Lead.status.in_(("new", "contacted", "visit_booked")), Lead.anonymised_at == None).order_by(Lead.created_at.desc(), Lead.id.desc())  # noqa: E711
+    return [lead_out(r) for r in session.exec(stmt).all()]
+
+
 STAGE_RANK = {s: i for i, s in enumerate(JOB_STAGES)}
 
 
-@router.get("/funnel", response_model=LeadFunnel)
+@router.get("/funnel", response_model=LeadFunnel, dependencies=[Depends(require_owner)])
 def funnel(days: int = 30, session: Session = Depends(get_session)) -> LeadFunnel:
     """The last N days: estimates run (estimate log), leads, visits booked and converted (inbox), quoted and signed (projects by stage)."""
     days = max(1, min(int(days), 3650))
@@ -125,12 +134,12 @@ def funnel(days: int = 30, session: Session = Depends(get_session)) -> LeadFunne
     )
 
 
-@router.get("/{lead_id}", response_model=LeadOut)
+@router.get("/{lead_id}", response_model=LeadOut, dependencies=[Depends(require_owner)])
 def get_lead(lead_id: int, session: Session = Depends(get_session)) -> LeadOut:
     return lead_out(_get(session, lead_id))
 
 
-@router.patch("/{lead_id}", response_model=LeadOut)
+@router.patch("/{lead_id}", response_model=LeadOut, dependencies=[Depends(require_owner)])
 def update_lead(lead_id: int, body: LeadPatch, session: Session = Depends(get_session)) -> LeadOut:
     lead = _get(session, lead_id)
     if body.closed_reason is not None:
@@ -151,7 +160,7 @@ def update_lead(lead_id: int, body: LeadPatch, session: Session = Depends(get_se
     return lead_out(lead)
 
 
-@router.delete("/{lead_id}", status_code=204)
+@router.delete("/{lead_id}", status_code=204, dependencies=[Depends(require_owner)])
 def delete_lead(lead_id: int, session: Session = Depends(get_session)) -> Response:
     lead = _get(session, lead_id)
     session.delete(lead)
