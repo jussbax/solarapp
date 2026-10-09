@@ -60,7 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.engine = engine
         with Session(engine) as session:
             ensure_seeded(session)
-            leads.migrate_lead_assessments(session)  # lead-stage assessments saved before the inbox existed move there (idempotent)
+            leads.migrate_lead_assessments(session)  # lead-stage assessments saved before bookings had their own table move there (idempotent)
             bootstrap_owner(session, settings)        # the first owner from .env, once; the old authenticator file and keys move to them
         app.state.pvgis = PvgisDataset(settings.data_dir)
         app.state.nasa = NasaReference(settings.data_dir)

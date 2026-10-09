@@ -3,12 +3,26 @@
 Agreed with the owner before the build started. Keep this file current when a
 decision changes; the code follows it.
 
+This file is a log in the order the decisions were made; where a later
+section conflicts with an earlier one, the later one stands. Where things
+stand on 9 October 2026: the app is a solar engineering app (site
+assessment, energy audit and sizing, design, BOM and BOQ, program of works,
+cashflow, customer documents) for the owner and their engineers, each with
+their own account; website bookings are the CRM's data and only start a
+project here; the pricing follows the owner's workbook to the peso; the
+customer documents open with the customer's situation and solution; the
+audit team under `.claude/agents` reviews each round. The sections that
+hold the current rules are "Accounts", "The Leads tab leaves the
+engineering app", "Money, round three", "The customer's story on paper",
+"The clean form" and "Round 3, batch 1".
+
 ## Purpose
 
 Estimate what a roof in the Philippines can produce, combining the company's
 on-site readings (UNI-T UT381PV irradiance meter and UT673PV+ MPPT meter on a
 50 W test panel) with PVGIS typical-year weather data. Roof-level production
-only at this stage: no inverter, wiring, financial or sizing modules yet.
+only at this stage: no inverter, wiring, financial or sizing modules yet
+(the first stage; modules 2 to 5 followed, below).
 
 ## Data
 
@@ -203,7 +217,8 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   rounded up to the hundred; OCM share of the markup.
 - BOQ rules: inverter = the default model on every job, the Felicity
   6 kW eco-hybrid (FS-INV-008), in as many parallel units as the sizing
-  requirement needs, with a per-job override; when no default is set the
+  requirement needs (since round 3: one unit, and a larger single unit
+  before parallel ones; see "Round 3, batch 1"), with a per-job override; when no default is set the
   cheapest hybrid at or above the sized kW is used (3-phase and
   high-voltage units excluded). Battery =
   cheapest combination at or above the nominal kWh (racks, slave modules,
@@ -616,8 +631,9 @@ only at this stage: no inverter, wiring, financial or sizing modules yet.
   from any authenticator app after the password (offline, so it works on
   a roof), with eight one-time backup codes for a lost phone, a replay
   guard per 30 s window, wrong codes counted by the login throttle, and
-  the secret kept in `data/twofactor.json` (0600), never in `.env`.
-  Cloudflare Access stays as an optional outer layer.
+  the secret kept in `data/twofactor.json` (0600), never in `.env`
+  (since accounts, each person's secret lives in the database; see
+  "Accounts"). Cloudflare Access stays as an optional outer layer.
 - Passkeys (WebAuthn) sign in on their own: a hardware key or phone passkey
   with user verification required is possession plus PIN or fingerprint,
   and it is bound to the hostname, so it is stronger than password plus
@@ -695,7 +711,8 @@ with the corrected deliverable set and the boundary, is
 
 Left for the owner's go-ahead (scope, not defects): the leads inbox and the
 stage split, the Results regrouping with the plan drawing and the Gantt
-chart, and the engineering build order in the plan.
+chart, and the engineering build order in the plan. All three were approved
+and built; the next sections record them.
 
 ## The boundary, built: leads out of the project list
 
@@ -714,11 +731,12 @@ chart, and the engineering build order in the plan.
   read as assessed; a startup migration moves lead-stage records without
   results into the inbox and keeps those with results as projects.
 - Retention anonymises inbox leads that never became a project after
-  twelve months and never touches a project. The nav is Projects, Leads,
-  Materials, Settings; the estimate page link and the website-only
+  twelve months and never touches a project. The nav was Projects, Leads,
+  Materials, Settings (the Leads page left the app in round 3; see "The
+  Leads tab leaves the engineering app"); the estimate page link and the website-only
   profile fields sit under a Website heading in Settings; the phone top
   bar is one row with a menu.
-- A future CRM module takes the Leads page over through the same API; a
+- A future CRM module takes the bookings over through the same API; a
   future PM module takes the later stages and the actuals. Both link by
   the project id.
 

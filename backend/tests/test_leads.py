@@ -1,4 +1,4 @@
-"""The leads inbox: website bookings land there (not on the project list), the owner works them, Start assessment makes the project.
+"""Website bookings: they land in their own table (not on the project list), the owner works them through the API (the CRM's), Start project makes the project.
 
 Also the startup migration of lead-stage assessments, the retention run over leads, and the stage contract (C1).
 """
@@ -98,7 +98,7 @@ def test_inbox_lists_newest_first_filters_searches_edits_and_deletes(client, cap
     assert any(f"lead status id={a} new -> contacted" in m for m in caplog.messages)
     assert [l["id"] for l in client.get("/api/leads?status=contacted").json()] == [a]
     assert a not in [l["id"] for l in client.get("/api/leads?status=new").json()]
-    # closing takes a reason; reopening clears it; "converted" is only reached through Start assessment
+    # closing takes a reason; reopening clears it; "converted" is only reached through Start project
     r = client.patch(f"/api/leads/{a}", json={"status": "closed", "closed_reason": "Renting, landlord said no."})
     assert r.json()["status"] == "closed" and r.json()["closed_reason"] == "Renting, landlord said no."
     assert client.patch(f"/api/leads/{a}", json={"status": "new"}).json()["closed_reason"] == ""
@@ -109,7 +109,7 @@ def test_inbox_lists_newest_first_filters_searches_edits_and_deletes(client, cap
     assert client.get(f"/api/leads/{b}").status_code == 404 and client.delete(f"/api/leads/{b}").status_code == 404
 
 
-# ---- Start assessment
+# ---- Start project
 
 def test_start_assessment_creates_the_project_from_the_lead(client, caplog):
     lid = book(client, name="Maria Santos")
@@ -148,7 +148,7 @@ def test_start_assessment_keeps_the_pin_and_the_address(client):
     assert doc["audit"]["bills"][0]["amount_php"] == 5000 and doc["audit"]["bills"][0]["kwh"] > 0  # pesos read as kWh at the default tariff
 
 
-# ---- the funnel moved to the inbox
+# ---- the funnel lives with the bookings
 
 def test_funnel_counts_from_the_inbox_and_the_projects(client):
     from solarapp.db import get_engine
@@ -228,7 +228,7 @@ def test_migration_moves_lead_stage_assessments_to_the_inbox(tmp_path_factory, c
     # the app starts again on the same database: the lifespan runs the migration
     with caplog.at_level(logging.INFO, logger="solarapp.audit"):
         with TestClient(create_app(settings)) as c:
-            assert any("lead migration: 4 lead-stage assessments moved to the leads inbox, 1 with results kept as projects at stage assessed" in m for m in caplog.messages)
+            assert any("lead migration: 4 lead-stage assessments moved to the bookings table, 1 with results kept as projects at stage assessed" in m for m in caplog.messages)
             login(c)
             projects = {a["customer_name"]: a for a in c.get("/api/assessments").json()}
             assert set(projects) == {"Measured Lead", "Quoted Job"}

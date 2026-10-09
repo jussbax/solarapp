@@ -203,7 +203,7 @@ export interface EconomicsBlock {
   co2_t_per_year?: number
 }
 
-/** The project's own stage, from the first visit to the closed job. "Lead" and "Contacted" live on the lead in the Leads inbox, not here. */
+/** The project's own stage, from the first visit to the closed job. "Lead" and "Contacted" are the booking's own status (the CRM's), not here. */
 export type JobStage = 'assessed' | 'quoted' | 'signed' | 'sourcing' | 'installing' | 'commissioned' | 'net_metering' | 'closed'
 export const JOB_STAGES: { id: JobStage; label: string }[] = [
   { id: 'assessed', label: 'Assessed' }, { id: 'quoted', label: 'Quoted' }, { id: 'signed', label: 'Signed' }, { id: 'sourcing', label: 'Sourcing' },

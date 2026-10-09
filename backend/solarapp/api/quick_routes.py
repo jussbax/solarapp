@@ -177,7 +177,7 @@ def estimate(body: QuickRequest, request: Request, tasks: BackgroundTasks, sessi
 
 @router.post("/lead")
 def lead(body: QuickLead, request: Request, tasks: BackgroundTasks, session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> dict:
-    """Keep the visitor's details in the leads inbox (not the project list), with the four answers and what they saw."""
+    """Keep the visitor's details as a booking (not a project), with the four answers and what they saw."""
     cfg = load_config(session)
     if not cfg.quick.enabled:
         raise HTTPException(status_code=404, detail=UNAVAILABLE)
@@ -199,7 +199,7 @@ def lead(body: QuickLead, request: Request, tasks: BackgroundTasks, session: Ses
              f"Uses power {PATTERN_LABEL[body.pattern]}. Bill: about {kwh:,.0f} kWh"
              f"{' (₱' + format(body.monthly_php, ',.0f') + ')' if body.monthly_php else ''}.{seen} "
              f"Location: {where['label']}{'; pin placed by the customer, confirm on the visit' if not body.town else ''}.")
-    # the snapshot also keeps what the visitor typed, so "Start assessment" can prefill the first bill
+    # the snapshot also keeps what the visitor typed, so "Start project" can prefill the first bill
     snapshot = est.model_copy(update={"goal": est.goal or body.goal, "monthly_kwh": float(kwh) if kwh else None, "monthly_php": body.monthly_php, "pattern": body.pattern})
     pin = not body.town  # a pin from the phone's location; a listed town carries no pin (the town centre is looked up when needed)
     row = Lead(

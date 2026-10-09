@@ -81,7 +81,7 @@ def _get(session: Session, lead_id: int) -> Lead:
     return lead
 
 
-# ---- the inbox
+# ---- the bookings: owner-only, except the open list and the conversion
 
 @router.get("", response_model=list[LeadOut], dependencies=[Depends(require_owner)])
 def list_leads(status: Optional[str] = None, q: str = "", limit: int = 500, session: Session = Depends(get_session)) -> list[LeadOut]:
@@ -146,7 +146,7 @@ def update_lead(lead_id: int, body: LeadPatch, session: Session = Depends(get_se
         lead.closed_reason = body.closed_reason.strip()
     if body.status is not None and body.status != lead.status:
         if body.status == "converted" and lead.project_id is None:
-            raise HTTPException(status_code=409, detail="Use Start assessment to turn a lead into a project.")
+            raise HTTPException(status_code=409, detail="Use Start project to turn a booking into a project.")
         log.info("lead status id=%s %s -> %s%s", lead.id, lead.status, body.status, f" reason={lead.closed_reason!r}" if body.status == "closed" and lead.closed_reason else "")
         lead.status = body.status
         if body.status != "closed" and body.closed_reason is None:
@@ -200,7 +200,7 @@ def project_from_lead(lead: Lead) -> AssessmentDoc:
 
 @router.post("/{lead_id}/convert", response_model=LeadConvertOut)
 def convert_lead(lead_id: int, session: Session = Depends(get_session)) -> LeadConvertOut:
-    """Start assessment: create the project from the lead and mark the lead converted. Calling it again returns the same project."""
+    """Start project: create the project from the booking and mark it converted. Calling it again returns the same project."""
     lead = _get(session, lead_id)
     if lead.project_id is not None and session.get(Assessment, lead.project_id) is not None:
         return LeadConvertOut(project_id=lead.project_id, lead=lead_out(lead))
@@ -222,7 +222,7 @@ def convert_lead(lead_id: int, session: Session = Depends(get_session)) -> LeadC
     return LeadConvertOut(project_id=a.id, lead=lead_out(lead))
 
 
-# ---- startup migration: lead-stage assessments saved before the inbox existed
+# ---- startup migration: lead-stage assessments saved before bookings had their own table
 
 def _parse_place(label: str) -> tuple[str, str, bool]:
     """The old LeadInfo.town label -> (town, province, keep the pin). "near Pila, Laguna" keeps the visitor's pin; "Pila, Laguna" was the town centre."""
@@ -289,5 +289,5 @@ def migrate_lead_assessments(session: Session) -> dict:
             kept += 1
     session.commit()
     if moved or kept:
-        log.info("lead migration: %s lead-stage assessments moved to the leads inbox, %s with results kept as projects at stage assessed", moved, kept)
+        log.info("lead migration: %s lead-stage assessments moved to the bookings table, %s with results kept as projects at stage assessed", moved, kept)
     return {"moved": moved, "kept": kept}

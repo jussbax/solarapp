@@ -214,24 +214,28 @@ Being fixed now, no decision needed (the spot-clean batch):
   button placement, pricing inputs grid, k under each reading, route matrix
   hint); a nudge to add a second key.
 
-Approved on 8 October and built (see DECISIONS.md: the boundary, the drawings, the engineering numbers): A, B and items 4, 6 and 8 of the engineering order, plus the data groundwork of item 1 (electrical fields, grid-interactive flag, default inverter per kind). Still open:
-
-- A. The separation (section 5): leads inbox and funnel out of the project
-  list; stages split; stage pill in the page head; nav "Projects, Materials,
-  Settings"; website settings grouped; phone top bar to one row with a
-  menu; create the record on first save. About two days.
-- B. Results regrouped as "Design and outputs" with an index: roof and
-  production with a plan drawing per face, system design, quantities with
-  export, program with a Gantt chart (also in the program PDF), cashflow,
-  savings, documents card with state and dates; phone layouts for the BOM,
-  the month tables and the payment editor; a label map and a table editor
-  in the pricing settings. About three days.
-- C. The rest of the engineering order (section 7): the string design table
-  and the circuit design sheet first, then the plans data pack, the DU
-  pack, the commissioning and handover templates, the roof construction
-  fields, the tax lines and the credit carry-over.
+Approved on 8 October and built (see DECISIONS.md: the boundary, the
+drawings, the engineering numbers): A, the separation (and in round 3 the
+Leads page left the app altogether; the hand-off stays on the Projects
+page), and B, the Design and outputs step with the plan drawing, the Gantt
+chart, the documents card and the phone layouts. Round 3 (9 October, see
+`docs/audits/round-3/00-plan.md`) then closed the hardware rules, the
+money findings, the customer's story and the UI. What remains of the
+engineering order is in section 7's status line.
 
 ## 7. The engineering build order and the decisions it needs
+
+Status on 9 October 2026: item 1 has its data fields on the materials
+items and the default per kind (the eco-hybrid exports, per the owner); the
+string table waits on the datasheets. Item 2 is built (breakers and
+conductors coordinated per circuit, the grid side on the inverter's input
+rating, bonding and lugs in the BOM, conductor count), except derating.
+Item 4 is built. Item 5 has the export-limiter role and the certificate
+warning; the checklist, lead times and fees wait on the DU. Item 8 is built
+(task floors and the late-finish allowance). Item 9: VAT is exact on the
+rounded contract and every job carries the 5 % commission by the owner's
+rule; the VAT invoice in the cashflow waits on the accountant. Items 3, 6,
+7 and 10 are open.
 
 1. Electrical data on the materials items and a grid-interactive flag:
    panels get Voc, Vmp, Isc, Imp and the temperature coefficients;
@@ -244,7 +248,9 @@ Approved on 8 October and built (see DECISIONS.md: the boundary, the drawings, t
    workbook's own sample job used FS-INV-001, the grid-tie hybrid with the
    IEC 61727 and 62116 listing, at about PHP 18,000 more. The reviewer's
    recommendation: a default per system kind, grid-interactive for anything
-   with net metering. Three to four days.
+   with net metering. Three to four days. (Decided on 8 October: the
+   eco-hybrid can export and is the default on every kind; a grid-tie unit
+   needs the owner's say.)
 2. Circuit design sheet: breaker per circuit coordinated with the conductor
    (today a 63 A breaker sits on 8 mm² wire rated 40 A), the grid-side
    breaker from the inverter's AC input current, equipment and electrode
@@ -288,9 +294,10 @@ Approved on 8 October and built (see DECISIONS.md: the boundary, the drawings, t
 - The company profile in Settings: phone, Messenger link, Facebook page,
   email, owner's name, the PEE's name and PRC number, the brands line, where
   to pay, the callback promise.
-- The five warranty figures from the makers' warranty cards (the workbook
-  notes "5 years datasheet against 10 years price list" on the 10 kWh
-  battery; settle it before anything prints).
+- The warranty figures: set on 9 October (panel product 12, battery 5,
+  inverter 5, workmanship 2; panel performance still blank). The savings
+  view replaces the battery at the warranty interval; a per-product
+  override exists for a datasheet that says otherwise.
 - Real photos with town and system size; the decision whether to show
   "Recent installations" before the first installs.
 - The website address (pldevinc.com) and the back-office address, as two

@@ -31,25 +31,30 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
 6. Energy audit: appliances with usage windows (start, end, weekdays,
    months), duty factors per type, reconciliation with the latest bill, and
    future additions. Sizing from the hour-by-hour balance of the reconciled
-   load against this roof's production for an off-grid system (full
-   battery, no grid import), net metering, or net metering with a battery:
-   PV capped by the roof, battery modules, and the inverter size from your
-   catalogue sizes with the 200% surge rule. Every appliance typed is kept
-   in a catalogue for reuse.
+   load against this roof's production for net metering, net metering with
+   a battery, or the company's "off-grid" (no export: the panels and the
+   battery carry the house and the grid steps in only when both fall
+   short): PV capped by the roof, the battery balanced over the hourly year
+   with days of autonomy, and the inverter sized on the array for net
+   metering or on the house peak with the 200% surge rule when there is a
+   battery. Every appliance typed is kept in a catalogue for reuse.
 7. Pricing: the materials workbook (suppliers, 362 items, drivers, route,
    labour rates, mob/demob, tools, job fees) is imported once into the app,
    which is then the master: edit prices, weights, panel sizes and settings
    in the browser, re-import a newer workbook to update items by code. A
    bill of materials is generated from the sizing and the roof layout
-   (panels from the database, default inverter model (Felicity 6 kW eco-hybrid) in parallel units
-   as needed, cheapest battery combination at or above the required kWh,
-   rails, L-feet, clamps and splices per row, strings, PV and AC cable with
-   a voltage-drop gauge check, protection, enclosures, grounding,
-   consumables), can be edited line by line, and is priced exactly as the
+   (panels from the database, the default inverter per system kind as one
+   unit, a larger single unit before parallel ones, the battery chosen on
+   continuous current first and price second, rails, L-feet, clamps and
+   splices per row, strings, PV and AC cable with breakers and conductors
+   coordinated and a voltage-drop gauge check, protection, enclosures,
+   grounding and bonding, a disconnect, consumables), can be edited line by
+   line, and is priced exactly as the
    workbook does it: landed cost, freight run through the suppliers, labour
    crew and days, build-up with markups, commission and VAT, rounded up to
-   the hundred. A customer quotation PDF shows Materials, Labor, Equipment
-   (the tool charge) and Tax only.
+   the hundred. The proposal PDF opens with the customer's situation and
+   the solution in plain words, then Materials, Installation and permits,
+   Installation tools and VAT, with the price before and after VAT.
 8. Program of works: from the signing date, the schedule of permits, net
    metering steps, the pickup run, installation days with activities by
    the hour for the roof pairs and the ground crew, commissioning and the
@@ -61,7 +66,8 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
 9. Economics for the customer: monthly bill before and after solar from
    the sizing's hourly balance and the effective tariff on the latest bill,
    export credit under net metering, savings by year with tariff rise and
-   panel degradation, battery and inverter replacements, upkeep, payback,
+   panel degradation, battery replacements at the warranty interval and
+   inverter replacements, upkeep, payback,
    net savings over the analysis period, NPV, IRR, cost of solar energy
    and carbon avoided. The proposal PDF, laid out like a utility statement
    with the company's own branding, carries the charges, savings, payment
@@ -79,6 +85,11 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
     as an embeddable widget for the website (see below). The booking
     statuses, notes and the funnel (estimates run, leads, visits booked,
     converted) stay behind `/api/leads` for the CRM to come.
+11. People: the owner and the engineers each sign in with their own
+    account; an engineer works on projects and outputs, only an owner
+    changes the company profile, pricing, the materials list and the
+    people. Each person sets up their own authenticator app and security
+    keys under Settings › Your account.
 
 ## The website and the estimate
 
@@ -135,7 +146,7 @@ the token or to a signed-in user.
 
 Then follow `docs/security.md` for the Cloudflare rules (rate limits, WAF,
 Access, the www redirect), the server checklist, backups and the monthly
-retention run (`python -m solarapp.retention`: leads in the inbox that never
+retention run (`python -m solarapp.retention`: website bookings that never
 became a project lose their name, contact, address and precise pin after
 twelve months, the estimate log is trimmed after ninety days, and projects
 are never anonymised). Note that the compose file now requires
@@ -322,7 +333,8 @@ After the first update, in the browser:
   file) and any security keys already registered carry over to it. From
   then on the password lives in the database, not in `.env`: change it
   under Settings › Your account, where the authenticator app and the keys
-  are set up too. Add your engineer under Settings › People.
+  are set up too. Add your engineer under Settings › People. The old
+  `data/session.key` file is no longer read and can be deleted.
 - Check `https://solar.pldevinc.com` (login), `https://pldevinc.com` (site),
   run the estimate and a test booking, and see it under Projects › "From a
   website booking".
@@ -354,7 +366,7 @@ Run it under systemd or `nohup` to keep it alive.
 
 ```bash
 cd backend && . .venv/bin/activate && pip install -r requirements-dev.txt
-python -m pytest                                          # 168 tests, no network
+python -m pytest                                          # the whole suite, no network
 python -m solarapp.pricing ../path/to/PLD_Materials_DB.xlsx   # import a materials workbook (the Materials page does this too)
 python -m solarapp.data_download --out ../data --synthetic --bbox 14.25 14.75 120.75 121.25
 SOLARAPP_DATA_DIR=../data uvicorn solarapp.main:app --reload --port 8000
@@ -383,10 +395,12 @@ backend/solarapp/core/quick.py        quick estimate from four answers
 backend/solarapp/core/simulation.py   hourly pvlib simulation and monthly aggregation
 backend/solarapp/core/dataset.py      nearest-cell lookup and TMY loading
 backend/solarapp/core/audit.py        appliance types and duty factors, load profiles, bill reconciliation
-backend/solarapp/core/sizing.py       hourly balance, PV target, battery modules, inverter choice
+backend/solarapp/core/sizing.py       hourly balance, PV target, the battery over the hourly year, inverter requirement per kind
 backend/solarapp/pricing/importer.py  reads the materials workbook (items, suppliers, drivers, route, rates)
 backend/solarapp/pricing/engine.py    landed cost, freight run, labour calc, build-up, customer sections
-backend/solarapp/pricing/boq.py       bill of materials from the sized system and roof layout
+backend/solarapp/pricing/boq.py       bill of materials from the sized system and roof layout: unit choice, circuits, roles
+backend/solarapp/pricing/catalog.py   the materials list as the engine reads it (flags, ratings, grid-interactive inference)
+backend/solarapp/pricing/config.py    every pricing, program and economics setting with its default and its version
 backend/solarapp/pricing/job.py       prices an assessment: BOM, manual edits, extra km from the map pin
 backend/solarapp/pricing/store.py     materials tables and pricing settings in SQLite, workbook import
 backend/solarapp/pricing/program.py   program of works: schedule, hourly installation plan, cashflow
@@ -394,9 +408,15 @@ backend/solarapp/pricing/economics.py customer economics: bill before and after,
 backend/data_seed/                    bundled materials workbook, loaded on first start
 backend/solarapp/compute.py           turns an assessment into results
 backend/solarapp/data_download/       one-time PVGIS and NASA download
-backend/solarapp/reports/             customer PDF, client card PNG, proposal PDF, internal program of works PDF
-backend/solarapp/api/                 FastAPI routes
-frontend/src/                         React app (map pin, editors, results)
+backend/solarapp/reports/             roof check PDF, client card PNG, proposal PDF, program of works PDF, plan and Gantt drawings
+backend/solarapp/api/                 FastAPI routes (assessments, pricing, settings, bookings, auth, people)
+backend/solarapp/auth.py, users.py    accounts: passwords, sessions, roles; the server-side people command
+backend/solarapp/passkeys.py, twofactor.py  security keys and the authenticator app, per person
+backend/solarapp/public.py            the website process: static pages and the estimate proxy
+frontend/src/                         React app (pages, components, the estimate page, the pricing settings)
+site/                                 the website pages and their build
+docs/                                 security, marketing, the engineering plan, the audit team and its rounds
+.claude/agents/                       the five standing audit roles
 data/                                 weather dataset and SQLite database (not in git)
 ```
 

@@ -72,7 +72,7 @@ def _out_live(session: Session, a: Assessment) -> AssessmentOut:
 
 @router.get("", response_model=list[AssessmentSummary])
 def list_assessments(session: Session = Depends(get_session)) -> list[AssessmentSummary]:
-    """The project list: engineering facts only. The lead's contact, source and what they saw live on the leads inbox (/api/leads)."""
+    """The project list: engineering facts only. The lead's contact, source and what they saw live on the booking (/api/leads, the CRM's)."""
     rows = session.exec(select(Assessment).order_by(Assessment.updated_at.desc())).all()
     current_version = settings_version(load_config(session))
     out = []

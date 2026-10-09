@@ -179,7 +179,7 @@ class PaymentPlanIn(BaseModel):
     installment_first_offset_days: int = Field(default=30, ge=0)
 
 
-# The project's own stage, from the first visit to the closed job. "lead" and "contacted" belong to the Lead record (the leads inbox).
+# The project's own stage, from the first visit to the closed job. "lead" and "contacted" belong to the booking (the CRM's data behind /api/leads).
 JobStage = Literal["assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
 JOB_STAGES: list[str] = ["assessed", "quoted", "signed", "sourcing", "installing", "commissioned", "net_metering", "closed"]
 LEGACY_LEAD_STAGES = ("lead", "contacted")
@@ -192,7 +192,7 @@ class ProgramJob(BaseModel):
     @field_validator("stage", mode="before")
     @classmethod
     def _legacy_stage(cls, v):  # noqa: ANN001
-        """A record saved before the leads inbox existed reads as "assessed"; the startup migration rewrites it for good."""
+        """A record saved before bookings had their own table reads as "assessed"; the startup migration rewrites it for good."""
         return "assessed" if v in LEGACY_LEAD_STAGES else v
     signing_date: Optional[str] = None       # YYYY-MM-DD; blank = today
     install_date: Optional[str] = None       # blank = after the permit
@@ -241,7 +241,7 @@ class LeadEstimate(BaseModel):
     bill_before_monthly: Optional[float] = Field(default=None, ge=0, le=10_000_000)
     bill_after_monthly: Optional[float] = Field(default=None, ge=0, le=10_000_000)
     payback_years: Optional[float] = Field(default=None, ge=0, le=1000)
-    # what the visitor typed, filled in by the server so "Start assessment" can prefill the first bill
+    # what the visitor typed, filled in by the server so "Start project" can prefill the first bill
     monthly_kwh: Optional[float] = Field(default=None, ge=0, le=20000)
     monthly_php: Optional[float] = Field(default=None, ge=0, le=1000000)
     pattern: str = Field(default="", max_length=20)
@@ -492,7 +492,7 @@ class QuickLead(QuickRequest):
     estimate: LeadEstimate = Field(default_factory=LeadEstimate)
 
 
-# ---- the leads inbox (a future CRM module takes these over)
+# ---- website bookings (the CRM's data; the engineering app lists the open ones and starts a project from one)
 
 LeadStatus = Literal["new", "contacted", "visit_booked", "converted", "closed"]
 LEAD_STATUSES: list[str] = ["new", "contacted", "visit_booked", "converted", "closed"]
@@ -524,7 +524,7 @@ class LeadOut(BaseModel):
 
 
 class LeadPatch(BaseModel):
-    """What the owner edits on the inbox: the status, the notes, and why a lead was closed."""
+    """What the CRM (today the owner, through the API) edits on a booking: the status, the notes, and why it was closed."""
     status: Optional[LeadStatus] = None
     notes: Optional[str] = Field(default=None, max_length=4000)
     closed_reason: Optional[str] = Field(default=None, max_length=200)
@@ -536,7 +536,7 @@ class LeadConvertOut(BaseModel):
 
 
 class LeadFunnel(BaseModel):
-    """The last N days: estimates run, leads, visits booked, converted (from the inbox), quoted and signed (from the projects)."""
+    """The last N days: estimates run, leads, visits booked, converted (from the bookings), quoted and signed (from the projects)."""
     days: int
     estimates: int
     leads: int

@@ -62,7 +62,7 @@ class QuickEstimateLog(SQLModel, table=True):
 
 
 class Lead(SQLModel, table=True):
-    """A website booking: the leads inbox. Not a project; "Start assessment" creates the project from it.
+    """A website booking (the CRM's data). Not a project; "Start project" creates the project from it.
 
     A future CRM module takes this table over; the engineering project keeps only ``lead_id``.
     """

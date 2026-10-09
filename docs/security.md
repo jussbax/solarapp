@@ -152,7 +152,7 @@ dataset is re-downloadable and need not be backed up. Never copy the live
 ## Data Privacy Act routine
 
 - Monthly, after the backup: `docker compose exec -T solarapp python -m solarapp.retention`
-  (add `--dry-run` to see what it would do). Leads in the inbox that never
+  (add `--dry-run` to see what it would do). Website bookings that never
   became a project lose their name, contact, address and precise pin after
   12 months; projects are never touched; estimate rows older than 90 days
   are deleted. Add it to cron on the 1st.

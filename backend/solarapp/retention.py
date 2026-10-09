@@ -3,7 +3,7 @@
     python -m solarapp.retention            # apply
     python -m solarapp.retention --dry-run  # only report
 
-Leads in the inbox that never became a project (any status but converted)
+Bookings that never became a project (any status but converted)
 and were last touched more than --lead-months ago lose their name, contact,
 address, preferred time and pin; the row stays with its town, source and
 the estimate they saw, so the funnel counts hold. Projects are never
