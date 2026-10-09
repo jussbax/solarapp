@@ -1239,3 +1239,82 @@ and built; the next sections record them.
   the base in Pila with the pin's extra kilometres, so a far site carries a
   long trip; a regional base, or a freight rule per island group, is the
   owner's call when such jobs come.
+
+## Accounts, round four: a question is asked at the moment of the action
+
+- The owner's words: "the user management is really not intuitive ... I want
+  the user experience to feel like I am just browsing Facebook-level easy."
+  The round-4 UX specification (part 2) was built as written, with no API
+  change: People is a list of person cards and Your account is four plain
+  rows, and every action is a dialog of the app's own. No native `prompt()`
+  or `confirm()` remains anywhere in the back office.
+- One `Dialog` component carries every question: a focus trap, Escape and the
+  backdrop cancel, the primary button is the only black one, a refusal from
+  the server prints inside the dialog under the fields and the dialog stays
+  open. On the phone a dialog is a sheet from the bottom (Add a person is a
+  full-height sheet) and every target is 44 px. The "⋯" menu is a popover on
+  the desk and a sheet on the phone. The styles live in `accounts.css`,
+  imported by the components that use them, so `styles.css` is untouched.
+- The standing "Confirm it's you" form is gone. The password (and a fresh
+  code when two-step verification is on) is asked inside the dialog of the
+  action that needs it: turning two-step on or off, adding or removing a key,
+  changing the password. The API already took `{password, code}` on each of
+  those calls, so nothing moved on the server; the rule that a stolen cookie
+  alone cannot change how a person signs in is unchanged. A wrong password or
+  code is named as such ("That password is wrong. Try again." / "The password
+  or the code is wrong.") instead of the server's generic step-up sentence.
+- Two-step verification is a switch. Off → On is one dialog in three steps
+  (password; QR or the typed key with Copy, then the code it shows now; the
+  eight backup codes with Copy all and Download). The switch flips only after
+  the person has kept the codes (Done wakes after Copy or Download, or after
+  five seconds), and Escape at the last step still flips it, since the server
+  already has it on. "Two-step verification" is the only name for it in the
+  owner's UI; "authenticator app" names the phone app, never the feature.
+- Adding a person asks for the Name first and suggests the username from it:
+  lowercase, accents stripped, the first name, a dot, the rest of the name
+  joined ("Juan dela Cruz" → `juan.delacruz`, so a surname with a particle
+  reads as one word), anything else a dash; the field stays editable and a
+  taken username answers "Taken; try juan.delacruz2" inline. The role is two
+  tiles with what each can do; Engineer is preselected. The temporary
+  password is shown in a box with a Copy button that reads "Copied" for two
+  seconds (where the clipboard is blocked the text is select-all); the card
+  appears in the list behind the dialog with "Temporary password" in the bad
+  colour. The owner's flow is 7 taps (Settings, People, Add a person, Name,
+  Add, Copy, Done), the spec's count, and no username is invented by hand.
+- The first-sign-in gate no longer asks for the temporary password the person
+  typed ten seconds earlier: the login form keeps it in memory (a module
+  variable, never storage) and the gate sends it silently, so the form is
+  New password with a live checklist (12 characters or more · not your
+  username · 5 different characters) and New password again: 6 taps from the
+  login page to the app. After a reload the memory is gone and the field
+  "Temporary password" reappears with "Type the temporary password you were
+  given once more"; if the remembered one is refused (the owner reset it in
+  between) the same field reappears with that reason.
+- People's words are the owner's, not the server's: "has not signed in yet",
+  "signed in today 5:38 AM", "last signed in 2 Oct, 4:10 PM"; "Password
+  only", "Two-step verification on · 1 security key", "Temporary password";
+  "Remove access" / "Restore access" and "access removed" on a muted card,
+  never "Deactivate"; "Turn off two-step verification" names what it removes
+  ("Their authenticator app and 1 security key are removed.") and calls the
+  unchanged `/reset-authenticator`. The owner's own card has no menu, only
+  "Your account ›". The empty state (only the owner) is a dashed card with
+  the same Add a person button. A removed person's card carries no date: the
+  API has none, and nothing is fabricated.
+- Kept for the forms agent's Settings pages: the component names and props
+  (`AccountCard` with `user` and `onUser`, `PeopleCard` with `me`), plus an
+  optional `heading={false}` so a page with its own h1 does not print the
+  title twice. "Your account ›" links to `/settings#account` on the one-page
+  Settings and to `/settings/account` from anywhere else. Left as the spec
+  notes them: "Last changed" on the Password row (needs `password_changed_at`
+  on `/api/auth/me`) and "Show new codes…" (needs an endpoint that regenerates
+  the backup codes); until then the rows say what the API knows.
+- The proof: Playwright at 1280×900 and 390×844 adds a person end to end (the
+  password copied from the dialog, the new person signing in on a second
+  context, choosing a password at the gate without retyping the temporary
+  one, turning two-step on from the switch with a computed authenticator
+  code, adding a virtual security key with a backup code as the fresh code,
+  signing in with the key alone), resets a password and turns two-step off
+  from the menu, removes and restores access, and counts the taps (7 owner,
+  6 engineer). A security key is bound to a hostname, so the proof runs on
+  `localhost`, not `127.0.0.1`: the browser refuses an IP address as a
+  relying party, which the dialog reports in plain words and stays open.

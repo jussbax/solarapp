@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Me } from '../api'
 import { getPasskey, passkeyProblem, passkeySupported } from '../passkeys'
 import Field from '../components/Field'
+import { rememberTemporaryPassword } from '../accounts'
 
 type Method = 'key' | 'password'
 const METHOD_KEY = 'login-method'
@@ -49,6 +50,8 @@ export default function LoginPage({ onLogin }: { onLogin: (me: Me) => void }) {
     setError(null)
     try {
       const r = await api.login(username, password, code)
+      // a temporary password is kept in memory for the first-sign-in gate, so the person is not asked to type it again
+      if (r.must_change_password) rememberTemporaryPassword(password)
       rememberMethod('password')
       onLogin(r)
     } catch (err) {
