@@ -22,6 +22,9 @@ class Assessment(SQLModel, table=True):
     doc: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     results: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
     results_stale: bool = False
+    # when the proposal PDF was first generated for this record (round 4): the engineering status reads "proposal
+    # issued" from it and the price lock keys off it; "Reopen design" clears it. Outside the document, so a Save never wipes it.
+    proposal_issued_at: Optional[datetime] = None
 
 
 class ApplianceCatalog(SQLModel, table=True):

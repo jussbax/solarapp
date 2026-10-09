@@ -12,10 +12,13 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
 1. Drop a map pin on the roof. The nearest PVGIS grid cell is used.
 2. Enter roof faces (rectangle, hip face or triangle: eave, ridge, slope,
    tilt, facing, panels left out) with any firewalls, trees or buildings
-   that shade them, and candidate panels (Wp, length, width, or picked from
-   the materials database). The app cuts the wall strips, fits panels row by
-   row in both orientations, shades the simulation hour by hour, and shows
-   the panel and count that give the most kWp.
+   that shade them. The panel is chosen in the background: every active
+   panel in the materials list that carries a wattage, a length and a width
+   is fitted, and the one with the most kWp on this roof is used (ties to
+   the lower price per watt), unless the pricing settings name one panel
+   for every job or the engineer picks another under System design. The
+   app cuts the wall strips, fits panels row by row in both orientations,
+   shades the simulation hour by hour, and shows the panel and count.
 3. Enter the on-site readings: three simultaneous rows of irradiance, MPPT
    power and panel surface temperature per roof face. The app computes the
    owner's k per row, removes the heat and low-light effect present at the
@@ -62,7 +65,11 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    cashflow with the running balance and the lowest point the company has
    to carry. The quotation PDF carries the milestone schedule and payment
    terms; an internal PDF carries the full program and cashflow. Each
-   assessment has a job stage for the project list.
+   project shows an engineering status read from its facts (draft,
+   surveyed, designed, proposal issued) on its head and in the project
+   list; generating the proposal PDF marks it issued and locks the price
+   until "Reopen design". The job stage (quoted, signed, sourcing...) stays
+   on the record for the CRM and PM modules to come but has no screen here.
 9. Economics for the customer: monthly bill before and after solar from
    the sizing's hourly balance and the effective tariff on the latest bill,
    export credit under net metering, savings by year with tariff rise and

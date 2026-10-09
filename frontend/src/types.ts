@@ -141,8 +141,10 @@ export interface AssessmentDoc {
   lat: number | null
   lon: number | null
   faces: RoofFace[]
-  panels: CandidatePanel[]
-  selected_panel_id: string | null
+  /** The engineer's panel for this project (a materials-list code); null = automatic: the settings' panel, else the most kWp on this roof. */
+  panel_code: string | null
+  /** Panels typed by hand on a record saved before the materials list chose the panel; the next calculation reports them, then clears this. */
+  dropped_panels?: string[]
   reading_sets: ReadingSet[]
   test_panel_rating_w: number
   test_panel_calibration: number
@@ -203,12 +205,19 @@ export interface EconomicsBlock {
   co2_t_per_year?: number
 }
 
-/** The project's own stage, from the first visit to the closed job. "Lead" and "Contacted" are the booking's own status (the CRM's), not here. */
+/** The job stage the document keeps for the CRM (quoted, signed) and the PM module (sourcing to closed) to come. Since round 4 no
+ * engineering screen shows or edits it; the project head shows the engineering status instead. */
 export type JobStage = 'assessed' | 'quoted' | 'signed' | 'sourcing' | 'installing' | 'commissioned' | 'net_metering' | 'closed'
-export const JOB_STAGES: { id: JobStage; label: string }[] = [
-  { id: 'assessed', label: 'Assessed' }, { id: 'quoted', label: 'Quoted' }, { id: 'signed', label: 'Signed' }, { id: 'sourcing', label: 'Sourcing' },
-  { id: 'installing', label: 'Installing' }, { id: 'commissioned', label: 'Commissioned' }, { id: 'net_metering', label: 'Net metering' }, { id: 'closed', label: 'Closed' },
+
+/** The engineering status (round 4): read-only, derived by the server from the record's facts, never typed. */
+export type EngineeringStatus = 'draft' | 'surveyed' | 'designed' | 'proposal_issued'
+export const ENGINEERING_STATUSES: { id: EngineeringStatus; label: string; what: string }[] = [
+  { id: 'draft', label: 'Draft', what: 'nothing measured yet' },
+  { id: 'surveyed', label: 'Surveyed', what: 'roof readings saved' },
+  { id: 'designed', label: 'Designed', what: 'results calculated and up to date' },
+  { id: 'proposal_issued', label: 'Proposal issued', what: 'the proposal PDF was generated; the price is locked until the design is reopened' },
 ]
+export const statusLabel = (s: EngineeringStatus) => ENGINEERING_STATUSES.find((x) => x.id === s)?.label ?? s
 
 export interface PaymentMilestone {
   key: string
@@ -471,7 +480,10 @@ export interface AssessmentSummary {
   results_stale: boolean
   /** The pricing settings moved since this price was calculated (its own reason, apart from stale inputs). */
   pricing_settings_changed: boolean
+  /** The job stage the document keeps for the CRM and PM modules; no engineering screen shows it. */
   stage: JobStage
+  status: EngineeringStatus
+  proposal_issued_at: string | null
   contract_php: number | null
   system_kwp: number | null
   annual_kwh: number | null
@@ -573,6 +585,20 @@ export interface PanelResult {
   total_count: number
   system_kwp: number
   best: boolean
+  /** List price per watt, the tie-breaker between two panels at the same kWp. */
+  price_per_w?: number
+}
+
+/** Why the results use the panel they use (round 4). */
+export interface PanelChoice {
+  rule: 'project' | 'setting' | 'automatic'
+  code: string
+  name: string
+  watt_peak: number
+  /** How many usable panels of the materials list were fitted. */
+  candidates: number
+  best_code: string
+  setting_code: string | null
 }
 
 export interface ReadingSetResult {
@@ -729,6 +755,7 @@ export interface Results {
   panels: PanelResult[]
   selected_panel_id: string
   best_panel: { id: string; name: string; watt_peak: number; count: number; system_kwp: number }
+  panel_choice?: PanelChoice
   k: {
     sets: ReadingSetResult[]
     selected_set_index: number | null
@@ -768,6 +795,8 @@ export interface AssessmentOut {
   results: Results | null
   results_stale: boolean
   pricing_settings_changed: boolean
+  status: EngineeringStatus
+  proposal_issued_at: string | null
 }
 
 export interface DataStatus {
@@ -823,8 +852,7 @@ export function emptyDoc(): AssessmentDoc {
     lat: null,
     lon: null,
     faces: [newFace('Roof 1')],
-    panels: [{ id: newId(), name: '', watt_peak: 550, length_m: 2.278, width_m: 1.134 }],
-    selected_panel_id: null,
+    panel_code: null,
     reading_sets: [],
     test_panel_rating_w: 50,
     test_panel_calibration: 1.0,

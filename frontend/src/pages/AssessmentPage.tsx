@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { api, type ApiError } from '../api'
-import type { AssessmentDoc, AssessmentOut, DataStatus, JobStage } from '../types'
+import type { AssessmentDoc, AssessmentOut, DataStatus } from '../types'
 import MapPicker from '../components/MapPicker'
 import FacesEditor from '../components/FacesEditor'
-import PanelsEditor from '../components/PanelsEditor'
 import ReadingsEditor from '../components/ReadingsEditor'
 import ResultsView from '../components/ResultsView'
 import NumberInput from '../components/NumberInput'
 import AuditEditor from '../components/AuditEditor'
-import SystemDesign from '../components/SystemDesign'
+import SystemDesign, { PanelChoice } from '../components/SystemDesign'
 import { batteryNominalKwh } from '../components/shared'
 import DocumentsCard, { documentState } from '../components/DocumentsCard'
 import ErrorBoundary from '../components/ErrorBoundary'
@@ -17,7 +16,7 @@ import Field from '../components/Field'
 import { PricingInputs, PricingResults } from '../components/PricingSection'
 import { CashflowResults, ProgramInputs, ProgramResults } from '../components/ProgramSection'
 import { EconomicsInputs, EconomicsResults } from '../components/EconomicsSection'
-import { emptyDoc, emptyEconomicsJob, emptyPricingJob, emptyProgramJob, JOB_STAGES, NEW_DRAFT_ID } from '../types'
+import { emptyDoc, emptyEconomicsJob, emptyPricingJob, emptyProgramJob, ENGINEERING_STATUSES, NEW_DRAFT_ID, statusLabel } from '../types'
 import { clearDraft, readDraft, writeDraft, type Draft } from '../draft'
 import { fmtDateShort, fmtDateTime, php0 } from '../fmt'
 import { useNarrow } from '../components/responsive'
@@ -29,7 +28,7 @@ const STEPS: { id: Step; label: string; short: string }[] = [
   { id: 'pricing', label: 'Pricing and program', short: 'Pricing' },
   { id: 'results', label: 'Design and outputs', short: 'Outputs' },
 ]
-const CARD_STEP: Record<string, Step> = { 'card-site': 'site', 'card-faces': 'site', 'card-panels': 'site', 'card-readings': 'site', 'card-audit': 'audit' }
+const CARD_STEP: Record<string, Step> = { 'card-site': 'site', 'card-faces': 'site', 'card-readings': 'site', 'card-audit': 'audit' }
 
 /** The seven cards of Design and outputs, in order; the in-step index jumps to them. */
 type DesignCardId = 'design-roof' | 'design-system' | 'design-quantities' | 'design-program' | 'design-cashflow' | 'design-savings' | 'design-documents'
@@ -54,7 +53,7 @@ function cardForError(msg: string): string | null {
   if (m.includes('location') || m.includes('map pin') || m.includes('weather')) return 'card-site'
   if (m.includes('roof face') || m.includes('no panel fits') || m.includes('face')) return 'card-faces'
   if (m.includes('reading') || m.includes('calibration') || m.includes('test panel') || m.includes('test_panel')) return 'card-readings'
-  if (m.includes('panel')) return 'card-panels'
+  // the panel is no longer typed on a card: a message about it (the materials list, the chosen panel) stays in the bar
   if (m.includes('audit') || m.includes('consumption') || m.includes('bill') || m.includes('appliance')) return 'card-audit'
   return null
 }
@@ -255,11 +254,10 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
    * the record carries the flag, and again when the server refuses (409) because the settings moved after the page
    * loaded. Null means the owner kept the price.
    */
-  const REPRICE = /^Pricing settings changed since this price/
+  const REPRICE = /^Pricing settings changed since/
   const repriceQuestion = (was: number | null | undefined) => {
-    const stageIndex = (s: JobStage) => JOB_STAGES.findIndex((x) => x.id === s)
-    const quoted = stageIndex(doc.program?.stage ?? 'assessed') >= stageIndex('quoted')
-    return `Pricing settings changed since this price was ${quoted ? 'quoted' : 'calculated'}${was != null ? ` (was ${php0(was)})` : ''}. Re-price now?`
+    const issued = a?.status === 'proposal_issued'
+    return `Pricing settings changed since ${issued ? 'the proposal was issued at this price' : 'this price was calculated'}${was != null ? ` (was ${php0(was)})` : ''}. Re-price now?`
   }
   const computeWithRepriceCheck = async (target: number): Promise<AssessmentOut | null> => {
     let confirmReprice = false
@@ -363,6 +361,10 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         }
       }
       const d = await api.fetchDocument(url)
+      if (url === api.quotationUrl(aid) && a && !a.proposal_issued_at) {
+        // the proposal is issued for the record from here: the head shows it with the date and the price locks
+        api.getAssessment(aid).then(setA).catch(() => undefined)
+      }
       const objectUrl = URL.createObjectURL(d.blob)
       if (d.inline && win) {
         win.location.replace(objectUrl)
@@ -389,9 +391,8 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   // the on-site checklist: what Calculate needs
   const hasPin = doc.lat != null && doc.lon != null
   const hasFace = doc.faces.length > 0 && doc.faces.some((f) => f.length_m > 0 && f.width_m > 0)
-  const hasPanel = doc.panels.length > 0
   const hasReadings = doc.reading_sets.length > 0
-  const canCalculate = hasPin && hasFace && hasPanel && hasReadings  // the model needs one reading set for the k factor
+  const canCalculate = hasPin && hasFace && hasReadings  // the model needs one reading set for the k factor; the panel comes from the materials list
 
   const sizing = results?.sizing
   const pricing = results?.pricing
@@ -405,10 +406,26 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   const auditPending =
     !!results && !results.sizing && [results.pricing, results.economics, results.program].every((b) => b != null && !b.available)
   const cardAvailable = (c: DesignCardId) => !auditPending || FIRST_CARDS.has(c)
-  const stageValue: JobStage = doc.program?.stage ?? 'assessed'
 
   const go = (cardId: string) => () => document.getElementById(cardId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  const setStage = (stage: JobStage) => patch({ program: { ...(doc.program ?? emptyProgramJob()), stage } })
+
+  // the engineering status is read from the record's facts, never typed; "Reopen design" is the one thing that moves it back
+  const projectStatus = a?.status ?? 'draft'
+  const statusWhat = ENGINEERING_STATUSES.find((s) => s.id === projectStatus)?.what ?? ''
+  const reopen = async () => {
+    if (!a?.proposal_issued_at) return
+    if (!window.confirm(`Reopen the design? The proposal issued on ${fmtDateShort(a.proposal_issued_at)} is no longer the standing one, and the next Calculate may move the price.`)) return
+    setBusy('Reopening...')
+    setError(null)
+    try {
+      setA(await api.reopenDesign(aid))
+      setToast('Design reopened')
+    } catch (e) {
+      fail(e)
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <div>
@@ -431,14 +448,22 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         <div className="page-head-main">
           <div className="page-head-row">
             <h1 className="page-title">{doc.customer_name || (isNew ? 'New project' : 'Unnamed project')}</h1>
-            {/* the job's own stage, saved with the record; a booking's own status (new, contacted, visit booked) is the CRM's, not this app's */}
-            <select className="stage-pill" aria-label="Job stage" title="Job stage" value={stageValue} onChange={(e) => setStage(e.target.value as JobStage)} data-testid="stage-pill">
-              {JOB_STAGES.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            {/* the engineering status, read from the record's facts (draft, surveyed, designed, proposal issued); the job stage the
+                document keeps (quoted, signed, sourcing...) is the CRM's and the PM module's and has no screen here */}
+            <span
+              className={`badge ${projectStatus === 'proposal_issued' ? 'gold' : projectStatus === 'designed' ? 'good' : 'neutral'}`}
+              title={`Engineering status: ${statusWhat}`}
+              data-testid="status-pill"
+              data-status={projectStatus}
+            >
+              {statusLabel(projectStatus)}
+              {a?.proposal_issued_at ? ` ${fmtDateShort(a.proposal_issued_at)}` : ''}
+            </span>
+            {a?.proposal_issued_at && (
+              <button type="button" className="toggle link" onClick={reopen} disabled={!!busy} data-testid="reopen-design">
+                Reopen design
+              </button>
+            )}
           </div>
           <div className="muted">
             {doc.address || 'No address yet'}
@@ -468,8 +493,8 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
               <b>To calculate, the app needs:</b>
               <span className={`check-item ${hasPin ? 'done' : ''}`}>{hasPin ? '✓' : '○'} Map pin</span>
               <span className={`check-item ${hasFace ? 'done' : ''}`}>{hasFace ? '✓' : '○'} A roof face</span>
-              <span className={`check-item ${hasPanel ? 'done' : ''}`}>{hasPanel ? '✓' : '○'} A panel</span>
               <span className={`check-item ${hasReadings ? 'done' : ''}`}>{hasReadings ? '✓' : '○'} Roof readings (one set with three readings)</span>
+              <span className="muted">The panel is picked from the materials list: the one with the most kWp on this roof.</span>
             </div>
           )}
           <div className="card" id="card-site">
@@ -502,17 +527,6 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 {(fid) => <NumberInput id={fid} value={doc.gap_m} onChange={(v) => patch({ gap_m: v ?? 0 })} min={0} step={0.01} />}
               </Field>
             </div>
-          </div>
-
-          <div className="card" id="card-panels">
-            <h2>Panel options</h2>
-            <PanelsEditor
-              panels={doc.panels}
-              selectedId={doc.selected_panel_id}
-              results={results?.panels ?? null}
-              onChange={(panels) => patch({ panels })}
-              onSelect={(selected_panel_id) => patch({ selected_panel_id })}
-            />
           </div>
 
           <div className="card" id="card-readings">
@@ -563,7 +577,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
 
       {step === 'results' && !results && (
         <div className="card">
-          <div className="muted">Nothing calculated yet. Fill in the site, one roof face and a panel, then press Calculate.</div>
+          <div className="muted">Nothing calculated yet. Fill in the site, one roof face and the roof readings, then press Calculate.</div>
         </div>
       )}
 
@@ -579,8 +593,8 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
           )}
           {a?.pricing_settings_changed && (
             <div className="banner warn" data-testid="settings-changed">
-              Pricing settings changed since this price{results.pricing?.totals ? ` (was ${php0(results.pricing.totals.contract_rounded)})` : ''}. Calculate asks before
-              re-pricing a quoted job.
+              Pricing settings changed since this price{results.pricing?.totals ? ` (was ${php0(results.pricing.totals.contract_rounded)})` : ''}.
+              {projectStatus === 'proposal_issued' ? ' The proposal is issued, so Calculate asks before re-pricing.' : ' Calculate re-prices it.'}
             </div>
           )}
           <div className={stale ? 'stale' : ''}>
@@ -658,13 +672,20 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                   Energy audit
                 </a>
                 , then Calculate. <span className="muted">System design, quantities, the program of works, cashflow and savings follow the sizing.</span>
+                <PanelChoice results={results} panelCode={doc.panel_code ?? null} onPanelCode={(panel_code) => patch({ panel_code })} />
               </div>
             ) : (
               <>
                 <div className="card design-card" id="design-system">
                   <h2>System design</h2>
                   <ErrorBoundary title="The system design" onRecalculate={compute}>
-                    <SystemDesign results={results} panelName={selectedPanel?.name || ''} panelWp={selectedPanel?.watt_peak || 0} />
+                    <SystemDesign
+                      results={results}
+                      panelName={selectedPanel?.name || ''}
+                      panelWp={selectedPanel?.watt_peak || 0}
+                      panelCode={doc.panel_code ?? null}
+                      onPanelCode={(panel_code) => patch({ panel_code })}
+                    />
                   </ErrorBoundary>
                 </div>
                 <div className="card design-card" id="design-quantities">
@@ -743,11 +764,11 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
           className="primary"
           onClick={compute}
           disabled={!!busy || !status?.pvgis.available || !canCalculate}
-          title={!status?.pvgis.available ? 'Weather data is not downloaded yet' : !canCalculate ? 'Needs a map pin, a roof face, a panel and one reading set' : 'Saves, then runs the model'}
+          title={!status?.pvgis.available ? 'Weather data is not downloaded yet' : !canCalculate ? 'Needs a map pin, a roof face and one reading set' : 'Saves, then runs the model'}
         >
           Calculate
         </button>
-        {!results && !canCalculate && <span className="muted bar-note">Needs a map pin, a roof face, a panel and one reading set.</span>}
+        {!results && !canCalculate && <span className="muted bar-note">Needs a map pin, a roof face and one reading set.</span>}
         {status && !status.pvgis.available && <span className="muted bar-note">Weather data is not downloaded yet; see Settings.</span>}
       </div>
     </div>

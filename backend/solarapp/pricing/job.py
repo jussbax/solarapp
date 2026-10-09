@@ -120,7 +120,7 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
         return {"available": False, "reason": "The materials database is empty. Import the workbook on the Materials page.", "warnings": []}
     if sizing is None or selected is None:
         return {"available": False, "reason": "Pricing needs the energy audit and sizing (inverter and battery size).", "warnings": []}
-    panel_doc = next(p for p in doc.panels if p.id == results["selected_panel_id"])
+    panel_doc = CandidatePanel.model_validate(selected["panel"])   # a usable panel of the materials list (compute.panel_candidates)
     db_panel, note = resolve_panel(panel_doc, catalog, cfg)
     if note:
         warnings.append({"code": "panel_unlinked", "message": note})

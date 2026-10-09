@@ -57,11 +57,24 @@ def _settings_changed(results: Optional[dict], current_version: str) -> bool:
     return bool(pricing.get("available") and stored and stored != current_version)
 
 
+def project_status(a: Assessment) -> str:
+    """The engineering status (round 4), read from the record's facts and never typed: proposal issued (the proposal PDF
+    was generated and the design not reopened since), designed (results calculated and not stale), surveyed (at least
+    one reading set saved), else draft. The job stage the document keeps is the CRM's and the PM module's, not this."""
+    if a.proposal_issued_at is not None:
+        return "proposal_issued"
+    if a.results and not a.results_stale:
+        return "designed"
+    if (a.doc or {}).get("reading_sets"):
+        return "surveyed"
+    return "draft"
+
+
 def _out(a: Assessment, settings_changed: bool = False) -> AssessmentOut:
     return AssessmentOut(
         id=a.id, created_at=a.created_at, updated_at=a.updated_at,
         doc=AssessmentDoc.model_validate(a.doc), results=a.results, results_stale=a.results_stale,
-        pricing_settings_changed=settings_changed,
+        pricing_settings_changed=settings_changed, status=project_status(a), proposal_issued_at=a.proposal_issued_at,
     )
 
 
@@ -95,7 +108,7 @@ def list_assessments(session: Session = Depends(get_session)) -> list[Assessment
             id=a.id, created_at=a.created_at, updated_at=a.updated_at, customer_name=a.customer_name,
             address=a.address, has_results=a.results is not None, results_stale=a.results_stale,
             pricing_settings_changed=_settings_changed(results, current_version),
-            stage=stage if stage in JOB_STAGES else "assessed",
+            stage=stage if stage in JOB_STAGES else "assessed", status=project_status(a), proposal_issued_at=a.proposal_issued_at,
             contract_php=(pricing.get("totals") or {}).get("contract_rounded") if pricing.get("available") else None,
             system_kwp=prod.get("system_kwp"), annual_kwh=prod.get("annual_kwh"), panel_count=prod.get("total_panels"),
             kind=((doc.get("audit") or {}).get("system") or {}).get("kind"),
@@ -123,9 +136,10 @@ def get_assessment(assessment_id: int, session: Session = Depends(get_session)) 
 def update_assessment(assessment_id: int, doc: AssessmentDoc, session: Session = Depends(get_session)) -> AssessmentOut:
     a = _get(session, assessment_id)
     new_doc = doc.model_dump(mode="json")
-    if new_doc != a.doc:
+    stored = AssessmentDoc.model_validate(a.doc or {}).model_dump(mode="json")   # as the browser received it (old panel fields migrated)
+    if new_doc != stored:
         # the card's next-step line is printed, never computed: changing it leaves the results fresh
-        affects_results = {k: v for k, v in new_doc.items() if k != "card_next_step"} != {k: v for k, v in (a.doc or {}).items() if k != "card_next_step"}
+        affects_results = {k: v for k, v in new_doc.items() if k != "card_next_step"} != {k: v for k, v in stored.items() if k != "card_next_step"}
         a.doc = new_doc
         a.customer_name, a.address = doc.customer_name, doc.address
         if affects_results:
@@ -147,15 +161,15 @@ def delete_assessment(assessment_id: int, session: Session = Depends(get_session
     return Response(status_code=204)
 
 
-REPRICE_DETAIL = "Pricing settings changed since this price was quoted (was ₱{was:,.0f}). Re-pricing a quoted job needs your confirmation."
+REPRICE_DETAIL = "Pricing settings changed since the proposal was issued at this price (was ₱{was:,.0f}). Re-pricing a job whose proposal is issued needs your confirmation."
 
 
-def _needs_reprice_confirmation(a: Assessment, stage: str, current_version: str) -> Optional[float]:
-    """From stage quoted onward a price calculated under other pricing settings stays until the re-price is confirmed:
-    returns the quoted contract when confirmation is needed, else None."""
+def _needs_reprice_confirmation(a: Assessment, current_version: str) -> Optional[float]:
+    """Once the proposal is issued (round 4; the job stage "quoted" before) a price calculated under other pricing
+    settings stays until the re-price is confirmed: returns the proposed contract when confirmation is needed, else None."""
     if not _settings_changed(a.results, current_version):
         return None
-    if stage not in JOB_STAGES or JOB_STAGES.index(stage) < JOB_STAGES.index("quoted"):
+    if a.proposal_issued_at is None:
         return None
     return float(((a.results or {}).get("pricing") or {}).get("totals", {}).get("contract_rounded") or 0)
 
@@ -171,7 +185,7 @@ def compute_assessment(
     settings: Settings = Depends(get_settings),
 ) -> AssessmentOut:
     """Save the document (if sent) and compute results. The pricing settings' version is stored with a priced result;
-    when the settings have moved since, a job from stage quoted onward is re-priced only with `confirm_reprice`."""
+    when the settings have moved since, a job whose proposal is issued is re-priced only with `confirm_reprice`."""
     a = _get(session, assessment_id)
     if doc is not None:
         a.doc = doc.model_dump(mode="json")
@@ -179,7 +193,7 @@ def compute_assessment(
     parsed = AssessmentDoc.model_validate(a.doc)
     cfg = load_config(session)
     current_version = settings_version(cfg)
-    was = _needs_reprice_confirmation(a, parsed.program.stage, current_version)
+    was = _needs_reprice_confirmation(a, current_version)
     if was is not None and not confirm_reprice:
         raise HTTPException(status_code=409, detail=REPRICE_DETAIL.format(was=was))
     ctx = PricingContext(load_catalog(session), cfg, company_settings(session, settings))
@@ -190,7 +204,10 @@ def compute_assessment(
     if (a.results.get("pricing") or {}).get("available"):
         a.results["pricing"]["settings_version"] = current_version
     if was is not None:
-        log.info("assessment re-priced under new pricing settings id=%s stage=%s was=%s", assessment_id, parsed.program.stage, was)
+        log.info("assessment re-priced under new pricing settings id=%s status=%s was=%s", assessment_id, project_status(a), was)
+    # the record keeps the document as calculated: the old panel fields are gone and the panels typed by hand were reported once
+    parsed.dropped_panels = []
+    a.doc = parsed.model_dump(mode="json")
     a.results_stale = False
     a.updated_at = utcnow()
     session.add(a)
@@ -253,7 +270,29 @@ def customer_quotation(
     company = company_settings(session, settings)
     pdf = build_quotation_pdf(AssessmentDoc.model_validate(a.doc), results, company, proposal_no=f"P-{a.created_at.year}-{a.id:04d}",
                               outage_hours=load_config(session).program.installation_outage_hours)
+    if a.proposal_issued_at is None:
+        # the proposal exists for the record from here (round 4): the status reads "proposal issued" with this date and the
+        # price locks; "Reopen design" (POST .../reopen) clears it. A later download keeps the first date.
+        a.proposal_issued_at = utcnow()
+        session.add(a)
+        session.commit()
+        log.info("proposal issued id=%s", assessment_id)
     return Response(pdf, media_type="application/pdf", headers=_download_name("proposal", a, "pdf"))
+
+
+@router.post("/{assessment_id}/reopen", response_model=AssessmentOut)
+def reopen_design(assessment_id: int, session: Session = Depends(get_session)) -> AssessmentOut:
+    """"Reopen design": the proposal issued for this record is no longer the standing one, so the status falls back to
+    the facts (designed, surveyed or draft) and Calculate re-prices freely again. The document and the results stay."""
+    a = _get(session, assessment_id)
+    if a.proposal_issued_at is not None:
+        log.info("design reopened id=%s proposal_issued_at=%s", assessment_id, a.proposal_issued_at.isoformat())
+        a.proposal_issued_at = None
+        a.updated_at = utcnow()
+        session.add(a)
+        session.commit()
+        session.refresh(a)
+    return _out_live(session, a)
 
 
 @router.get("/{assessment_id}/program.pdf")

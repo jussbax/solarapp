@@ -360,6 +360,11 @@ class SizingRules(BaseModel):
     # The evenings the battery must carry without sun. 1 = the night deficit of the worst typical day (the rule
     # until now); 2 = twice that, and so on. The hourly-year balance then reports how often it still runs out.
     days_of_autonomy: float = Field(default=1.0, ge=0.5, le=7.0)
+    # The panel on every job (round 4). Blank = automatic: of the usable panels in the materials list (active, category
+    # Solar Panel, with wattage, length and width) the one that gives the most kWp on each roof, ties to the lower list
+    # price per watt. A code (BC-PNL-001) puts that panel on every job; an engineer may still pick another for one
+    # project under Design and outputs › System design. A code that is not a usable panel falls back to automatic with a warning.
+    panel_code: str = Field(default="", max_length=40)
 
 
 class EconomicsConfig(BaseModel):
