@@ -194,7 +194,7 @@ def loads_sheet(doc: Any, results: dict, items: dict[str, dict], cfg: dict, st: 
     poi_rows = [
         ("Point of interconnection", (escape(INTERCONNECTION_LABEL.get(inter, inter)) if inter else "not chosen (Site step)") + (f"; {escape(str(svc['interconnection_note']))}" if svc.get("interconnection_note") else "")),
         ("Existing main breaker, busbar", f"{_g(svc.get('main_breaker_a'), 'A')}, {_g(svc.get('busbar_a'), 'A')}" + ("" if svc.get("main_breaker_a") and svc.get("busbar_a") else " (not surveyed)")),
-        ("120 % rule", "; ".join(escape(x) for x in poi_lines(poi)) + f" ({escape(str(poi.get('source') or ''))})"),
+        ("120 % rule", "; ".join(escape(x) for x in poi_lines(poi, kind)) + f" ({escape(str(poi.get('source') or ''))})"),
         ("Meter", ("two-way meter: installed by the DU after the CFEI" if two_way else "existing meter; nothing exported") + f"; meter number {escape(str(svc.get('meter_no') or BLANK))}"),
         ("DU, account", f"{escape(str(svc.get('du_name') or BLANK))}, account {escape(str(svc.get('account_no') or BLANK))}; fault level at the service {_f(svc.get('fault_level_ka'), 1, 'kA') if svc.get('fault_level_ka') not in (None, '') else BLANK} (from the DU, verify)"),
     ]

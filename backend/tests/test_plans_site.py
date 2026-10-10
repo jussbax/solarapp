@@ -11,7 +11,9 @@ from fastapi.testclient import TestClient
 from solarapp.config import Settings
 from solarapp.data_download.cli import write_synthetic
 from solarapp.main import create_app
-from solarapp.reports.plans_site import BOX_H_MM, BOX_W_MM, face_axes, face_plan, fit_site_scale, from_metres, setbacks, site_plan_drawing, to_metres
+from reportlab.graphics.shapes import Group, Rect
+
+from solarapp.reports.plans_site import PAD_OPACITY, BOX_H_MM, BOX_W_MM, face_axes, face_plan, fit_site_scale, from_metres, setbacks, site_plan_drawing, text_box, to_metres
 from solarapp.schemas import AssessmentDoc
 from tests.test_drawings import PILA_DOC
 from tests.test_plans import _pages, _pdf_text
@@ -118,6 +120,38 @@ def test_a_typed_lot_prints_its_edges_the_house_the_setbacks_and_the_scale(clien
     assert "Inverter: utility room" in sheet and "Battery: beside the inverter" in sheet and "Meter: gate post" in sheet
     assert "POI" not in sheet.split("Site plan")[1].split("setback")[0] or "point of interconnection location: not chosen" in sheet
     assert "verify the zoning setback" in sheet
+
+
+def _overlap(a, b) -> bool:
+    return a[0] < b[2] and a[2] > b[0] and a[1] < b[3] and a[3] > b[1]
+
+
+def test_two_faces_whose_labels_would_collide_are_placed_apart_and_no_two_figures_overprint(client):
+    """The review's finding 4 on its own offsets: the main roof at [0, -2.5] and the kitchen roof at [4.5, 0] on the 15 × 12 m
+    lot, so the kitchen's eave runs along the main roof's east edge and the two label centroids sit 2.6 m apart at 1:100.
+    The kitchen's eave figure (7.00 m) and the main roof's depth figure (4.76 m) no longer overprint (the depth one gap
+    further out), the two label pads do not overlap, and no label hides a dimension figure."""
+    doc = deepcopy(PILA_DOC)
+    doc["site"] = {"lot_polygon": LOT, "house_polygon": HOUSE, "inverter_point": list(from_metres(4.0, -1.0, LAT0, LON0)), "battery_point": list(from_metres(4.0, -2.0, LAT0, LON0)),
+                   "poi_point": list(from_metres(3.5, 0.5, LAT0, LON0)), "meter_point": list(from_metres(-6.0, -5.0, LAT0, LON0))}
+    doc["faces"][0]["plan_offset_m"] = [0.0, -2.5]
+    doc["faces"][1]["plan_offset_m"] = [4.5, 0.0]
+    out = _computed(client, doc)
+    drawing, scale_n, _notes = site_plan_drawing(AssessmentDoc.model_validate(out["doc"]), out["results"]["geometry"])
+    assert scale_n == 100
+    pads = [(r.x, r.y, r.x + r.width, r.y + r.height) for r in drawing.contents if isinstance(r, Rect) and getattr(r, "fillOpacity", None) == PAD_OPACITY]
+    figures = [text_box(g) for g in drawing.contents if isinstance(g, Group)]
+    texts = [g.contents[0].text for g in drawing.contents if isinstance(g, Group)]
+    assert len(pads) == 2 and "7.00 m" in texts and "4.76 m" in texts and "3.86 m" in texts and "9.00 m" in texts
+    assert not _overlap(pads[0], pads[1]), pads
+    for i, a in enumerate(figures):
+        for b in figures[i + 1:]:
+            assert not _overlap(a, b), (texts[i], texts[figures.index(b)])
+        for pad in pads:
+            assert not _overlap(a, pad), texts[i]
+    # the same two faces on the sheet: both names and every figure print
+    sheet = " ".join(_sheet_pages(client, out["id"])[1].split())
+    assert "Main roof (south)" in sheet and "Kitchen roof (east)" in sheet and "7.00 m" in sheet and "4.76 m" in sheet and "4.7.00" not in sheet
 
 
 def test_typed_offsets_place_the_faces_around_the_pin(client):

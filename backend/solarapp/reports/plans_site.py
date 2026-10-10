@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 from xml.sax.saxutils import escape
 
-from reportlab.graphics.shapes import Circle, Drawing, Group, Line, Polygon, Rect, String
+from reportlab.graphics.shapes import Circle, Drawing, Group, Line, Polygon, Rect, String, transformPoint
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
@@ -170,13 +170,14 @@ def fit_site_scale(width_m: float, height_m: float, box_w_mm: float = BOX_W_MM, 
 
 # ---- the drawing
 
-def _dim_seg(d: Drawing, p1: Pt, p2: Pt, out: Pt, gap: float, text: str, font: str, size: float, color, t: float = 1.7) -> None:
+def _dim_seg(d: Drawing, p1: Pt, p2: Pt, out: Pt, gap: float, text: str, font: str, size: float, color, t: float = 1.7) -> Optional["Box"]:
     """An architectural dimension between two paper points: the line `gap` outward from the segment, extension lines
-    from the points, 45° ticks, the figure along the line on its outward side, turned so it never reads upside down."""
+    from the points, 45° ticks, the figure along the line on its outward side, turned so it never reads upside down.
+    Returns the figure's box on the paper (axis-aligned), so the labels placed later keep clear of it."""
     ux, uy = p2[0] - p1[0], p2[1] - p1[1]
     length = math.hypot(ux, uy)
     if length < 1e-6:
-        return
+        return None
     ux, uy = ux / length, uy / length
     a1 = (p1[0] + out[0] * gap, p1[1] + out[1] * gap)
     a2 = (p2[0] + out[0] * gap, p2[1] + out[1] * gap)
@@ -200,19 +201,56 @@ def _dim_seg(d: Drawing, p1: Pt, p2: Pt, out: Pt, gap: float, text: str, font: s
     g.translate(mid[0], mid[1])
     g.rotate(angle)
     d.add(g)
+    return text_box(g)
 
 
-def _label(d: Drawing, x: float, y: float, lines: list[str], font: str, size: float, color=brand.BLACK) -> tuple[float, float, float, float]:
+Box = tuple[float, float, float, float]
+
+
+def text_box(g: Group) -> Box:
+    """The axis-aligned box of a dimension figure: the String at the group's origin (anchored middle), its width and height
+    turned by the group's transform."""
+    s = g.contents[0]
+    tw = pdfmetrics.stringWidth(s.text, s.fontName, s.fontSize)
+    corners = [transformPoint(g.transform, (px, py)) for px in (-tw / 2, tw / 2) for py in (-0.25 * s.fontSize, 0.78 * s.fontSize)]
+    return (min(c[0] for c in corners), min(c[1] for c in corners), max(c[0] for c in corners), max(c[1] for c in corners))
+PAD_OPACITY = 0.78
+
+
+def _overlaps(box: Box, taken: list[Box]) -> bool:
+    return any(box[0] < b[2] and box[2] > b[0] and box[1] < b[3] and box[3] > b[1] for b in taken)
+
+
+def _label(d: Drawing, x: float, y: float, lines: list[str], font: str, size: float, color=brand.BLACK) -> Box:
     """Centred text lines on a white pad, so a label reads over panels or hatching; returns the pad's box."""
     widths = [pdfmetrics.stringWidth(s, font, size) for s in lines]
     w, h = max(widths) + 2 * mm, len(lines) * size * 1.25 + 1.2 * mm
     pad = Rect(x - w / 2, y - h / 2, w, h, fillColor=colors.white, strokeColor=None)
-    pad.fillOpacity = 0.78
+    pad.fillOpacity = PAD_OPACITY
     d.add(pad)
     top = y + h / 2 - 0.6 * mm - size
     for i, s in enumerate(lines):
         d.add(_text(x, top - i * size * 1.25, s, size, font, color, "middle"))
     return (x - w / 2, y - h / 2, x + w / 2, y + h / 2)
+
+
+def _place_label(d: Drawing, x: float, y: float, lines: list[str], font: str, size: float, taken: list[Box], bounds: Box, strip_slot: list[float]) -> Box:
+    """A face's label where it hides nothing placed before it (review finding 4): at the centroid, then the four offsets
+    around it, then in the strip along the bottom of the box with a leader to the centroid. Returns the pad's box."""
+    w, h = max(pdfmetrics.stringWidth(s, font, size) for s in lines) + 2 * mm, len(lines) * size * 1.25 + 1.2 * mm
+    gap = 2.0 * mm
+    candidates = [(x, y), (x, y - h - gap), (x, y + h + gap), (x + w + gap, y), (x - w - gap, y)]
+    for cx, cy in candidates:
+        box = (cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
+        inside = box[0] >= bounds[0] and box[1] >= bounds[1] and box[2] <= bounds[2] and box[3] <= bounds[3]
+        if inside and not _overlaps(box, taken):
+            return _label(d, cx, cy, lines, font, size)
+    # the strip below the site, from the right (the scale bar sits at the left), with a leader to the centroid
+    cx = strip_slot[0] - w / 2
+    cy = strip_slot[1]
+    strip_slot[0] = cx - w / 2 - gap
+    d.add(Line(cx, cy + h / 2, x, y, strokeColor=brand.GRAY, strokeWidth=0.25))
+    return _label(d, cx, cy, lines, font, size)
 
 
 def _symbol(d: Drawing, kind: str, x: float, y: float, font: str, size: float) -> None:
@@ -301,11 +339,18 @@ def site_plan_drawing(doc: AssessmentDoc, geometry: list[dict], box_w_mm: float 
 
     d.add(Rect(0, 0, W, H, fillColor=None, strokeColor=brand.LINE, strokeWidth=0.3))
     gap = 3.2 * mm
+    figures: list[Box] = []       # every dimension figure's box: the labels placed later keep clear of them
+
+    def dim(*args, **kw) -> None:
+        box = _dim_seg(d, *args, **kw)
+        if box is not None:
+            figures.append(box)
+
     # the lot: dash-dot, its edges' lengths outside
     if lot:
         d.add(Polygon([c for p in lot for c in P(p)], fillColor=None, strokeColor=brand.BLACK, strokeWidth=0.5, strokeDashArray=DASH_DOT))
         for p1, p2, nrm in _edges(lot):
-            _dim_seg(d, P(p1), P(p2), nrm, gap, f"{math.dist(p1, p2):.2f} m", F, fp, brand.GRAY)
+            dim(P(p1), P(p2), nrm, gap, f"{math.dist(p1, p2):.2f} m", F, fp, brand.GRAY)
     else:
         notes.append("property line: not surveyed")
     # the house: solid, its overall width and depth
@@ -314,8 +359,8 @@ def site_plan_drawing(doc: AssessmentDoc, geometry: list[dict], box_w_mm: float 
         # the overall width along the north side and the depth along the west side (the main roof's eave is usually south or east)
         he0, he1 = min(p[0] for p in house), max(p[0] for p in house)
         hn0, hn1 = min(p[1] for p in house), max(p[1] for p in house)
-        _dim_seg(d, P((he1, hn1)), P((he0, hn1)), (0.0, 1.0), gap * 0.6, f"house {he1 - he0:.2f} m", F, fp * 0.9, brand.GRAY)
-        _dim_seg(d, P((he0, hn1)), P((he0, hn0)), (-1.0, 0.0), gap * 0.6, f"house {hn1 - hn0:.2f} m", F, fp * 0.9, brand.GRAY)
+        dim(P((he1, hn1)), P((he0, hn1)), (0.0, 1.0), gap * 0.6, f"house {he1 - he0:.2f} m", F, fp * 0.9, brand.GRAY)
+        dim(P((he0, hn1)), P((he0, hn0)), (-1.0, 0.0), gap * 0.6, f"house {hn1 - hn0:.2f} m", F, fp * 0.9, brand.GRAY)
     else:
         notes.append("house outline: not surveyed")
     if lot and house:
@@ -323,24 +368,23 @@ def site_plan_drawing(doc: AssessmentDoc, geometry: list[dict], box_w_mm: float 
             a, b = P(mid_pt), P(foot)
             ux, uy = b[0] - a[0], b[1] - a[1]
             ln = math.hypot(ux, uy) or 1.0
-            _dim_seg(d, a, b, (-uy / ln, ux / ln), 1.2 * mm, f"{metres:.2f}", F, fp * 0.85, brand.MUTED, t=1.3)
+            dim(a, b, (-uy / ln, ux / ln), 1.2 * mm, f"{metres:.2f}", F, fp * 0.85, brand.MUTED, t=1.3)
         notes.append("setback figures: from each house wall straight out to the property line; verify the zoning setback")
     else:
         notes.append("setbacks: not computed (the lot and the house outline are both needed)")
-    # the faces: outline, used panels, name; the eave and the plan depth as dimensions
-    face_boxes: list[tuple[float, float, float, float]] = []
+    # the faces: outline, used panels; the eave as a dimension one gap out and the plan depth one gap further (review finding
+    # 4: at the same gap a neighbouring face's eave figure overprinted the depth figure where the two faces share a line)
     for f in placed:
         d.add(Polygon([c for p in f["outline"] for c in P(p)], fillColor=FACE_FILL, strokeColor=brand.BLACK, strokeWidth=0.7))
         for quad in f["panels"]:
             d.add(Polygon([c for p in quad for c in P(p)], fillColor=PANEL_FILL, strokeColor=brand.GOLD_DARK, strokeWidth=0.4))
         e1p, e2p = f["eave"]
-        _dim_seg(d, P(e1p), P(e2p), f["eave_out"], gap, f"{f['eave_m']:.2f} m", FS, fp, brand.BLACK)
+        dim(P(e1p), P(e2p), f["eave_out"], gap, f"{f['eave_m']:.2f} m", FS, fp, brand.BLACK)
         s1p, s2p = f["side"]
-        _dim_seg(d, P(s1p), P(s2p), f["ex"], gap, f"{f['depth_m']:.2f} m", F, fp, brand.GRAY)
-        cx, cy = P(f["centroid"])
-        face_boxes.append(_label(d, cx, cy, [f["name"], f"{f['n_panels']} panels · slope {f['slope_m']:g} m at {f['tilt_deg']:g}°, looks {f['azimuth_deg']:g}°"], FS, fp * 0.86))
-    # the pin and the points: every symbol first, then each label where it overlaps no symbol and no label placed before it
-    taken: list[tuple[float, float, float, float]] = face_boxes + [(cx - 1.5 * mm, cy - 1.5 * mm, cx + 1.5 * mm, cy + 1.5 * mm) for cx, cy in (P(p) for _, _, p in points)]
+        dim(P(s1p), P(s2p), f["ex"], 2 * gap, f"{f['depth_m']:.2f} m", F, fp, brand.GRAY)
+    # every symbol first (the pin, the points), then the face labels through the placement loop (each where it hides no
+    # symbol and no label placed before it), then the point labels the same way
+    taken: list[Box] = figures + [(cx - 1.5 * mm, cy - 1.5 * mm, cx + 1.5 * mm, cy + 1.5 * mm) for cx, cy in (P(p) for _, _, p in points)]
     labels: list[tuple[float, float, str, str, Any]] = []
     if anchored:
         px, py = P((0.0, 0.0))
@@ -353,6 +397,11 @@ def site_plan_drawing(doc: AssessmentDoc, geometry: list[dict], box_w_mm: float 
         x, y = P(p)
         _symbol(d, kind, x, y, FB, fp * 0.8)
         labels.append((x, y, label, FS, brand.BLACK))
+    bounds = (1.0 * mm, 1.0 * mm, W - 1.0 * mm, H - 1.0 * mm)
+    strip_slot = [W - MARGIN_MM["right"] * mm, MARGIN_MM["bottom"] * mm * 0.62]   # the next free slot in the strip below the site, from the right
+    for f in placed:
+        cx, cy = P(f["centroid"])
+        taken.append(_place_label(d, cx, cy, [f["name"], f"{f['n_panels']} panels · slope {f['slope_m']:g} m at {f['tilt_deg']:g}°, looks {f['azimuth_deg']:g}°"], FS, fp * 0.86, taken, bounds, strip_slot))
     for x, y, label, font, color in labels:
         tw, th = pdfmetrics.stringWidth(label, font, fp * 0.85), fp * 0.85
         near = ((x + 2.0 * mm, y - th * 0.35, "start"), (x, y - 2.2 * mm - th, "middle"), (x, y + 2.4 * mm, "middle"), (x - 2.0 * mm, y - th * 0.35, "end"))
@@ -360,7 +409,7 @@ def site_plan_drawing(doc: AssessmentDoc, geometry: list[dict], box_w_mm: float 
         for lx, ly, anchor in near + far:
             x0 = lx if anchor == "start" else lx - tw / 2 if anchor == "middle" else lx - tw
             box = (x0, ly, x0 + tw, ly + th)
-            if not any(box[0] < b[2] and box[2] > b[0] and box[1] < b[3] and box[3] > b[1] for b in taken):
+            if not _overlaps(box, taken):
                 break
         taken.append(box)
         d.add(_text(lx, ly, label, fp * 0.85, font, color, anchor))

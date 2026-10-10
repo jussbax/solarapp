@@ -297,6 +297,7 @@ def _figures(doc: Any, results: dict, items: dict[str, dict], cfg: dict) -> dict
     service = getattr(doc, "service", None)
     svc = service.model_dump() if hasattr(service, "model_dump") else dict(service or {})
     poi = choices.get("poi_busbar") or poi_busbar_check(svc, choices)[0]
+    poi = {**poi, "kind": poi.get("kind") or kind}
     strings = int(choices.get("strings") or 0)
     per_string = int(choices.get("panels_per_string") or 0)
     panels_n = int(sizing.get("panels") or 0)
@@ -322,15 +323,19 @@ def _assign_inputs(strings: int, n_inputs: int) -> list[int]:
     return [k % n for k in range(strings)]
 
 
-def poi_lines(poi: dict) -> list[str]:
+def poi_lines(poi: dict, kind: Optional[str] = None) -> list[str]:
     """The 120 % rule as the sheets print it, one short line per step so a wrapped label keeps each figure whole: the
-    arithmetic, the limit and PASS or FAIL, or why it is not checked."""
+    arithmetic, the limit and PASS or FAIL, or why it is not checked. On a no-export job the rule is applied all the same
+    (the inverter is a source on the bus even with an export limit) and the line says it is conservative (review finding 10)."""
     if not poi.get("checked"):
         return [f"120 % rule: not checked — {poi.get('reason') or 'no figures'}"]
     units = f" × {poi['units']}" if int(poi.get("units") or 1) > 1 else ""
-    return [f"120 %: {_g(poi['grid_breaker_a'])} A{units} + {_g(poi['main_breaker_a'])} A = {_g(poi['sum_a'])} A",
-            f"limit {_g(poi['factor'])} × {_g(poi['busbar_a'])} A = {_g(poi['limit_a'])} A",
-            f"{'PASS' if poi['ok'] else 'FAIL'}; verify the PEC clause"]
+    lines = [f"120 %: {_g(poi['grid_breaker_a'])} A{units} + {_g(poi['main_breaker_a'])} A = {_g(poi['sum_a'])} A",
+             f"limit {_g(poi['factor'])} × {_g(poi['busbar_a'])} A = {_g(poi['limit_a'])} A",
+             f"{'PASS' if poi['ok'] else 'FAIL'}; verify the PEC clause"]
+    if str(kind or poi.get("kind") or "") == "off_grid":
+        lines.append("(applied although nothing is exported: conservative; the DU's view: verify)")
+    return lines
 
 
 # ---------------------------------------------------------------- the drawing
@@ -499,14 +504,21 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
             s.text(inv_x - 0.8, yi + 0.9, f"MPPT {i + 1}", TAG, F, brand.MUTED, "end")
     inv_l = fig["inv_l"]
     inv_code = str(inv_l.get("code")) if _has_item(inv_l) else "inverter: no item in the materials list"
-    inv_type = {"grid_tie": "grid-tie", "hybrid": "hybrid", "off_grid": "off-grid type", "charge_controller": "charge controller", "ess_set": "ESS set"}.get(str(ii.get("inverter_type") or ""), BLANK)
+    type_word = {"grid_tie": "grid-tie", "hybrid": "hybrid", "off_grid": "off-grid", "charge_controller": "charge controller", "ess_set": "ESS set"}.get(str(ii.get("inverter_type") or ""), "")
     phase = f"{_g(ii.get('phase'))}Ø" if ii.get("phase") else BLANK
     in_list = _mppt_inputs(ii)
     inp_txt = "/".join(_g(a) for a in in_list) + " A" if any(a is not None for a in in_list) else BLANK
     grid_flag = ch.get("inverter_grid_interactive")
     cert = str(fig["pricing"].get("inverter_certificate") or "").strip()
+    if grid_flag:
+        # the review's finding 7: the balloon leads with the role the job gives the inverter; the datasheet's type word follows it
+        role = "grid-interactive" + {"combination": " (hybrid)", "off_grid": " (no export)"}.get(kind, "")
+        head = (f"{inv_code}: {_g((inv_l or {}).get('rating'), 'kW')} {role}, {phase}" + (f" × {units}" if units > 1 else "")
+                + f"; the datasheet's type: {type_word if type_word else BLANK + ' (not marked on the item)'}")
+    else:
+        head = f"{inv_code}: {_g((inv_l or {}).get('rating'), 'kW')} {type_word + ' type' if type_word else BLANK}, {phase}" + (f" × {units}" if units > 1 else "")
     inv_lines = [
-        f"{inv_code}: {_g((inv_l or {}).get('rating'), 'kW')} {inv_type}, {phase}" + (f" × {units}" if units > 1 else ""),
+        head,
         f"{_g(ii.get('mppt_count')) if ii.get('mppt_count') else BLANK} MPPT inputs, {inp_txt}; max PV {_f(ii.get('max_pv_voltage_v'), 0, 'V')}; window {_f(ii.get('mppt_min_v'), 0, 'V')}–{_f(ii.get('mppt_max_v'), 0, 'V')}",
     ]
     s.stack(inv_x + side - 1.0, BUS + 30.0, inv_lines, 44, FS, "end", bold_first=True)
@@ -581,7 +593,7 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     s.line(x_pb0, BUS, bar_x, BUS, W_BUS)
     s.line(bar_x, BUS - 5.5, bar_x, BUS + 5.5, W_BUS)
     s.text(bar_x + 2.0, BUS + 1.2, f"bus {_g(svc.get('busbar_a'), 'A')}", TAG, F, brand.GRAY)
-    s.text(bar_x + 2.0, BUS - 5.6, "backfeed brk: C5, C6", TAG, F, brand.MUTED)
+    s.text(x_pb1 - 1.2, BUS - 5.6, "C5 backfeed brk; C6 bypass feed", TAG, F, brand.MUTED, "end")   # inside the box (review finding 11: C6 is a load-side feed)
     s.line(bar_x, BUS, x_pb1 - 12.0, BUS, W_BUS)
     s.breaker(x_pb1 - 8.0, BUS, True, 2, 7.0)
     s.text(x_pb1 - 8.0, BUS + 4.0, f"main {_g(svc.get('main_breaker_a'), 'A')}", TAG, F, brand.GRAY, "middle")
@@ -607,7 +619,7 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     poi_txt = ["point of interconnection: " + (INTERCONNECTION_LABEL.get(inter) if inter else "not chosen (Site step)")]
     if svc.get("interconnection_note"):
         poi_txt.append(str(svc["interconnection_note"]))
-    poi_txt += poi_lines(poi)
+    poi_txt += poi_lines(poi, kind)
     x_poi_lbl = x_poi + 3.0 if load_side else x_poi      # clear of the AC SPD's stub on the left
     y_end = s.stack(x_poi_lbl, BUS - 11.0, poi_txt, 36, FS, "middle", bold_first=True)
     if poi.get("checked") and not poi.get("ok"):
@@ -625,7 +637,7 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     du_lines = [f"{du if du else 'DU ' + BLANK}: fault level at the service {_f(fl, 1, 'kA') if fl not in (None, '') else BLANK}", "(from the DU, verify)",
                 _g(svc.get("voltage_v"), "V") if svc.get("voltage_v") else _g(wiring.get("ac_voltage"), "V") + " (assumption)",
                 f"{svc.get('phase')}Ø" if svc.get("phase") else f"phase {BLANK}", f"account {svc.get('account_no') or BLANK}"]
-    s.stack(DRAW_W_MM - 4.0, BUS + 36.0, du_lines, 46, FS, "end")
+    s.stack(DRAW_W_MM - 4.0, BUS + 36.0, du_lines, 62, FS, "end")   # wide enough for "fault level at the service 10.0 kA" on one line (review finding 3)
 
     # ---- the grid line above the bus: the grid feed to the inverter's AC input and the maintenance bypass to the ATS
     x_in = inv_x + side
@@ -662,10 +674,13 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     c7 = circuits.get("C7") or {}
     gec_gauge = c7.get("egc_provided_mm2") if c7 else ch.get("ac_gauge")
     rod_txt = f"{rod.get('name')} ({rod.get('code')})" if _has_item(rod) else "ground rod: no item in the materials list"
-    s.stack(x_disc, EARTH_Y + 3.0 + 3 * FS * 0.42, [
+    # the caption sits to the right of the C7 balloon, where no bus line or symbol runs (review finding 3: anchored at the
+    # bus's end it was struck through by the bus line and overprinted the electrode); `start` anchored, as wide as the sheet leaves
+    cap_x = x_disc + 5.0 + BAL_R + 1.6
+    s.stack(cap_x, EARTH_Y + 2 * FS * 0.42 + 1.0, [
         f"EGC bus: the grounding run {_g(gec_gauge)} mm² THHN, {_g(ch.get('grounding_run_m'), 'm')}; bonds dashed: array, DC box, inverter, battery rack (verify)",
         f"electrode: {rod_txt}; GEC {_g(gec_gauge)} mm² to the rod, required 14 mm² or less for a rod (verify)",
-    ], 66, FS, "end")
+    ], DRAW_W_MM - 4.0 - cap_x, FS, "start")
     return s.d
 
 
