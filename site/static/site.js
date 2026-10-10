@@ -1,4 +1,6 @@
-// Fills contact details and trust lines from the app's public profile, so they are edited in Settings, not in the pages.
+// Fills contact details and trust lines from the app's public profile, so they are edited in Settings, not in the pages;
+// and the motion: sections come in as they scroll into view, the proof figures count up, the phone's sticky call to
+// action appears after the hero. Nothing here is needed to read a page: with JavaScript off nothing is hidden.
 (function () {
   var toggle = document.querySelector('.nav-toggle');
   if (toggle) {
@@ -66,4 +68,80 @@
       .then(function (s) { if (s && s.profile) apply(s.profile, s.warranty); })
       .catch(function () { /* the page stands on its own */ });
   } catch (e) { /* ignore */ }
+
+  // ---- motion. Off entirely when the visitor asks for reduced motion or the browser has no IntersectionObserver.
+  var motion = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) && 'IntersectionObserver' in window;
+
+  // Sections and cards below the fold come in as they scroll into view. Only what is not yet on screen is hidden,
+  // so the first screen never flashes and nothing is hidden before this script runs.
+  if (motion) {
+    var below = [].filter.call(document.querySelectorAll('[data-reveal]'), function (el) {
+      return el.getBoundingClientRect().top > window.innerHeight;
+    });
+    var byParent = {};
+    below.forEach(function (el) {
+      var p = el.parentNode;
+      var key = p.__revealKey || (p.__revealKey = Math.random());
+      var n = byParent[key] = (byParent[key] || 0) + 1;
+      el.style.setProperty('--d', Math.min(n - 1, 5) * 0.08 + 's');
+      el.classList.add('reveal');
+    });
+    var revealer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); revealer.unobserve(e.target); }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -5% 0px' });
+    below.forEach(function (el) { revealer.observe(el); });
+  }
+
+  // The proof figures count up once, when they come into view. The final text is the one written in the page.
+  function countUp(el) {
+    var target = parseFloat(el.getAttribute('data-count'));
+    var prefix = el.getAttribute('data-prefix') || '';
+    var suffix = el.getAttribute('data-suffix') || '';
+    var done = el.textContent;
+    var start = null, dur = 1400;
+    function tick(now) {
+      if (start === null) start = now;
+      var t = Math.min(1, (now - start) / dur);
+      var eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = t < 1 ? prefix + Math.round(target * eased).toLocaleString('en-US') + suffix : done;
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  if (motion) {
+    var counter = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { countUp(e.target); counter.unobserve(e.target); }
+      });
+    }, { threshold: 0.6 });
+    document.querySelectorAll('[data-count]').forEach(function (el) { counter.observe(el); });
+  }
+
+  // The sticky call to action on the phone: after the hero has scrolled away, and never over the band or the footer,
+  // which carry the button themselves.
+  var hero = document.querySelector('.hero');
+  var bar = document.querySelector('[data-sticky-cta]');
+  if (hero && bar && 'IntersectionObserver' in window) {
+    var pastHero = false, endInView = false, ends = document.querySelectorAll('.cta-band, .site-foot');
+    var update = function () { document.documentElement.classList.toggle('cta-on', pastHero && !endInView); };
+    new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { pastHero = !e.isIntersecting && e.boundingClientRect.bottom < 0; });
+      update();
+    }, { threshold: 0 }).observe(hero);
+    var endObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { e.target.__inView = e.isIntersecting; });
+      endInView = [].some.call(ends, function (el) { return el.__inView; });
+      update();
+    }, { threshold: 0 });
+    [].forEach.call(ends, function (el) { endObserver.observe(el); });
+  }
+
+  // The homes scroller on the phone: reachable from the keyboard when it overflows.
+  var homes = document.querySelector('.homes');
+  if (homes && homes.scrollWidth > homes.clientWidth + 8) {
+    homes.setAttribute('tabindex', '0');
+    homes.setAttribute('role', 'region');
+  }
 })();
