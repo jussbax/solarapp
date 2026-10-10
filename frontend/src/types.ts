@@ -873,6 +873,14 @@ export interface SiteBlock {
   tmy_hot_cell_c: number | null
 }
 
+/** One line of the plan set's revision log (round 13): appended by "Issue a revision", never edited. Revision 0 is the first issue, dated by plans_issued_at. */
+export interface RevisionEntry {
+  no: number
+  date: string
+  note: string
+  by: string
+}
+
 export interface AssessmentOut {
   id: number
   created_at: string
@@ -883,6 +891,9 @@ export interface AssessmentOut {
   pricing_settings_changed: boolean
   status: EngineeringStatus
   proposal_issued_at: string | null
+  /** Round 13: when the plans for the PEE were first generated (revision 0); null until then. */
+  plans_issued_at?: string | null
+  revisions?: RevisionEntry[]
 }
 
 export interface DataStatus {
@@ -908,6 +919,17 @@ export const PROFILE_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: 'owner_name', label: "Owner's name", hint: 'Signs the proposal; named in the booking thank-you.' },
   { key: 'pee_name', label: 'Professional Electrical Engineer' },
   { key: 'pee_license', label: 'PEE licence number (PRC)' },
+  // round 13 (brief 6.1): the rest of the signing engineer's title-block lines; a blank prints as a blank line on every sheet
+  { key: 'pee_prc_valid_until', label: 'PRC licence valid until', hint: 'e.g. 31 Dec 2028' },
+  { key: 'pee_ptr_no', label: 'PTR number' },
+  { key: 'pee_ptr_date', label: 'PTR date of issue', hint: 'e.g. 5 Jan 2026' },
+  { key: 'pee_ptr_place', label: 'PTR place of issue', hint: 'e.g. Pila, Laguna' },
+  { key: 'pee_tin', label: 'TIN' },
+  { key: 'pee_address', label: "PEE's address" },
+  { key: 'pee_firm', label: 'Firm', hint: 'e.g. sole practice' },
+  { key: 'pee_firm_address', label: "Firm's address" },
+  { key: 'pee_phone', label: "PEE's phone" },
+  { key: 'pee_email', label: "PEE's email" },
   { key: 'service_area', label: 'Where you install', hint: 'e.g. the Philippines' },
   { key: 'brands', label: 'Brands you install', hint: 'One line, e.g. Blue Carbon TOPCon panels, Felicity hybrid inverters, LiFePO4 batteries' },
   { key: 'warranty_workmanship_years', label: 'Workmanship warranty (years)' },

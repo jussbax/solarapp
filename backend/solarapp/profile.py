@@ -23,6 +23,19 @@ PROFILE_FIELDS: list[tuple[str, str, str]] = [
     ("owner_name", "Owner's name (signs the proposal)", ""),
     ("pee_name", "Professional Electrical Engineer (name)", ""),
     ("pee_license", "PEE licence number (PRC)", ""),
+    # Round 13 (docs/audits/round-13/engineer-brief.md, 6.1): the rest of the signing engineer's lines in the plans' title
+    # block. Dates are typed as text (the PRC and PTR documents carry them as printed); a blank prints as a blank line on
+    # every sheet, never a guess. None of these is public (PUBLIC_KEYS below is unchanged).
+    ("pee_prc_valid_until", "PRC licence valid until", ""),
+    ("pee_ptr_no", "PTR number", ""),
+    ("pee_ptr_date", "PTR date of issue", ""),
+    ("pee_ptr_place", "PTR place of issue", ""),
+    ("pee_tin", "TIN", ""),
+    ("pee_address", "PEE's address", ""),
+    ("pee_firm", "Firm (or \"sole practice\")", ""),
+    ("pee_firm_address", "Firm's address", ""),
+    ("pee_phone", "PEE's phone", ""),
+    ("pee_email", "PEE's email", ""),
     ("service_area", "Where you install", "the Philippines"),
     ("brands", "Brands you install (one line)", ""),
     # The owner's warranty terms (9 Oct 2026): panel product 12, battery 5, inverter 5, workmanship 2; the panel
@@ -42,6 +55,8 @@ PROFILE_FIELDS: list[tuple[str, str, str]] = [
 ]
 PROFILE_KEYS = [k for k, _, _ in PROFILE_FIELDS]
 PROFILE_DEFAULTS = {k: d for k, _, d in PROFILE_FIELDS}
+# the signing engineer's fields (the Settings page groups them under "Signing engineer"; the plans' title block prints them all)
+PEE_KEYS = ["pee_name", "pee_license", "pee_prc_valid_until", "pee_ptr_no", "pee_ptr_date", "pee_ptr_place", "pee_tin", "pee_address", "pee_firm", "pee_firm_address", "pee_phone", "pee_email"]
 # fields only the website uses (the Settings page groups them under "Website"); the proposal fields stay with the documents
 WEBSITE_KEYS = ["messenger", "facebook", "brands", "callback_promise", "after_sales", "privacy_note"]
 # fields the public estimate page may show; the rest stay internal

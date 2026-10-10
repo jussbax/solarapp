@@ -364,6 +364,10 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
         // the proposal is issued for the record from here: the head shows it with the date and the price locks
         api.getAssessment(aid).then(setA).catch(() => undefined)
       }
+      if (url === api.plansUrl(aid) && a && !a.plans_issued_at) {
+        // the plans are issued from here (revision 0): the Documents card shows the revision line
+        api.getAssessment(aid).then(setA).catch(() => undefined)
+      }
       const objectUrl = URL.createObjectURL(d.blob)
       if (d.inline && win) {
         win.location.replace(objectUrl)
@@ -411,6 +415,27 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
   // the engineering status is read from the record's facts, never typed; "Reopen design" is the one thing that moves it back
   const projectStatus = a?.status ?? 'draft'
   const statusWhat = ENGINEERING_STATUSES.find((s) => s.id === projectStatus)?.what ?? ''
+  /** "Issue a revision" of the plans (round 13): a note is required; the signed-in person's name is recorded on the server. */
+  const issueRevision = async () => {
+    if (isNew || !a?.plans_issued_at) return
+    const note = window.prompt('What changed in this revision of the plans? (printed on every sheet and in the cover\'s revision log)')
+    if (note == null) return
+    if (!note.trim()) {
+      setError('A revision needs a note that says what changed.')
+      return
+    }
+    setBusy('Issuing...')
+    setError(null)
+    try {
+      setA(await api.issueRevision(aid, note.trim()))
+      setToast('Revision issued')
+    } catch (e) {
+      fail(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const reopen = async () => {
     if (!a?.proposal_issued_at) return
     if (!window.confirm(`Reopen the design? The proposal issued on ${fmtDateShort(a.proposal_issued_at)} is no longer the standing one, and the next Calculate may move the price.`)) return
@@ -738,6 +763,9 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                   bomXlsx: api.bomXlsxUrl(aid),
                 }}
                 openDocument={openDocument}
+                plansIssuedAt={a?.plans_issued_at ?? null}
+                revisions={a?.revisions ?? []}
+                onIssueRevision={issueRevision}
               />
             </div>
           </div>

@@ -363,6 +363,19 @@ class AssessmentSummary(BaseModel):
     lead_id: Optional[int] = None          # the leads-inbox row it was started from; the only lead field a project summary carries
 
 
+class RevisionEntry(BaseModel):
+    """One line of the plan set's revision log (round 13, brief 6.3): appended by "Issue a revision", never edited or
+    removed. Revision 0 is the first issue, dated by `plans_issued_at`, and is not an entry here."""
+    no: int = Field(ge=1)
+    date: str = ""      # ISO date-time (UTC) of the issue
+    note: str = ""      # what changed, as the office typed it
+    by: str = ""        # the signed-in person's name
+
+
+class RevisionIn(BaseModel):
+    note: str = Field(min_length=1, max_length=400)
+
+
 class AssessmentOut(BaseModel):
     id: int
     created_at: datetime
@@ -373,6 +386,9 @@ class AssessmentOut(BaseModel):
     pricing_settings_changed: bool = False   # see AssessmentSummary
     status: EngineeringStatus = "draft"
     proposal_issued_at: Optional[datetime] = None
+    # round 13: the plan set's first issue (revision 0) and its revision log; empty until the plans PDF is first generated
+    plans_issued_at: Optional[datetime] = None
+    revisions: list[RevisionEntry] = Field(default_factory=list)
 
 
 class LoginIn(BaseModel):

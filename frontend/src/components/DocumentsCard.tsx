@@ -1,5 +1,6 @@
-import type { Results } from '../types'
+import type { Results, RevisionEntry } from '../types'
 import Field from './Field'
+import { fmtDateShort } from '../fmt'
 
 export type DocState = 'ready' | 'needs_calculation' | 'needs_pricing' | 'test_weather'
 
@@ -44,6 +45,9 @@ export default function DocumentsCard({
   onNextStepChange,
   urls,
   openDocument,
+  plansIssuedAt,
+  revisions,
+  onIssueRevision,
 }: {
   results: Results | null
   stale: boolean
@@ -54,13 +58,19 @@ export default function DocumentsCard({
   /** `plans` may be left out: the plans URL then follows the program's (the same route family, api.plansUrl). */
   urls: { report: string; card: string; proposal: string; program: string; bomCsv: string; bomXlsx: string; plans?: string }
   openDocument: (url: string, inlineHint?: boolean) => void
+  /** Round 13: the plan set's first issue (revision 0) and its revision log; "Issue a revision" appends the next number. */
+  plansIssuedAt?: string | null
+  revisions?: RevisionEntry[]
+  onIssueRevision?: () => void
 }) {
+  const revs = revisions ?? []
+  const last = revs.length ? revs[revs.length - 1] : null
   const plansUrl = urls.plans ?? urls.program.replace(/\/program\.pdf(\?.*)?$/, '/plans.pdf')
   const rows: DocRow[] = [
     { key: 'report', name: 'Roof check PDF', what: 'Internal: what the roof can hold and what it would make, with the plan of each face. The customer receives the proposal, never the readings.', customer: false, needs: 'results', url: urls.report, action: 'Download' },
     { key: 'card', name: 'Roof check card', what: 'Internal: the visit on one phone-sized image for the office chat. Not for the customer.', customer: false, needs: 'results', url: urls.card, inline: true, action: 'Open' },
     { key: 'proposal', name: 'Proposal PDF', what: 'For the customer: the system, the price, savings, payment terms and the milestone schedule.', customer: true, needs: 'pricing', url: urls.proposal, action: 'Download' },
-    { key: 'plans', name: 'Plans for the PEE, PDF', what: 'Internal: the A3 drawing set for the Professional Electrical Engineer to sign and seal: cover and general notes, the array layout of each face at scale, the equipment and circuit schedule, and what still waits on the datasheets.', customer: false, needs: 'pricing', url: plansUrl, action: 'Download' },
+    { key: 'plans', name: 'Plans for the PEE, PDF', what: 'Internal: the A3 drawing set for the Professional Electrical Engineer to sign and seal: cover and general notes with the sheet index and the revision log, the array layout of each face at scale, the equipment and circuit schedule, and what still waits on the datasheets. The title block prints the signing engineer from Settings › Company.', customer: false, needs: 'pricing', url: plansUrl, action: 'Download' },
     { key: 'program', name: 'Program of works PDF', what: 'Internal: the Gantt chart, the hour-by-hour plan and the pickup list.', customer: false, needs: 'program', url: urls.program, action: 'Download' },
     { key: 'bom-csv', name: 'Bill of materials, CSV', what: 'Internal: the BOM with your edits, for supplier orders.', customer: false, needs: 'pricing', url: urls.bomCsv, action: 'Export' },
     { key: 'bom-xlsx', name: 'Bill of materials, XLSX', what: 'Internal: the same list as a workbook.', customer: false, needs: 'pricing', url: urls.bomXlsx, action: 'Export' },
@@ -82,6 +92,24 @@ export default function DocumentsCard({
                 </div>
                 <div className="muted">{r.what}</div>
                 {reason && <div className="muted doc-reason">{reason}</div>}
+                {r.key === 'plans' && (
+                  <div className="doc-revision" data-testid="plans-revision">
+                    {plansIssuedAt ? (
+                      <>
+                        <span className="muted">
+                          {last ? `Rev. ${last.no}: ${last.note} — ${fmtDateShort(last.date)}, by ${last.by || '—'}` : `Rev. 0: first issue — ${fmtDateShort(plansIssuedAt)}`}
+                        </span>{' '}
+                        {onIssueRevision && (
+                          <button type="button" className="toggle link" onClick={onIssueRevision} disabled={busy}>
+                            Issue a revision
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <span className="muted">Not issued yet: the first download is revision 0; later changes are issued as numbered revisions here.</span>
+                    )}
+                  </div>
+                )}
                 {r.key === 'card' && (
                   <Field label="Next step printed on the card" className="doc-field" hint={`A date and time help, e.g. "Energy audit: Saturday 18 Oct, 9 am, about an hour". Blank prints the card's own line. Saved with the project.`}>
                     {(id) => <input id={id} value={nextStep} onChange={(e) => onNextStepChange(e.target.value)} placeholder="Next step: your free energy audit" maxLength={120} />}

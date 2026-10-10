@@ -65,8 +65,10 @@ def test_plans_build_for_the_reference_record_on_a3(client):
     for i, page in enumerate(pages, start=1):
         assert "Test Solar" in page and "PV system plans: Maria Santos" in page and f"Project P-" in page
         assert f"Sheet {i} of 5" in page and "A3 landscape, 420 × 297 mm" in page
-        assert "Signed and sealed by the Professional Electrical Engineer" in page and "Name: Juan dela Cruz" in page and "PRC No.: 0012345" in page
-        assert "PTR No.: " + BLANK in page   # not in the profile: a blank line, never invented
+        # round 13: the signature block's six lines from the profile; a field the profile does not hold is a blank line, never invented
+        assert "Signed and sealed by the Professional Electrical Engineer" in page and "Juan dela Cruz, PEE" in page and "PRC No. 0012345" in page
+        assert "PTR No. " + BLANK in page and "TIN " + BLANK in page
+        assert "Owner: Maria Santos" in page and "Rev. 0: first issue" in page   # the owner and the revision line on every sheet
     cover, main, kitchen, schedule, last = pages
     assert "Cover and general notes" in cover and "General notes" in cover and "Sheets in this set" in cover
     assert "Hybrid: grid-interactive with a battery" in cover and "Main roof (south)" in cover and "Kitchen roof (east)" in cover
@@ -95,7 +97,8 @@ def test_plans_print_blank_lines_where_the_profile_is_empty():
     pdf = build_plans_pdf(doc, results, {"company_name": "", "pee_name": "", "pee_license": ""}, items={}, config={}, project_no="P-2026-0001")
     pages = _pages(_pdf_text(pdf))
     assert len(pages) == 3   # cover, the schedule, the last sheet
-    assert "Name: " + BLANK in pages[0] and "PRC No.: " + BLANK in pages[0] and "Sheet 1 of 3" in pages[0]
+    assert BLANK + ", PEE" in pages[0] and "PRC No. " + BLANK in pages[0] and "Sheet 1 of 3" in pages[0]
+    assert "Rev. 0" in pages[0] and "Rev. 0: first issue" not in pages[0]   # no issue date outside the API: the title block reads "Rev. 0" as before the log existed
     assert "The energy audit has no appliances yet" in pages[-1]
 
 

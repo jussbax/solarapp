@@ -394,6 +394,7 @@ table.bom td.cell-qty input { width: 90px; }
 .doc-action { flex: 0 0 auto; }
 .doc-action button { min-width: 110px; }
 .doc-field { margin-top: 8px; max-width: 520px; }
+.doc-revision { margin-top: 6px; font-size: var(--fs-sm); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .doc-row .doc-reason { color: var(--warn); }
 
 /* ---------- settings: a menu of pages (a left menu on the desk, a list of cards on the phone), one page beside it ---------- */
