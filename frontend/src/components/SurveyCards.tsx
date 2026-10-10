@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Field from './Field'
 import NumberInput from './NumberInput'
-import type { ConditionFlag, GeoPoint, Interconnection, PanelboardCircuit, PurlinMaterial, RoofConstruction, RoofType, ServiceEntrance, SitePlan } from '../types'
+import { fmtDateShort } from '../fmt'
+import type { ConditionFlag, GeoPoint, Interconnection, PanelboardCircuit, PurlinMaterial, RoofConstruction, RoofType, ServiceEntrance, SitePlan, VicinityMap } from '../types'
 
 /** The survey record the plan set reads (round 13, docs/audits/round-13/engineer-brief.md, 1.3, 3.2, 4.2): the service entrance,
  * the roof construction and the site plan's points and outlines. Every field is optional and blank until surveyed; a blank
@@ -260,8 +261,81 @@ const POINTS: { key: 'inverter' | 'battery' | 'poi' | 'meter'; label: string; pl
   { key: 'meter', label: 'Meter', placeholder: 'e.g. on the gate post' },
 ]
 
+/** The vicinity map's controls on the Site plan card (round 13, item 4): the page owns the calls; the card shows the state and asks. */
+export interface VicinityControls {
+  state: VicinityMap | null
+  /** The preview of whichever map prints (null when nothing is on record). */
+  previewUrl: string | null
+  busy: boolean
+  /** Why the actions are off (an unsaved draft, unsaved edits, no pin), or null when they may run. */
+  blocked: string | null
+  onPrepare: (force: boolean) => void
+  onUpload: (file: File, note: string) => void
+  onRemoveUpload: () => void
+}
+
+/** The vicinity map: composed on the server from map tiles ("Prepare the map"), or the office's screen grab, which prints instead. */
+function VicinityMapSection({ state, previewUrl, busy, blocked, onPrepare, onUpload, onRemoveUpload }: VicinityControls) {
+  const [note, setNote] = useState(state?.upload?.note ?? '')
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const off = busy || !!blocked
+  const status = state?.upload
+    ? `Your screen grab of ${fmtDateShort(state.upload.uploaded_at)} prints on the sheet${state.osm ? ' (the fetched map is kept underneath)' : ''}.`
+    : state?.osm
+      ? `Composed from map tiles on ${fmtDateShort(state.osm.fetched_at)} (${state.osm.host}); prints on the sheet with "${state.osm.attribution}".`
+      : state?.error
+        ? `Not fetched: ${state.error.reason}. The sheet prints the pin and this note until a map is on record.`
+        : 'Not prepared yet. The first plans download prepares it; or press the button now.'
+  const version = state?.upload?.uploaded_at ?? state?.osm?.fetched_at ?? ''
+  return (
+    <div data-testid="vicinity-map">
+      <h3>Vicinity map</h3>
+      <div className="muted" style={{ marginBottom: 6 }}>
+        Sheet 2 of the plans. Composed from OpenStreetMap tiles under their usage policy (eighteen tiles per project, fetched once and cached; the attribution prints on the sheet), or your own screen grab, which always prints instead when uploaded.
+      </div>
+      <div className="muted" data-testid="vicinity-status" data-source={state?.source ?? (state?.error ? 'error' : 'none')}>
+        {status}
+      </div>
+      {previewUrl && (
+        <div style={{ margin: '6px 0' }}>
+          <img src={`${previewUrl}${previewUrl.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}`} alt="The vicinity map that prints on the plans" style={{ maxHeight: 220, maxWidth: '100%', border: '1px solid var(--line)' }} />
+        </div>
+      )}
+      <div className="row" style={{ alignItems: 'end', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="small" disabled={off} title={blocked ?? undefined} onClick={() => onPrepare(!!state?.osm)} data-testid="vicinity-prepare">
+          {state?.osm ? 'Refresh map' : 'Prepare the map'}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg"
+          style={{ display: 'none' }}
+          data-testid="vicinity-file"
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) onUpload(f, note)
+            e.target.value = ''
+          }}
+        />
+        <button type="button" className="small" disabled={off} title={blocked ?? undefined} onClick={() => fileRef.current?.click()} data-testid="vicinity-upload">
+          Upload a screen grab
+        </button>
+        {state?.upload && (
+          <button type="button" className="toggle link danger" disabled={off} onClick={onRemoveUpload} data-testid="vicinity-remove">
+            Remove the upload
+          </button>
+        )}
+        <Field label="Attribution printed with the upload" id="vicinity-note" className="narrow" style={{ minWidth: 260, flex: 1 }} help="e.g. screen grab of the office map, © OpenStreetMap contributors">
+          {(id) => <input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="screen grab of the office map, © OpenStreetMap contributors" maxLength={200} />}
+        </Field>
+      </div>
+      {blocked && <div className="muted">{blocked}</div>}
+    </div>
+  )
+}
+
 /** The site plan's survey (4.2): where the equipment, the point of interconnection and the meter go, and the lot and house outlines. */
-export function SitePlanCard({ value, onChange }: { value: SitePlan; onChange: (v: SitePlan) => void }) {
+export function SitePlanCard({ value, onChange, vicinity }: { value: SitePlan; onChange: (v: SitePlan) => void; vicinity?: VicinityControls }) {
   const set = (p: Partial<SitePlan>) => onChange({ ...value, ...p })
   return (
     <div className="card" id="card-siteplan" data-testid="card-siteplan">
@@ -269,6 +343,7 @@ export function SitePlanCard({ value, onChange }: { value: SitePlan; onChange: (
       <div className="muted" style={{ marginBottom: 8 }}>
         Typed coordinates for now, as the map pin shows them (latitude, longitude in degrees); drawing the outlines and dragging the points on the map is a later step. A blank prints "not surveyed" on the site plan sheet, never a guess.
       </div>
+      {vicinity && <VicinityMapSection {...vicinity} />}
       <h3>Equipment, the point of interconnection and the meter</h3>
       <div className="form-grid cols-3">
         {POINTS.map((p) => (

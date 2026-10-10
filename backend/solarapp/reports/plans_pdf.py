@@ -1,8 +1,9 @@
 """The plans for the PEE: the drawing set the Professional Electrical Engineer signs and seals, A3 landscape
 (420 × 297 mm), drawn with ReportLab from the geometry, the BOM and the settings the results already hold.
 
-Sheets: 1 cover and general notes; one array layout per roof face that holds panels, at the largest standard scale
-that fits the sheet; the equipment and circuit schedule; a last sheet that says what is not yet in the set and why,
+Sheets: 1 cover and general notes; 2 the vicinity map and the site plan (round 13, item 4: reports/plans_site.py); one
+array layout per roof face that holds panels, at the largest standard scale that fits the sheet; the equipment and
+circuit schedule; a last sheet that says what is not yet in the set and why,
 with the energy audit's schedule of loads when the audit has appliances. Every page carries the title block
 (company; the owner, the project and the system; sheet name and number; the date, the revision line and the calculation
 stamp; the PEE's signature block from the company profile, round 13: name and PRC number with its validity, the PTR
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import io
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Optional
 from xml.sax.saxutils import escape
 
@@ -31,6 +33,7 @@ from ..profile import PEE_KEYS, PROFILE_FIELDS
 from ..schemas import AssessmentDoc
 from . import brand
 from .drawings import fit_scale, plan_drawing
+from .plans_site import site_sheet
 
 PAGE_W, PAGE_H = landscape(A3)              # 1190.55 × 841.89 pt: 420 × 297 mm
 SHEET_SIZE = "A3 landscape, 420 × 297 mm"
@@ -310,12 +313,15 @@ def _revision_line(plans_issued_at: Optional[str], revisions: list[dict]) -> str
 
 def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Optional[dict[str, dict]] = None,
                     config: Optional[dict] = None, project_no: str = "", today: Optional[date] = None, datasheets: Optional[dict[str, dict]] = None,
-                    plans_issued_at: Optional[str] = None, revisions: Optional[list[dict]] = None) -> bytes:
+                    plans_issued_at: Optional[str] = None, revisions: Optional[list[dict]] = None,
+                    vicinity: Optional[dict] = None, project_dir: Optional[Path] = None) -> bytes:
     """The A3 drawing set as PDF bytes. `items` is the materials list by code (dicts of the Item fields) for the
     models' specs and electrical data; `config` is the pricing settings as a dict (wiring rules and BOM item roles);
     `datasheets` (round 12) says per code which datasheet file and date an item's figures came from, so each figure
     on the sheets can say so, or stay BLANK: nothing is derived on the sheet. `plans_issued_at` and `revisions`
-    (round 13) are the record's first issue and its revision log; without them the set reads "Rev. 0"."""
+    (round 13) are the record's first issue and its revision log; without them the set reads "Rev. 0". `vicinity` is the
+    record's vicinity-map block and `project_dir` the folder its files live in (round 13, item 4); without them the
+    site sheet prints the pin and says no map was fetched."""
     items = items or {}
     revisions = list(revisions or [])
     cfg = config or {}
@@ -638,9 +644,13 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
             l, r, _ = _balance(part)
             sched_pages.append((l, r))
 
+    # ---------------- sheet 2 (built first, so the cover's index knows its name): the vicinity map and the site plan (round 13, item 4)
+    site_name, site_flow, site_scale = site_sheet(doc, geometry, styles={"h1": h1, "h2": h2, "body": body, "small": small, "P": P, "two_col": two_col},
+                                                  vicinity=vicinity, project_dir=project_dir, blank=BLANK)
+
     # ---------------- sheet 1: cover and general notes
     sched_names = ["Equipment and circuit schedule"] + (["Equipment and circuit schedule (continued)"] if len(sched_pages) > 1 else [])
-    sheet_names = ["Cover and general notes"] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels] + sched_names + ["Not yet in this set; schedule of loads"]
+    sheet_names = ["Cover and general notes", site_name] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels] + sched_names + ["Not yet in this set; schedule of loads"]
     story: list = [SheetMarker(sheet_names[0])]
     story.append(Paragraph(f"PV system plans: {escape(doc.customer_name or BLANK)}", h1))
     story.append(Paragraph(f"{escape(doc.address or BLANK)} · pin {doc.lat:.5f}, {doc.lon:.5f} · {escape(KIND_LABEL.get(kind, 'solar PV system'))}", body))
@@ -749,6 +759,11 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     bottom.setStyle(two_col)
     story.append(bottom)
 
+    # ---------------- the vicinity map and the site plan, after the cover
+    story.append(PageBreak())
+    story.append(SheetMarker(site_name, site_scale))
+    story += site_flow
+
     # ---------------- one sheet per roof face with panels
     DRAW_W, DRAW_H, SIDE_W = 272 * mm, 226 * mm, 112 * mm
     for g in faces_with_panels:
@@ -848,7 +863,6 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         ("Design analysis: conductor derating, OCPD per circuit beyond the breakers listed, conduit fill, the short-circuit note", TO_COMPLETE + "; the breakers, conductors and drops the BOQ computed are on the circuit schedule sheet."),
         ("Mounting detail (rail, foot, fastener, penetration seal) and the roof construction", "Not drawn. The mounting items and their counts are on the cover's general notes; the roof construction, purlin spacing and uplift check are not in the app yet."),
         ("Wind zone for the mounting", "Not in the app; " + TO_COMPLETE + "."),
-        ("Vicinity map and site plan", f"Not in the set. The project pin is {doc.lat:.5f}, {doc.lon:.5f} ({escape(doc.address or BLANK)})."),
     ]
     if pee_blank:
         missing.append(("Signing engineer's details in the title block", "Blank lines until typed under Settings › Company › Signing engineer: " + escape(", ".join(pee_blank)) + "."))

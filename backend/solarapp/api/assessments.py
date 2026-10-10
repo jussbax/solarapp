@@ -8,7 +8,8 @@ import unicodedata
 from dataclasses import asdict
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
 from ..auth import require_account, require_user
@@ -25,8 +26,9 @@ from ..reports.card import build_client_card
 from ..reports.customer_pdf import build_customer_pdf
 from ..reports.plans_pdf import build_plans_pdf
 from ..reports.program_pdf import build_program_pdf
+from ..reports import vicinity
 from ..reports.quotation_pdf import build_quotation_pdf, customer_battery_kwh
-from ..schemas import JOB_STAGES, AssessmentDoc, AssessmentOut, AssessmentSummary, RevisionEntry, RevisionIn
+from ..schemas import JOB_STAGES, AssessmentDoc, AssessmentOut, AssessmentSummary, RevisionEntry, RevisionIn, VicinityMap
 from .appliances import remember_appliances
 from .deps import get_nasa, get_pvgis
 from .settings_routes import company_settings
@@ -84,6 +86,7 @@ def _out(a: Assessment, settings_changed: bool = False) -> AssessmentOut:
         doc=AssessmentDoc.model_validate(a.doc), results=a.results, results_stale=a.results_stale,
         pricing_settings_changed=settings_changed, status=project_status(a), proposal_issued_at=a.proposal_issued_at,
         plans_issued_at=a.plans_issued_at, revisions=_revisions(a),
+        vicinity_map=VicinityMap.model_validate(a.vicinity_map) if a.vicinity_map else None,
     )
 
 
@@ -162,10 +165,11 @@ def update_assessment(assessment_id: int, doc: AssessmentDoc, session: Session =
 
 
 @router.delete("/{assessment_id}", status_code=204)
-def delete_assessment(assessment_id: int, session: Session = Depends(get_session)) -> Response:
+def delete_assessment(assessment_id: int, session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> Response:
     a = _get(session, assessment_id)
     session.delete(a)
     session.commit()
+    vicinity.remove_project_files(settings.data_dir, assessment_id)   # the project's folder (the maps, the upload) goes with the record
     log.info("assessment deleted id=%s", assessment_id)
     return Response(status_code=204)
 
@@ -343,9 +347,11 @@ def plans_for_the_pee(
         session.commit()
         session.refresh(a)
         log.info("plans issued id=%s", assessment_id)
+    # the vicinity map on record (round 13, item 4): never fetched here, so the build never waits on the tile server
     pdf = build_plans_pdf(AssessmentDoc.model_validate(a.doc), results, company, items=items, config=load_config(session).model_dump(mode="json"),
                           project_no=f"P-{a.created_at.year}-{a.id:04d}", datasheets=datasheet_sources(session),
-                          plans_issued_at=a.plans_issued_at.isoformat(), revisions=[r.model_dump() for r in _revisions(a)])
+                          plans_issued_at=a.plans_issued_at.isoformat(), revisions=[r.model_dump() for r in _revisions(a)],
+                          vicinity=a.vicinity_map, project_dir=vicinity.project_dir(settings.data_dir, a.id))
     return Response(pdf, media_type="application/pdf", headers=_download_name("plans", a, "pdf"))
 
 
@@ -369,6 +375,78 @@ def issue_revision(assessment_id: int, body: RevisionIn, account: User = Depends
     session.refresh(a)
     log.info("plans revision issued id=%s no=%s by=%s", assessment_id, entry.no, account.username)
     return _out_live(session, a)
+
+
+# ---- the vicinity map (round 13, item 4; docs/audits/round-13/engineer-brief.md 4.1): the composed map tiles and the office's upload
+
+def _store_vicinity(session: Session, a: Assessment, state: dict) -> AssessmentOut:
+    a.vicinity_map = dict(state)   # a new dict, so SQLAlchemy sees the JSON column change
+    session.add(a)
+    session.commit()
+    session.refresh(a)
+    return _out_live(session, a)
+
+
+@router.post("/{assessment_id}/vicinity-map/fetch", response_model=AssessmentOut)
+def prepare_vicinity_map(assessment_id: int, force: bool = Query(False, description="remake the mosaics even when they were made for this pin"),
+                         session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> AssessmentOut:
+    """"Prepare the map": composes the vicinity map from map tiles for the record's pin under the tile usage policy
+    (one request at a time, the company's contact in the User-Agent, the 30-day tile cache) and keeps it with the project;
+    nothing is fetched when the mosaics on record were made for this pin (unless `force`). A failure (no outside
+    access, a timeout, a 429) is kept with its reason, and the sheet prints the pin and that reason instead of a map.
+    The plans build itself never fetches, so it never waits on the network."""
+    a = _get(session, assessment_id)
+    doc = AssessmentDoc.model_validate(a.doc)
+    if doc.lat is None or doc.lon is None:
+        raise HTTPException(status_code=409, detail="Set the map pin first: the vicinity map is composed around it.")
+    if vicinity.FETCH_LOCK.locked():
+        raise HTTPException(status_code=409, detail="A vicinity map is being prepared already; try again in a moment.")
+    agent = vicinity.user_agent(company_settings(session, settings), settings.website_base)
+    with vicinity.make_client() as client:   # the environment's proxy settings apply, as to every outbound call
+        state = vicinity.prepare(doc.lat, doc.lon, data_dir=settings.data_dir, assessment_id=a.id, url_template=settings.map_tiles_url,
+                                 attribution=settings.map_tiles_attribution, agent=agent, state=a.vicinity_map, client=client, force=force)
+    return _store_vicinity(session, a, state)
+
+
+@router.post("/{assessment_id}/vicinity-map", response_model=AssessmentOut)
+async def upload_vicinity_map(assessment_id: int, file: UploadFile = File(...), note: str = Form(""),
+                              session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> AssessmentOut:
+    """The office's screen grab of the vicinity map (the override: it is printed in place of the fetched map whenever
+    it is present, with the attribution typed as `note`): PNG or JPEG, 8 MB at most, re-encoded without EXIF and the
+    longer side capped at 2,400 px, kept with the project."""
+    a = _get(session, assessment_id)
+    if file.size is not None and file.size > vicinity.UPLOAD_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="The image is larger than 8 MB.")
+    data = await file.read(vicinity.UPLOAD_MAX_BYTES + 1)
+    if len(data) > vicinity.UPLOAD_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="The image is larger than 8 MB.")
+    try:
+        state = vicinity.store_upload(data, note, vicinity.project_dir(settings.data_dir, a.id), state=a.vicinity_map)
+    except vicinity.UploadError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    log.info("vicinity map uploaded id=%s bytes=%s", assessment_id, len(data))
+    return _store_vicinity(session, a, state)
+
+
+@router.delete("/{assessment_id}/vicinity-map", response_model=AssessmentOut)
+def remove_vicinity_upload(assessment_id: int, session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> AssessmentOut:
+    """Removes the office's upload; the fetched map, when on record, prints again."""
+    a = _get(session, assessment_id)
+    state = vicinity.remove_upload(a.vicinity_map, vicinity.project_dir(settings.data_dir, a.id))
+    log.info("vicinity map upload removed id=%s", assessment_id)
+    return _store_vicinity(session, a, state)
+
+
+@router.get("/{assessment_id}/vicinity-map.png")
+def vicinity_map_png(assessment_id: int, which: str = Query("", pattern="^(|upload|z16|z12)$"),
+                     session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> Response:
+    """The map the sheet prints (the upload when present, else the main mosaic), for the Site plan card's preview;
+    `which` asks for one file outright. 404 when nothing is on record."""
+    a = _get(session, assessment_id)
+    path = vicinity.current_file(a.vicinity_map, vicinity.project_dir(settings.data_dir, a.id), which)
+    if path is None:
+        raise HTTPException(status_code=404, detail="No vicinity map on record for this project.")
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 @router.get("/{assessment_id}/card.png")

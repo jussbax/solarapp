@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
     notify_email: str = ""
+    # Round 13 (docs/audits/round-13/engineer-brief.md, 4.1): the map tiles the vicinity map is composed from. The default is
+    # OpenStreetMap's tile server under its usage policy (light use, a descriptive User-Agent with the company's contact, a
+    # 30-day cache, one request at a time); set another provider's {z}/{x}/{y} address and its attribution line to swap it.
+    # A blank address switches the fetch off: the sheet then prints the pin and the office uploads a screen grab.
+    map_tiles_url: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    map_tiles_attribution: str = "Map data © OpenStreetMap contributors, ODbL"
 
     model_config = SettingsConfigDict(env_prefix="SOLARAPP_", env_file=".env", extra="ignore")
 

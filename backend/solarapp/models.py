@@ -32,6 +32,10 @@ class Assessment(SQLModel, table=True):
     # (db.ensure_columns); an older record without them prints "Rev. 0" as before.
     plans_issued_at: Optional[datetime] = None
     revisions: Optional[list[dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    # Round 13, item 4 (brief 4.1): the vicinity map on record, as reports.vicinity keeps it: which source the sheet prints
+    # ("upload" wins over "osm"), the upload's file and note, the fetched mosaics with the pin they were made for, and the
+    # last fetch failure with its reason. The files live under {data_dir}/projects/{id}/ and go with the record on delete.
+    vicinity_map: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class ApplianceCatalog(SQLModel, table=True):

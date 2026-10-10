@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -33,6 +34,8 @@ EMBED_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-in
              "connect-src 'self'; frame-ancestors 'self'{origins}; base-uri 'self'; form-action 'self'; object-src 'none'")
 MAX_BODY = 1024 * 1024            # an assessment document is tens of kilobytes; nothing on the private API needs more
 MAX_UPLOAD_BODY = 11 * 1024 * 1024  # the materials workbook import (10 MB cap inside, plus the form overhead)
+MAX_IMAGE_BODY = 8 * 1024 * 1024 + 64 * 1024   # the vicinity-map upload (round 13, 4.1: an 8 MB cap inside, plus the form overhead)
+VICINITY_UPLOAD = re.compile(r"^/api/assessments/\d+/vicinity-map$")
 
 
 def prepare_secrets(settings: Settings) -> Settings:
@@ -85,7 +88,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """No request body beyond what the back office needs; a write without a length is refused."""
         if request.method in ("POST", "PUT", "PATCH"):
             length = request.headers.get("content-length", "")
-            cap = MAX_UPLOAD_BODY if request.url.path in ("/api/pricing/import", "/api/pricing/datasheets") else MAX_BODY
+            path = request.url.path
+            cap = MAX_UPLOAD_BODY if path in ("/api/pricing/import", "/api/pricing/datasheets") else MAX_IMAGE_BODY if VICINITY_UPLOAD.match(path) else MAX_BODY
             if not length.isdigit():
                 return JSONResponse({"detail": "Length required"}, status_code=411)
             if int(length) > cap:
