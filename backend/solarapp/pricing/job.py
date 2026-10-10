@@ -12,6 +12,7 @@ from .config import PricingConfig
 from .design_analysis import analyse_design
 from .engine import BomLine, JobInputs, landed_cost, price_job
 from .uplift import apply_uplift
+from .service_checks import poi_busbar_check
 
 
 @dataclass
@@ -160,6 +161,10 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
                               inverter=catalog.get(str(boq.choices.get("inverter_code") or "")), battery=catalog.get(str(boq.choices.get("battery_code") or "")),
                               units=int(boq.choices.get("inverter_units") or 1), tmy_max_air_c=site.get("tmy_max_air_c"), service=doc.service.model_dump())
     warnings += analysis["warnings"]
+    # round 13 (brief 1.3): the 120 % busbar rule at the point of interconnection, from the survey record against the
+    # grid-side breaker the BOQ sized; a failure is a hard warning that prints on the plans, never a block
+    boq.choices["poi_busbar"], poi_warnings = poi_busbar_check(doc.service, boq.choices)
+    warnings += poi_warnings
     generated = [{"code": l.code, "qty": l.qty, "role": l.role, "note": l.note} for l in boq.lines]
     lines, edit_warnings = apply_edits(boq.lines, doc, catalog)
     warnings += edit_warnings

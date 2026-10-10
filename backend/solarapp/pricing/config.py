@@ -509,6 +509,19 @@ class EconomicsConfig(BaseModel):
     co2_kg_per_kwh: float = 0.71              # Philippine grid emission factor
 
 
+class LoadsConfig(BaseModel):
+    """The schedule of loads in the permit's format (round 13, docs/audits/round-13/engineer-brief.md, 5.2): the energy
+    audit's appliances grouped as the LGU's table groups them (lighting, convenience outlets, equipment), each group's VA
+    from its watts over a power factor. Every power factor here is an ASSUMPTION the sheet labels as such; the PEE
+    replaces it before sealing. Nothing here moves a price, a BOM line or a customer document."""
+    # ASSUMPTION: lighting and small appliances at unity, motor and compressor loads at 0.85; the sheet prints "(PF 0.85, assumption)"
+    power_factor: dict[str, float] = Field(default_factory=lambda: {"lighting": 1.0, "outlets": 1.0, "equipment": 0.85})
+    # the audit's categories tabled as equipment (a motor or a compressor); "lighting" is its own group; every other category is a convenience outlet
+    equipment_categories: list[str] = Field(default_factory=lambda: [
+        "aircon_inverter", "aircon_non_inverter", "water_pump", "pressure_washer", "water_heater_tankless", "water_heater_storage", "washing_machine", "dryer", "ev_charger",
+    ])
+
+
 class QuickConfig(BaseModel):
     """Quick estimate (public, four questions): typical roof and panel, no site measurements."""
     enabled: bool = True
@@ -549,6 +562,7 @@ class PricingConfig(BaseModel):
     grounding: GroundingRules = Field(default_factory=GroundingRules)
     mounting: MountingConfig = Field(default_factory=MountingConfig)   # round 13, item 3: the fastener, the feet and the wind inputs of the uplift check
     roles: BoqRoles = Field(default_factory=BoqRoles)
+    loads: LoadsConfig = Field(default_factory=LoadsConfig)   # round 13: the schedule of loads' power factors and grouping (a sheet's labels, never a price)
     imported_from: Optional[str] = None
     imported_at: Optional[str] = None
     # round 12: when the datasheet workbooks were last imported, and which files (a stamp, like imported_at; never a price)
@@ -566,8 +580,9 @@ class PricingConfig(BaseModel):
         return self.labor.paid_hours - self.labor.nonproductive_hours - 2 * self.mobdemob.one_way_travel_hours
 
 
-# Settings that never move a price or a customer document: the website estimate's own knobs and the import stamp.
-VERSION_EXCLUDES = {"quick", "imported_from", "imported_at", "datasheets_imported_from", "datasheets_imported_at", "company_base"}
+# Settings that never move a price or a customer document: the website estimate's own knobs, the import stamp, and the
+# schedule of loads' labels (the plan sheet reads them live at build time, never from the stored results).
+VERSION_EXCLUDES = {"quick", "imported_from", "imported_at", "datasheets_imported_from", "datasheets_imported_at", "company_base", "loads"}
 
 
 def settings_version(cfg: PricingConfig) -> str:

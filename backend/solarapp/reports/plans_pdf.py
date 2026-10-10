@@ -2,11 +2,11 @@
 (420 × 297 mm), drawn with ReportLab from the geometry, the BOM and the settings the results already hold.
 
 Sheets: 1 cover and general notes; 2 the vicinity map and the site plan (round 13, item 4: reports/plans_site.py); one
-array layout per roof face that holds panels, at the largest standard scale that fits the sheet; the equipment and
-circuit schedule; the design analysis (round 13, item 2: the derated circuits with pass, fail or not checked, the
-short-circuit note, the grounding conductors, the tables used and the assumptions, from plans_analysis.py); a last
-sheet that says what is not yet in the set and why,
-with the energy audit's schedule of loads when the audit has appliances. Every page carries the title block
+array layout per roof face that holds panels, at the largest standard scale that fits the sheet; the single-line diagram
+(round 13, item 1: plans_sld.py); the mounting detail and the uplift check (item 3: plans_mounting.py); the equipment and
+circuit schedule; the design analysis (item 2: the derated circuits with pass, fail or not checked, the short-circuit note,
+the grounding conductors, the tables used and the assumptions, from plans_analysis.py); the schedule of loads in the
+permit's format (item 5: plans_loads.py); a last sheet that says what is not yet in the set and why. Every page carries the title block
 (company; the owner, the project and the system; sheet name and number; the date, the revision line and the calculation
 stamp; the PEE's signature block from the company profile, round 13: name and PRC number with its validity, the PTR
 line, the TIN, the address and firm, a blank line for each field the profile does not hold). The cover carries the
@@ -405,6 +405,9 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     two_col = TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                           ("RIGHTPADDING", (0, 0), (0, -1), 6 * mm), ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)])
 
+    # the styles the sheet modules of round 13 draw with (one hook each: a function returning the sheet's name and flowables)
+    styles = {"h1": h1, "h2": h2, "body": body, "small": small, "cell": cell, "cellb": cellb, "grid": grid, "kv_style": kv_style, "two_col": two_col}
+
     def P(t: str, st=cell) -> Paragraph:
         return Paragraph(t, st)
 
@@ -656,11 +659,20 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     mounting = mounting_sheet(doc, results, cfg, items, {"h1": h1, "h2": h2, "body": body, "small": small, "cell": cell, "cellb": cellb, "grid": grid,
                                                           "kv_style": kv_style, "two_col": two_col, "P": P, "kv": kv, "table": table})
 
+    # the single-line diagram (round 13, item 1): its own module, one sheet after the array layouts
+    from .plans_sld import sld_sheet
+    sld_name, sld_flows = sld_sheet(doc, results, items, cfg, styles)
+    # the schedule of loads in the permit's format (round 13, item 5): its own module, one sheet before the last
+    from .plans_loads import loads_sheet
+    loads_name, loads_flows = loads_sheet(doc, results, items, cfg, styles)
+
     # ---------------- sheet 1: cover and general notes
     sched_names = ["Equipment and circuit schedule"] + (["Equipment and circuit schedule (continued)"] if len(sched_pages) > 1 else [])
-    # round 13 (item 2): the design analysis sheet after the schedule sheets and before the last sheet (reports/plans_analysis.py)
+    # round 13 (item 2): the design analysis sheet after the schedule sheets and before the schedule of loads (reports/plans_analysis.py)
     analysis_name, analysis_flows = analysis_sheet(doc, results, items)
-    sheet_names = ["Cover and general notes", site_name] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels] + [mounting.name] + sched_names + [analysis_name] + ["Not yet in this set; schedule of loads"]
+    last_name = "Not yet in this set"
+    sheet_names = (["Cover and general notes", site_name] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels]
+                   + [sld_name, mounting.name] + sched_names + [analysis_name, loads_name, last_name])
     story: list = [SheetMarker(sheet_names[0])]
     cover_start = len(story)   # the head's flowables, measured below so the bottom block fits the room they leave
     story.append(Paragraph(f"PV system plans: {escape(doc.customer_name or BLANK)}", h1))
@@ -769,8 +781,10 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     rev_t.setStyle(kv_style)
     index_block = Table([[[Paragraph("Sheets in this set", h2), index_t], [Paragraph("Revisions", h2), rev_t]]], colWidths=[96 * mm, 98 * mm], hAlign="LEFT")
     index_block.setStyle(two_col)
-    notes_left = [Paragraph("General notes", h2)] + [Paragraph(n, note) for n in notes[:4]]
-    notes_right = [Paragraph("&nbsp;", h2)] + [Paragraph(n, note) for n in notes[4:]] + [index_block]
+    # the notes six and two: the bottom block is one table that cannot split, and the index under the two short notes
+    # keeps it on the cover with room for the sheets still to come (round 13: the set gained two sheets)
+    notes_left = [Paragraph("General notes", h2)] + [Paragraph(n, note) for n in notes[:6]]
+    notes_right = [Paragraph("&nbsp;", h2)] + [Paragraph(n, note) for n in notes[6:]] + [index_block]
     bottom = Table([[notes_left, notes_right]], colWidths=[196 * mm, 194 * mm], hAlign="LEFT")
     bottom.setStyle(two_col)
     # The cover is one sheet whatever the set's length: the sheet index grows with every sheet the set gains (the site
@@ -844,6 +858,11 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
                                  ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
         story.append(row)
 
+    # ---------------- the single-line diagram (not to scale: the marker carries no scale)
+    story.append(PageBreak())
+    story.append(SheetMarker(sld_name))
+    story += sld_flows
+
     # ---------------- the mounting detail and the uplift check
     story.append(PageBreak())
     story.append(SheetMarker(mounting.name, 5))
@@ -868,9 +887,14 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     story.append(SheetMarker(analysis_name))
     story += analysis_flows
 
-    # ---------------- the last sheet: what is not here, and the audit's schedule of loads
+    # ---------------- the schedule of loads in the permit's format
     story.append(PageBreak())
-    story.append(SheetMarker("Not yet in this set; schedule of loads"))
+    story.append(SheetMarker(loads_name))
+    story += loads_flows
+
+    # ---------------- the last sheet: what is not here, and why
+    story.append(PageBreak())
+    story.append(SheetMarker(last_name))
     story.append(Paragraph("Not yet in this set, and why", h1))
     panel_lbl = {"voc_v": "Voc", "vmp_v": "Vmp", "isc_a": "Isc", "imp_a": "Imp", "temp_coeff_voc_pct": "temperature coefficient of Voc", "max_system_voltage_v": "maximum system voltage"}
     inv_lbl = {"max_pv_voltage_v": "maximum PV voltage", "mppt_min_v": "MPPT window (low)", "mppt_max_v": "MPPT window (high)", "mppt_count": "MPPT count", "mppt_max_a": "current per MPPT"}
@@ -880,17 +904,18 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         ("the panel's " + ", ".join(panel_lbl[k] for k in panel_missing) if panel_missing else "the panel's data is on file")
         + "; " + ("the inverter's " + ", ".join(inv_lbl[k] for k in inv_missing) if inv_missing else "the inverter's data is on file")
     )
-    missing = [
-        ("Single-line diagram", (f"Waits on the figures still blank on the Materials page: {datasheet_state}. " if panel_missing or inv_missing else "Not drawn yet; the figures it needs are on file. ")
-                                + "The circuit schedule sheet already carries every breaker, conductor and disconnect the diagram will show."),
-    ]
+    missing = []
+    if panel_missing or inv_missing:
+        # the diagram is in the set (round 13); what the owner has not supplied prints blank on it, and this entry says which figures
+        missing.append(("Single-line diagram (figures blank)", f"Blank on sheet {sheet_names.index(sld_name) + 1} where the Materials page is blank: {datasheet_state}."))
     if not sdn.get("available"):
         missing.append(("String table (Voc at the coldest cell, Vmp at the hottest, Isc per MPPT, the margins against the inverter's window)", f"The same datasheets: {datasheet_state}. "
                         "The string count and the panels per string are on the layout sheets by the current rule."))
-    missing += [
-        ("Schedule of loads in the permit's format, with the PV system as a source and the point of interconnection",
-         "The energy audit's figures are tabled on this sheet; the format, the circuit grouping and the point of interconnection are the signing engineer's."),
-    ]
+    svc = doc.service
+    if not (svc.main_breaker_a and svc.busbar_a and svc.interconnection):
+        # the schedule is in the set (round 13); the panelboard, the point of interconnection and the 120 % rule print blank until surveyed
+        missing.append(("Schedule of loads (service entrance blank)", f"Drawn on sheet {sheet_names.index(loads_name) + 1}; the panelboard, the point of interconnection and the 120 % rule print blank "
+                                                                       "until the Service entrance card on the Site step holds the main breaker, the busbar and the interconnection."))
     # the design analysis (round 13, item 2) is in the set: the entry stays only for the rows it could not check, naming the figures to type
     da = choices.get("design_analysis") or {}
     if not da:
@@ -898,44 +923,12 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     elif da.get("not_checked"):
         missing.append(("Design analysis: rows not checked", "The design analysis sheet carries the rows; these are still \"not checked\" for a figure the app does not hold: "
                         + escape("; ".join(f"{n.get('id')}: " + ", ".join(n.get("reasons") or []) for n in da["not_checked"])) + "."))
-    missing += [
-    ]
     missing += mounting.missing   # the uplift inputs still blank, the tile detail, a roof type out of scope (none when the check passed on drawn details)
     if pee_blank:
         missing.append(("Signing engineer's details in the title block", "Blank lines until typed under Settings › Company › Signing engineer: " + escape(", ".join(pee_blank)) + "."))
     miss_t = Table([[P("Item", cellb), P("Why it is not here, and where it stands", cellb)]] + [[P(a, cellb), P(b)] for a, b in missing], colWidths=[70 * mm, 120 * mm], hAlign="LEFT")
     miss_t.setStyle(kv_style)
-    left_last = [miss_t]
-
-    apps = [a for a in (audit.get("appliances") or []) if a.get("status") in ("existing", "future", None)]
-    right_last: list = [Paragraph("Schedule of loads: the energy audit's figures", h2)]
-    if apps:
-        bills = (audit.get("audit_vs_bill") or {}).get("bills") or []
-        rows = []
-        tot_w, tot_audit, tot_rec = 0.0, 0.0, 0.0
-        for a in apps:
-            qty = float(a.get("quantity") or 1)
-            w = float(a.get("input_power_w") or 0)
-            rows.append([P(escape(str(a.get("name") or ""))), "planned" if a.get("status") == "future" else "existing", _g(qty), _f(w, 0), _f(qty * w, 0),
-                         _f(a.get("hours_per_day"), 1), _f(a.get("kwh_per_day_audit"), 2), _f(a.get("kwh_per_day_reconciled"), 2), _f(a.get("share_pct"), 0)])
-            tot_w += qty * w
-            tot_audit += float(a.get("kwh_per_day_audit") or 0)
-            tot_rec += float(a.get("kwh_per_day_reconciled") or 0)
-        rows.append([P("Total", cellb), "", "", "", _f(tot_w, 0), "", _f(tot_audit, 2), _f(tot_rec, 2), "100"])
-        loads_t = table(["Appliance", "Status", "Qty", "W each", "W total", "h/day", "kWh/day (audit)", "kWh/day (to the bill)", "Share %"], rows,
-                        [44 * mm, 20 * mm, 10 * mm, 16 * mm, 18 * mm, 14 * mm, 22 * mm, 26 * mm, 16 * mm])
-        right_last.append(loads_t)
-        peak = audit.get("peak_detail") or {}
-        bill_txt = f"reconciled to the bill of {escape(str(bills[0].get('billing_month') or ''))} ({_f(bills[0].get('kwh'), 0, 'kWh')})" if bills else "no bill on the audit, so unreconciled"
-        right_last.append(Paragraph(f"These are the audit's figures as calculated ({bill_txt}); connected load {_f(tot_w, 0, 'W')}, peak demand "
-                                    f"{_f(peak.get('kw'), 2, 'kW')} at {escape(str(peak.get('label') or BLANK))} by the hourly profile. "
-                                    f"The PV system as a source: {kwp:.2f} kWp of panels on {units} × {_rating(inv_l, 'kW')} inverter"
-                                    + ("" if kind == "net_metering" else f", battery {_f(choices.get('battery_nominal_kwh'), 2, 'kWh')}") + ". The permit's schedule of loads is drawn up by the signing engineer.", small))
-    else:
-        right_last.append(Paragraph("The energy audit has no appliances yet, so there is no schedule of loads to table.", body))
-    last = Table([[left_last, right_last]], colWidths=[196 * mm, 194 * mm], hAlign="LEFT")
-    last.setStyle(two_col)
-    story.append(last)
+    story.append(miss_t)   # the audit's own table moved to the schedule of loads sheet (round 13, item 5)
 
     # build
     buf = io.BytesIO()

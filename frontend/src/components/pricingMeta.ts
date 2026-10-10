@@ -15,7 +15,7 @@ export const SECTION_LABELS: Record<string, string> = {
   company_base: 'Company base', truck: 'Truck', handling: 'Handling at base', route: 'Route', categories: 'Markup and wastage by category',
   labor: 'Labor day rates', roof: 'Roof work', ground: 'Ground work', hauling: 'Hauling', mobdemob: 'Crew transport', tools: 'Tools', job: 'Fees, markups and VAT',
   job_defaults: 'Job defaults', wiring: 'Wiring rules', string_design: 'String design', roles: 'Items the generator uses', program: 'Program of works', economics: 'Customer savings',
-  system_losses: 'Losses after the panels', sizing: 'Panel and battery autonomy', quick: 'Estimate page', derating: 'Derating', grounding: 'Grounding conductors', mounting: 'Mounting and wind',
+  system_losses: 'Losses after the panels', sizing: 'Panel and battery autonomy', quick: 'Estimate page', derating: 'Derating', grounding: 'Grounding conductors', mounting: 'Mounting and wind', loads: 'Schedule of loads (the plans)',
 }
 export const SKIP = new Set(['imported_from', 'imported_at', 'datasheets_imported_from', 'datasheets_imported_at'])
 /** Percentages are stored as fractions (0.12) and edited as percent (12). */
@@ -285,6 +285,9 @@ export const META: Record<string, SettingMeta> = {
   'system_losses.wiring': { label: 'Wiring', unit: '% kept', help: 'Cables and terminations' },
   'system_losses.soiling': { label: 'Soiling', unit: '% kept', help: 'Dust between rains', about: 'Dust and dirt on the panels between rains; verify locally (a rice-field roof collects more in the dry season).' },
   'system_losses.other': { label: 'Other', unit: '% kept', help: 'Mismatch, availability', about: 'Module mismatch, availability and anything else after the panels. The four multiply: the array is sized on energy at the meter and the customer documents print that figure.' },
+  // the schedule of loads in the permit's format (round 13): labels on a plan sheet, never a price
+  'loads.power_factor': { label: 'Power factor by load group', decimals: 2, help: 'Assumptions; the sheet labels them so', about: "The schedule of loads on the plans for the PEE groups the energy audit's appliances as lighting, convenience outlets and equipment and prints each group's VA as watts over this power factor, labelled \"assumption\". The signing engineer replaces the figures before sealing; nothing here moves a price or a customer document." },
+  'loads.equipment_categories': { label: 'Equipment categories', help: 'Audit categories tabled as equipment', about: 'The energy audit categories the schedule of loads tables under Equipment (a motor or a compressor: aircon, pumps, water heaters, washers). "lighting" is its own group; every other category is a convenience outlet.' },
   'sizing.panel_code': { label: 'Panel on every job', help: 'Blank = the most kWp from the list', about: 'Blank = automatic: of the usable panels in the materials list (active, category Solar Panel, with wattage, length and width) the one that gives the most kWp on each roof, ties to the lower price per watt. A code such as BC-PNL-001 puts that panel on every job; an engineer can still pick another for one project under Design and outputs › System design.' },
   'sizing.days_of_autonomy': { label: 'Days of autonomy', unit: 'evenings', decimals: 1, help: 'Evenings without sun', about: 'The evenings the battery must carry without sun; your choice. 1 = the night deficit of the worst typical day (the rule until now), 2 = twice that. The balance over a real year of weather then reports how often it still runs out.' },
   // the website estimate

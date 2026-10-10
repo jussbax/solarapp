@@ -59,21 +59,23 @@ def test_plans_build_for_the_reference_record_on_a3(client):
     pages = _pages(_pdf_text(r.content))
     faces_with_panels = [g for g in res["geometry"] if g["panels"]]
     assert len(faces_with_panels) == 2
-    # cover, the vicinity map and site plan (round 13, item 4), one layout per face with panels, the mounting detail (item 3), the schedule, the design analysis (item 2), the last sheet
-    assert len(pages) == 2 + len(faces_with_panels) + 4 == 8
+    # cover, the vicinity map and site plan (item 4), one layout per face with panels, the single-line diagram (item 1), the mounting detail (item 3),
+    # the schedule, the design analysis (item 2), the schedule of loads (item 5), the last sheet
+    assert len(pages) == 2 + len(faces_with_panels) + 6 == 10
     # the title block on every sheet: company, project, sheet n of N, the sheet size and the signature block from the profile
     for i, page in enumerate(pages, start=1):
         assert "Test Solar" in page and "PV system plans: Maria Santos" in page and f"Project P-" in page
-        assert f"Sheet {i} of 8" in page and "A3 landscape, 420 × 297 mm" in page
+        assert f"Sheet {i} of 10" in page and "A3 landscape, 420 × 297 mm" in page
         # round 13: the signature block's six lines from the profile; a field the profile does not hold is a blank line, never invented
         assert "Signed and sealed by the Professional Electrical Engineer" in page and "Juan dela Cruz, PEE" in page and "PRC No. 0012345" in page
         assert "PTR No. " + BLANK in page and "TIN " + BLANK in page
         assert "Owner: Maria Santos" in page and "Rev. 0: first issue" in page   # the owner and the revision line on every sheet
-    cover, site, main, kitchen, mounting, schedule, analysis, last = pages
+    cover, site, main, kitchen, sld, mounting, schedule, analysis, loads, last = pages
     assert "Mounting detail and uplift check" in mounting and "Detail A: rib-type metal sheet" in mounting and "Detail B: corrugated sheet" in mounting
     assert "NOT CHECKED" in mounting and "Scale 1:5 on A3" in mounting   # nothing typed: the chain prints its blanks, never a figure
     assert "Cover and general notes" in cover and "General notes" in cover and "Sheets in this set" in cover
     assert "Vicinity map and site plan" in site and "Site plan" in site   # the sheet after the cover; its own tests are in test_plans_site.py
+    assert "Single-line diagram" in sld and "Not to scale" in sld and "S1: " in sld and "(rule)" in sld   # the diagram without the datasheets: the rule's string
     assert "Hybrid: grid-interactive with a battery" in cover and "Main roof (south)" in cover and "Kitchen roof (east)" in cover
     assert "to be completed by the signing engineer" in cover and "PEC" not in cover   # no clause numbers, no standards named by the app
     assert "Array layout: Main roof (south)" in main and re.search(r"Scale 1:\d+ on A3", main) and "Eave (lower edge)" in main
@@ -84,9 +86,10 @@ def test_plans_build_for_the_reference_record_on_a3(client):
     assert "Equipment and circuit schedule" in schedule and "DC side" in schedule and "AC side" in schedule
     assert "Grounding and bonding" in schedule and "Voltage drop" in schedule and "Battery circuit" in schedule
     assert "Grid-side" in schedule and "Inverter output" in schedule   # pdftotext wraps the narrow cells
-    assert "Design analysis: conductor derating" in analysis and "Sheet 7 of 8" in analysis   # test_design_analysis.py reads the sheet itself
+    assert "Design analysis: conductor derating" in analysis and "Sheet 8 of 10" in analysis   # test_design_analysis.py reads the sheet itself
     assert "Not yet in this set, and why" in last and "Single-line diagram" in last and "String table" in last
-    assert "Schedule of loads: the energy audit's figures" in last and "Refrigerator" in last and "Total" in last
+    assert "Schedule of loads" in loads and "Refrigerator" in loads and "Connected load, existing" in loads   # the permit's format, its own sheet (round 13)
+    assert "Refrigerator" not in last
     # the drop figures are the BOQ's
     ch = res["pricing"]["choices"]
     assert f"{ch['pv_drop'] * 100:.1f} %" in schedule and f"{ch['ac_drop'] * 100:.1f} %" in schedule
@@ -100,12 +103,14 @@ def test_plans_print_blank_lines_where_the_profile_is_empty():
                "sizing": {"kind": "net_metering", "panels": 0, "kwp": 0}, "audit": {"appliances": []}}
     pdf = build_plans_pdf(doc, results, {"company_name": "", "pee_name": "", "pee_license": ""}, items={}, config={}, project_no="P-2026-0001")
     pages = _pages(_pdf_text(pdf))
-    assert len(pages) == 6   # cover, the site sheet, the mounting detail (the standard details draw without a check), the schedule, the design analysis (every row a blank line: no circuit records), the last sheet
-    assert BLANK + ", PEE" in pages[0] and "PRC No. " + BLANK in pages[0] and "Sheet 1 of 6" in pages[0]
-    assert "The uplift check is not in these results" in pages[2]
-    assert "no circuits" in pages[4] and "calculate again" in pages[4]
+    assert len(pages) == 8   # cover, the site sheet, the single-line diagram (every figure a blank line), the mounting detail (the standard details draw without a check), the schedule, the design analysis (every row a blank line: no circuit records), the schedule of loads, the last sheet
+    assert BLANK + ", PEE" in pages[0] and "PRC No. " + BLANK in pages[0] and "Sheet 1 of 8" in pages[0]
+    assert "Single-line diagram" in pages[2] and "the system is not sized" in pages[2] and "no item in the materials list" in pages[2]
+    assert "The uplift check is not in these results" in pages[3]
+    assert "no circuits" in pages[5] and "calculate again" in pages[5]
+    assert "Schedule of loads" in pages[6] and "no appliances yet" in pages[6]
     assert "Rev. 0" in pages[0] and "Rev. 0: first issue" not in pages[0]   # no issue date outside the API: the title block reads "Rev. 0" as before the log existed
-    assert "The energy audit has no appliances yet" in pages[-1]
+    assert "Not yet in this set, and why" in pages[-1]
 
 
 def test_plans_are_refused_like_the_proposal(client):

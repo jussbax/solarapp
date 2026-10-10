@@ -81,6 +81,6 @@ def test_the_plans_print_the_string_table_and_the_datasheet_figures(client):
     # pdftotext breaks the cell at "temperature / coefficient", so the phrases are the ones that sit on one line
     assert "Single-line diagram" in last and "the panel's temperature" in flat(last) and "coefficient of Voc; the inverter's MPPT window (low), MPPT window (high)" in flat(last)
     assert "panel's the" not in flat(last) and "inverter's the" not in flat(last)   # the wording slip of the review's finding 8
-    assert "Schedule of loads: the energy audit's figures" in last
+    assert pages[-2].strip().startswith("Schedule of loads") and "Refrigerator" in pages[-2]   # the permit's format, its own sheet (round 13)
     # a figure the app does not hold is a blank line, never a guess: the series fuse rating is not on file
     assert "series fuse rating" in flat(schedule) and BLANK in schedule

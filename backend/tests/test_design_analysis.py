@@ -359,10 +359,10 @@ def test_the_sheet_prints_not_checked_with_the_reason_on_the_seed_then_passes_wi
     pages = _pdf_pages(r.content)
     reading = _pdf_pages(r.content, layout=False)
     # cover, the site sheet, two layouts, the schedule, the design analysis, the last sheet: seven sheets, the analysis named on the cover
-    assert len(pages) == len(reading) == 8 and re.search(r"Sheet 7\s+Design analysis", pages[0])
-    sheet = pages[6]
-    flat = _flat(reading[6])
-    assert "Design analysis: conductor derating, overcurrent protection, conduit fill and grounding" in sheet and "Sheet 7 of 8" in sheet and "Not to scale" in sheet
+    assert len(pages) == len(reading) == 10 and re.search(r"Sheet 8\s+Design analysis", pages[0])
+    sheet = pages[7]
+    flat = _flat(reading[7])
+    assert "Design analysis: conductor derating, overcurrent protection, conduit fill and grounding" in sheet and "Sheet 8 of 10" in sheet and "Not to scale" in sheet
     for cid in ("C1", "C2", "C3", "C4", "C5", "C6", "C7"):
         assert re.search(rf"\b{cid}\b", sheet)
     assert "not checked: the breaker's rating is not checked without Isc on file" in flat
@@ -374,7 +374,7 @@ def test_the_sheet_prints_not_checked_with_the_reason_on_the_seed_then_passes_wi
     assert "to be completed by the signing engineer" not in sheet          # the sheet carries the figures or the reason, never the old placeholder
     last = _flat(reading[-1])
     assert "Design analysis: rows not checked" in last and "C4: fill: the conductor's area is not on the item" in last
-    assert "conduit fill: the design analysis sheet" in _flat(reading[5]) and "Derating, the breaker against the derated ampacity" in _flat(reading[0])
+    assert "conduit fill: the design analysis sheet" in _flat(reading[6]) and "Derating, the breaker against the derated ampacity" in _flat(reading[0])
     # the datasheets, a 500 V input, the areas, the conduit's diameter, the breaker's AIC and the DU's fault level typed: the rows pass
     for f in FILES:
         with open(f, "rb") as fh:
