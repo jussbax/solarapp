@@ -24,7 +24,7 @@ export const SETTINGS_ENTRIES: SettingsEntry[] = [
   { id: 'freight', route: '/settings/pricing/freight', label: 'Freight and the truck', lead: 'The base, the truck and its running cost, handling at base, and the route with its km and toll between stops.', owner: true, sections: ['company_base', 'truck', 'handling', 'route'] },
   { id: 'program', route: '/settings/pricing/program', label: 'Program of works', lead: 'The site day, the durations the schedule assumes, the payment terms a proposal starts from, and when money moves.', owner: true, sections: ['program'] },
   { id: 'savings', route: '/settings/pricing/savings', label: 'Customer savings', lead: 'Tariff, export credit, price rise, the analysis period and the lifetimes the customer savings count on.', owner: true, sections: ['economics'] },
-  { id: 'system', route: '/settings/pricing/system', label: 'System design', lead: 'Losses after the panels and how many evenings the battery must carry.', owner: true, sections: ['system_losses', 'sizing'] },
+  { id: 'system', route: '/settings/pricing/system', label: 'System design', lead: "Losses after the panels, how many evenings the battery must carry, and the power factors the plans' schedule of loads prints as assumptions.", owner: true, sections: ['system_losses', 'sizing', 'loads'] },
   { id: 'account', route: '/settings/account', label: 'Your account', lead: 'Your password, two-step verification, security keys and devices.' },
   { id: 'people', route: '/settings/people', label: 'People', lead: 'Who can sign in to the back office.', owner: true },
   { id: 'data', route: '/settings/data', label: 'Weather and data', lead: 'The weather dataset every calculation runs on.' },

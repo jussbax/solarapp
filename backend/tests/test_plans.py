@@ -59,17 +59,17 @@ def test_plans_build_for_the_reference_record_on_a3(client):
     pages = _pages(_pdf_text(r.content))
     faces_with_panels = [g for g in res["geometry"] if g["panels"]]
     assert len(faces_with_panels) == 2
-    # cover, one layout per face with panels, the single-line diagram (round 13), the schedule, the last sheet
-    assert len(pages) == 1 + len(faces_with_panels) + 3 == 6
+    # cover, one layout per face with panels, the single-line diagram, the schedule, the schedule of loads (round 13), the last sheet
+    assert len(pages) == 1 + len(faces_with_panels) + 4 == 7
     # the title block on every sheet: company, project, sheet n of N, the sheet size and the signature block from the profile
     for i, page in enumerate(pages, start=1):
         assert "Test Solar" in page and "PV system plans: Maria Santos" in page and f"Project P-" in page
-        assert f"Sheet {i} of 6" in page and "A3 landscape, 420 × 297 mm" in page
+        assert f"Sheet {i} of 7" in page and "A3 landscape, 420 × 297 mm" in page
         # round 13: the signature block's six lines from the profile; a field the profile does not hold is a blank line, never invented
         assert "Signed and sealed by the Professional Electrical Engineer" in page and "Juan dela Cruz, PEE" in page and "PRC No. 0012345" in page
         assert "PTR No. " + BLANK in page and "TIN " + BLANK in page
         assert "Owner: Maria Santos" in page and "Rev. 0: first issue" in page   # the owner and the revision line on every sheet
-    cover, main, kitchen, sld, schedule, last = pages
+    cover, main, kitchen, sld, schedule, loads, last = pages
     assert "Cover and general notes" in cover and "General notes" in cover and "Sheets in this set" in cover
     assert "Single-line diagram" in sld and "Not to scale" in sld and "S1: " in sld and "(rule)" in sld   # the diagram without the datasheets: the rule's string
     assert "Hybrid: grid-interactive with a battery" in cover and "Main roof (south)" in cover and "Kitchen roof (east)" in cover
@@ -83,7 +83,8 @@ def test_plans_build_for_the_reference_record_on_a3(client):
     assert "Grounding and bonding" in schedule and "Voltage drop" in schedule and "Battery circuit" in schedule
     assert "Grid-side" in schedule and "Inverter output" in schedule   # pdftotext wraps the narrow cells
     assert "Not yet in this set, and why" in last and "Single-line diagram" in last and "String table" in last
-    assert "Schedule of loads: the energy audit's figures" in last and "Refrigerator" in last and "Total" in last
+    assert "Schedule of loads" in loads and "Refrigerator" in loads and "Connected load, existing" in loads   # the permit's format, its own sheet (round 13)
+    assert "Refrigerator" not in last
     # the drop figures are the BOQ's
     ch = res["pricing"]["choices"]
     assert f"{ch['pv_drop'] * 100:.1f} %" in schedule and f"{ch['ac_drop'] * 100:.1f} %" in schedule
@@ -97,11 +98,12 @@ def test_plans_print_blank_lines_where_the_profile_is_empty():
                "sizing": {"kind": "net_metering", "panels": 0, "kwp": 0}, "audit": {"appliances": []}}
     pdf = build_plans_pdf(doc, results, {"company_name": "", "pee_name": "", "pee_license": ""}, items={}, config={}, project_no="P-2026-0001")
     pages = _pages(_pdf_text(pdf))
-    assert len(pages) == 4   # cover, the single-line diagram (every figure a blank line), the schedule, the last sheet
-    assert BLANK + ", PEE" in pages[0] and "PRC No. " + BLANK in pages[0] and "Sheet 1 of 4" in pages[0]
+    assert len(pages) == 5   # cover, the single-line diagram (every figure a blank line), the schedule, the schedule of loads, the last sheet
+    assert BLANK + ", PEE" in pages[0] and "PRC No. " + BLANK in pages[0] and "Sheet 1 of 5" in pages[0]
     assert "Single-line diagram" in pages[1] and "the system is not sized" in pages[1] and "no item in the materials list" in pages[1]
+    assert "Schedule of loads" in pages[3] and "no appliances yet" in pages[3]
     assert "Rev. 0" in pages[0] and "Rev. 0: first issue" not in pages[0]   # no issue date outside the API: the title block reads "Rev. 0" as before the log existed
-    assert "The energy audit has no appliances yet" in pages[-1]
+    assert "Not yet in this set, and why" in pages[-1]
 
 
 def test_plans_are_refused_like_the_proposal(client):

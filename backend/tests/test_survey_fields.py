@@ -127,5 +127,5 @@ def test_the_plan_set_reads_the_service_block_and_the_quick_estimate_is_unchange
     if shutil.which("pdftotext"):
         text = subprocess.run(["pdftotext", "-layout", "-", "-"], input=r.content, capture_output=True, check=True).stdout.decode()
         pages = [p for p in text.split("\f") if p.strip()]
-        assert len(pages) == 6 and "FLECO: fault level at the service" in text and "120 %: 40 A + 100 A = 140 A" in text
+        assert len(pages) == 7 and "FLECO: fault level at the service" in text and "120 %: 40 A + 100 A = 140 A" in text
     assert AssessmentDoc().service == ServiceEntrance() and AssessmentDoc().site == SitePlan()

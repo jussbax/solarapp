@@ -153,8 +153,8 @@ def test_without_the_datasheets_the_figures_are_blank_and_the_string_label_says_
     assert re.search(r"S1: \d+ × 585 W \(rule\)", sld) and f"Voc {BLANK} STC, {BLANK} at 14 °C" in sld
     assert "not checked: no Isc on file" in sld and f"maximum Voc {BLANK}" in " ".join(sld.split())
     assert "two-way meter" in sld and "120 %: 40 A + 100 A = 140 A" in sld
-    # the set keeps its sheets plus the diagram: cover, two layouts, the diagram, the schedule, the last sheet
-    assert len(pages) == 6 and "Sheet 4 Single-line diagram" in " ".join(pages[0].split())
+    # the set: cover, two layouts, the diagram, the schedule, the schedule of loads, the last sheet
+    assert len(pages) == 7 and "Sheet 4 Single-line diagram" in " ".join(pages[0].split())
 
 
 def test_the_120_rule_fails_on_a_100_a_busbar_and_passes_on_125(client):
