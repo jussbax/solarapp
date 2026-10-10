@@ -1,0 +1,180 @@
+/* The estimate's question cards: one question per card, the slide between them, and the cues above each question.
+   Loaded after estimate.css (the widget concatenates the two); everything here is under .pld-wz- or .pld-wz-cue. */
+.pld-wz-progress { display: flex; align-items: center; gap: 10px; margin: 14px 0 10px; font-size: 12.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pld-gold-text); font-weight: 700; }
+.pld-wz-dots { display: inline-flex; gap: 6px; }
+.pld-wz-dots i { display: block; width: 8px; height: 8px; border-radius: 50%; background: var(--pld-line); transition: background-color 0.3s ease, transform 0.3s ease; }
+.pld-wz-dots i.done { background: var(--pld-gold-text); }
+.pld-wz-dots i.on { background: var(--pld-gold); transform: scale(1.3); }
+/* the stage clips the slide so nothing scrolls sideways; its small padding leaves room for focus rings */
+.pld-wz-stage { position: relative; overflow: hidden; margin: 0 -4px; padding: 4px; }
+.pld-wz-card { position: relative; }
+.pld-wz-leave { position: absolute; top: 4px; left: 4px; right: 4px; pointer-events: none; }
+.pld-wz-cue { margin: 0 0 14px; }
+.pld-wz-svg { display: block; width: 100%; height: auto; }
+.pld-wz-q { font-size: 20px; line-height: 1.25; margin: 0 0 12px; color: var(--pld-ink); font-weight: 700; outline: none; }
+.pld-wz-q:focus-visible { outline: 2px solid var(--pld-gold); outline-offset: 4px; border-radius: 4px; }
+.pld-wz-nav { display: flex; gap: 10px; margin-top: 16px; }
+.pld-wz-back { width: auto; flex: 0 0 auto; min-width: 96px; }
+.pld-wz-next { flex: 1 1 auto; font-size: 17px; }
+.pld-wz-nav .pld-wide { margin-top: 0; width: auto; flex: 1 1 auto; }
+
+/* the slide: the card on its way out fades and moves aside, the new one comes in from the right (from the left going back) */
+@keyframes pld-wz-in-next { from { transform: translateX(36px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pld-wz-in-back { from { transform: translateX(-36px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pld-wz-out-next { from { transform: none; opacity: 1; } to { transform: translateX(-36px); opacity: 0; } }
+@keyframes pld-wz-out-back { from { transform: none; opacity: 1; } to { transform: translateX(36px); opacity: 0; } }
+.pld-wz-enter-next { animation: pld-wz-in-next 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.pld-wz-enter-back { animation: pld-wz-in-back 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.pld-wz-leave-next { animation: pld-wz-out-next 0.32s cubic-bezier(0.4, 0, 0.8, 0.6) both; }
+.pld-wz-leave-back { animation: pld-wz-out-back 0.32s cubic-bezier(0.4, 0, 0.8, 0.6) both; }
+
+/* ---- the cues: gold on dark, the lines off-white ---- */
+.pld-wz-cue { --wz-line: rgba(245, 245, 243, 0.78); --wz-dim: rgba(245, 245, 243, 0.3); --wz-faint: rgba(245, 245, 243, 0.08); --wz-night: #2a3550; }
+.pld-wz-cue text { font-family: inherit; }
+.pld-wz-cue .wz-bg { fill: var(--pld-ink); }
+.pld-wz-cue .wz-ground { fill: rgba(245, 245, 243, 0.05); }
+.pld-wz-cue .wz-horizon { stroke: var(--wz-dim); stroke-width: 2; }
+.pld-wz-cue .wz-night { fill: var(--wz-night); opacity: 0; }
+.pld-wz-cue .wz-stars circle { fill: #f5f5f3; }
+.pld-wz-cue .wz-stars { opacity: 0; }
+/* the house */
+.pld-wz-cue .wz-wall, .pld-wz-cue .wz-roof, .pld-wz-cue .wz-door { fill: none; stroke: var(--wz-line); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.pld-wz-cue .wz-wall { fill: rgba(17, 17, 17, 0.9); }
+.pld-wz-cue .wz-panel { fill: var(--wz-faint); stroke: var(--wz-dim); stroke-width: 2; stroke-linejoin: round; transition: fill 0.35s ease, stroke 0.35s ease; }
+.pld-wz-cue .wz-panel-lines { fill: none; stroke: var(--wz-dim); stroke-width: 1.5; transition: stroke 0.35s ease; }
+.pld-wz-cue .wz-win { fill: none; stroke: var(--wz-line); stroke-width: 2; }
+.pld-wz-cue .wz-win-bars { fill: none; stroke: var(--wz-dim); stroke-width: 1.5; }
+.pld-wz-cue .wz-win-fill { fill: var(--pld-gold); }
+.pld-wz-cue .wz-win-halo, .pld-wz-cue .wz-ac-halo { fill: var(--pld-gold); opacity: 0.22; }
+.pld-wz-cue .wz-ac { fill: rgba(17, 17, 17, 0.9); stroke: var(--wz-line); stroke-width: 2; }
+.pld-wz-cue .wz-fan { fill: none; stroke: var(--wz-dim); stroke-width: 1.5; }
+.pld-wz-cue .wz-fan-blades { fill: none; stroke: var(--wz-line); stroke-width: 1.5; stroke-linecap: round; transform-box: fill-box; transform-origin: center; }
+.pld-wz-cue .wz-lit { opacity: 0; transition: opacity 0.35s ease; }
+/* the street */
+.pld-wz-cue .wz-pole { fill: none; stroke: var(--wz-dim); stroke-width: 2.5; stroke-linecap: round; }
+.pld-wz-cue .wz-wire { fill: none; stroke: var(--wz-dim); stroke-width: 2; stroke-linecap: round; transition: stroke 0.35s ease, opacity 0.35s ease; }
+.pld-wz-cue .wz-lamp { fill: var(--wz-dim); transition: fill 0.35s ease; }
+.pld-wz-cue .wz-lamp-halo { fill: var(--pld-gold); opacity: 0; transition: opacity 0.35s ease; }
+.pld-wz-cue .wz-nwall, .pld-wz-cue .wz-nroof { fill: none; stroke: var(--wz-dim); stroke-width: 2; stroke-linejoin: round; }
+.pld-wz-cue .wz-nwall { fill: rgba(17, 17, 17, 0.9); }
+.pld-wz-cue .wz-nwin { fill: var(--wz-faint); stroke: var(--wz-dim); stroke-width: 1.5; }
+/* the sun and the moon */
+.pld-wz-cue .wz-sun circle { fill: var(--pld-gold); }
+.pld-wz-cue .wz-rays { fill: none; stroke: var(--pld-gold); stroke-width: 3; stroke-linecap: round; }
+.pld-wz-cue .wz-moon path { fill: #f5f5f3; opacity: 0.9; }
+
+/* card 1: what you want from solar */
+.pld-wz-goal .wz-sun, .pld-wz-goal .wz-moon, .pld-wz-goal .wz-battery, .pld-wz-goal .wz-meter-back { opacity: 0; transition: opacity 0.35s ease; }
+.pld-wz-goal .wz-night, .pld-wz-goal .wz-stars { transition: opacity 0.4s ease; }
+.pld-wz-goal .wz-meter-box { fill: rgba(17, 17, 17, 0.9); stroke: var(--wz-line); stroke-width: 2; }
+.pld-wz-goal .wz-meter-dial { fill: none; stroke: var(--wz-dim); stroke-width: 1.5; }
+.pld-wz-goal .wz-meter-needle { stroke: var(--wz-line); stroke-width: 2; stroke-linecap: round; transform-box: view-box; transform-origin: 307px 160px; }
+.pld-wz-goal .wz-meter-back { fill: none; stroke: var(--pld-gold); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pld-wz-goal .wz-bat, .pld-wz-goal .wz-bat-nub { fill: rgba(17, 17, 17, 0.9); stroke: var(--wz-line); stroke-width: 2; }
+.pld-wz-goal .wz-cell { fill: var(--pld-gold); transition: opacity 0.35s ease; }
+.pld-wz-goal .wz-bat-halo { fill: var(--pld-gold); opacity: 0; }
+/* a lower bill: the sun, the panels gold, the meter spinning the other way, the wire carrying power out to the pole */
+.pld-wz-goal[data-goal="net_metering"] .wz-sun, .pld-wz-goal[data-goal="off_grid"] .wz-sun { opacity: 1; }
+.pld-wz-goal[data-goal="net_metering"] .wz-panel, .pld-wz-goal[data-goal="off_grid"] .wz-panel { fill: rgba(201, 162, 39, 0.28); stroke: var(--pld-gold); }
+.pld-wz-goal[data-goal="net_metering"] .wz-panel-lines, .pld-wz-goal[data-goal="off_grid"] .wz-panel-lines { stroke: var(--pld-gold); }
+.pld-wz-goal[data-goal="net_metering"] .wz-meter-back { opacity: 1; }
+.pld-wz-goal[data-goal="net_metering"] .wz-meter-needle { stroke: var(--pld-gold); animation: pld-wz-spin-back 2.4s linear infinite; }
+.pld-wz-goal[data-goal="net_metering"] .wz-wire:not(.wz-wire-far) { stroke: var(--pld-gold); stroke-dasharray: 10 8; animation: pld-wz-flow 0.9s linear infinite; }
+@keyframes pld-wz-spin-back { to { transform: rotate(-360deg); } }
+@keyframes pld-wz-flow { to { stroke-dashoffset: -18; } }
+/* lights in a brownout: the street dark, the windows lit, the battery glowing, the wire dead */
+.pld-wz-goal[data-goal="combination"] .wz-night { opacity: 0.6; }
+.pld-wz-goal[data-goal="combination"] .wz-stars { opacity: 0.9; }
+.pld-wz-goal[data-goal="combination"] .wz-moon { opacity: 1; }
+.pld-wz-goal[data-goal="combination"] .wz-lit { opacity: 1; }
+.pld-wz-goal[data-goal="combination"] .wz-battery { opacity: 1; }
+.pld-wz-goal[data-goal="combination"] .wz-bat-halo { animation: pld-wz-glow 2s ease-in-out infinite alternate; }
+.pld-wz-goal[data-goal="combination"] .wz-wire { stroke-dasharray: 3 9; opacity: 0.45; }
+.pld-wz-goal[data-goal="combination"] .wz-nwin { fill: rgba(17, 17, 17, 0.9); }
+@keyframes pld-wz-glow { from { opacity: 0.12; } to { opacity: 0.4; } }
+/* nothing sold back: the sun, the battery full, the grid line faded */
+.pld-wz-goal[data-goal="off_grid"] .wz-battery { opacity: 1; }
+.pld-wz-goal[data-goal="off_grid"] .wz-bat-halo { opacity: 0.18; }
+.pld-wz-goal[data-goal="off_grid"] .wz-wire { stroke-dasharray: 6 10; opacity: 0.22; }
+
+/* card 2: where the house is */
+.pld-wz-place .wz-grid { fill: none; stroke: rgba(245, 245, 243, 0.06); stroke-width: 1; }
+.pld-wz-place .wz-land { fill: rgba(245, 245, 243, 0.05); stroke: var(--wz-dim); stroke-width: 2; stroke-linejoin: round; }
+.pld-wz-place .wz-road { fill: none; stroke: var(--wz-dim); stroke-width: 1.5; stroke-dasharray: 6 8; }
+.pld-wz-place .wz-towns circle { fill: var(--wz-dim); }
+.pld-wz-place .wz-target { fill: none; stroke: var(--pld-gold); stroke-width: 2; stroke-dasharray: 5 6; opacity: 0.6; transition: opacity 0.35s ease; }
+.pld-wz-place .wz-ring { fill: none; stroke: var(--pld-gold); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.pld-wz-place .wz-shadow { fill: rgba(0, 0, 0, 0.5); opacity: 0; transition: opacity 0.35s ease 0.35s; }
+.pld-wz-place .wz-pin path { fill: var(--pld-gold); }
+.pld-wz-place .wz-pin circle { fill: var(--pld-ink); }
+.pld-wz-place .wz-pin { transform-box: fill-box; transform-origin: center bottom; }
+.pld-wz-place .wz-away { opacity: 0; }
+.pld-wz-place .wz-hover { animation: pld-wz-hover 1.8s ease-in-out infinite alternate; }
+.pld-wz-place .wz-drop { animation: pld-wz-drop 0.75s cubic-bezier(0.3, 0.6, 0.35, 1) both; }
+.pld-wz-place[data-place="town"] .wz-target, .pld-wz-place[data-place="located"] .wz-target { opacity: 0; }
+.pld-wz-place[data-place="town"] .wz-shadow, .pld-wz-place[data-place="located"] .wz-shadow { opacity: 1; }
+.pld-wz-place[data-place="town"] .wz-ring, .pld-wz-place[data-place="located"] .wz-ring { animation: pld-wz-splash 0.7s ease-out 0.4s both; }
+.pld-wz-place[data-place="busy"] .wz-ring { animation: pld-wz-pulse 1.6s ease-out infinite; }
+.pld-wz-place .wz-town { fill: var(--pld-gold); font-size: 32px; font-weight: 700; }
+.pld-wz-place .wz-prov { fill: var(--wz-line); font-size: 21px; font-weight: 600; letter-spacing: 0.04em; }
+.pld-wz-place[data-place="busy"] .wz-town, .pld-wz-place[data-place="province"] .wz-town { fill: var(--wz-line); font-weight: 600; }
+@keyframes pld-wz-drop { 0% { transform: translateY(-170px); opacity: 0; } 10% { opacity: 1; } 55% { transform: translateY(0); } 72% { transform: translateY(-18px); } 86% { transform: translateY(0); } 94% { transform: translateY(-5px); } 100% { transform: translateY(0); opacity: 1; } }
+@keyframes pld-wz-hover { from { transform: translateY(-22px); } to { transform: translateY(-34px); } }
+@keyframes pld-wz-splash { from { transform: scale(0.4); opacity: 0.8; } to { transform: scale(2.2); opacity: 0; } }
+@keyframes pld-wz-pulse { 0% { transform: scale(0.5); opacity: 0.8; } 100% { transform: scale(2.4); opacity: 0; } }
+
+/* card 3: how much electricity */
+.pld-wz-use .wz-track { fill: none; stroke: rgba(245, 245, 243, 0.14); stroke-width: 16; }
+.pld-wz-use .wz-fill { fill: none; stroke: var(--pld-gold); stroke-width: 16; transition: stroke-dashoffset 0.45s ease-out; }
+.pld-wz-use[data-full="yes"] .wz-fill { stroke: #e0b93a; }
+.pld-wz-use .wz-ticks { fill: none; stroke: var(--wz-dim); stroke-width: 2; stroke-linecap: round; }
+.pld-wz-use .wz-needle { stroke: #f5f5f3; stroke-width: 3; stroke-linecap: round; transform-box: view-box; transform-origin: 400px 196px; transition: transform 0.45s ease-out; }
+.pld-wz-use .wz-hub { fill: var(--pld-gold); }
+.pld-wz-use .wz-reading { fill: var(--wz-line); font-size: 22px; font-weight: 600; }
+.pld-wz-use .wz-num { fill: var(--pld-gold); font-size: 40px; font-weight: 700; }
+
+/* card 4: when the house uses the most power; a 6-second day */
+.pld-wz-time .wz-sun, .pld-wz-time .wz-moon { transform-box: view-box; transform-origin: 400px 245px; }
+.pld-wz-time .wz-sun { animation: pld-wz-sun 6s linear infinite; }
+.pld-wz-time .wz-moon { animation: pld-wz-moon 6s linear infinite; }
+.pld-wz-time .wz-night { animation: pld-wz-night 6s linear infinite; }
+.pld-wz-time .wz-stars { animation: pld-wz-stars 6s linear infinite; }
+.pld-wz-time .wz-lamp-halo { animation: pld-wz-stars 6s linear infinite; }
+.pld-wz-time .wz-lamp { fill: var(--pld-gold); }
+.pld-wz-time .wz-lit { opacity: 0.18; transition: none; }
+.pld-wz-time[data-pattern="morning"] .wz-lit { animation: pld-wz-lit-morning 6s linear infinite; }
+.pld-wz-time[data-pattern="balanced"] .wz-lit { animation: pld-wz-lit-day 6s linear infinite; }
+.pld-wz-time[data-pattern="evening"] .wz-lit { animation: pld-wz-lit-evening 6s linear infinite; }
+.pld-wz-time[data-pattern="morning"] .wz-fan-blades, .pld-wz-time[data-pattern="balanced"] .wz-fan-blades, .pld-wz-time[data-pattern="evening"] .wz-fan-blades { animation: pld-wz-fan 1s linear infinite; }
+/* the sun is up through the first half (it clears the horizon at about 4% and sets at about 49%), the moon through the second */
+@keyframes pld-wz-sun { from { transform: rotate(-100deg); } to { transform: rotate(260deg); } }
+@keyframes pld-wz-moon { from { transform: rotate(80deg); } to { transform: rotate(440deg); } }
+@keyframes pld-wz-night { 0%, 42% { opacity: 0; } 52%, 92% { opacity: 0.6; } 100% { opacity: 0; } }
+@keyframes pld-wz-stars { 0%, 46% { opacity: 0; } 56%, 90% { opacity: 0.9; } 100% { opacity: 0; } }
+@keyframes pld-wz-lit-morning { 0% { opacity: 0.15; } 4%, 28% { opacity: 1; } 36%, 100% { opacity: 0.15; } }
+@keyframes pld-wz-lit-day { 0% { opacity: 0.15; } 4%, 48% { opacity: 1; } 56%, 100% { opacity: 0.15; } }
+@keyframes pld-wz-lit-evening { 0%, 44% { opacity: 0.15; } 52%, 94% { opacity: 1; } 100% { opacity: 0.15; } }
+@keyframes pld-wz-fan { to { transform: rotate(360deg); } }
+
+/* reduced motion: the cards change in place, nothing loops; the day cue shows one still of the chosen pattern */
+@media (prefers-reduced-motion: reduce) {
+  .pld-wz-card, .pld-wz-dots i { animation: none !important; transition: none !important; }
+  .pld-wz-cue *, .pld-wz-cue { transition: none !important; }
+  .pld-wz-goal .wz-meter-needle, .pld-wz-goal .wz-bat-halo, .pld-wz-goal .wz-wire, .pld-wz-place .wz-pin, .pld-wz-place .wz-ring,
+  .pld-wz-time .wz-sun, .pld-wz-time .wz-moon, .pld-wz-time .wz-night, .pld-wz-time .wz-stars, .pld-wz-time .wz-lamp-halo, .pld-wz-time .wz-lit, .pld-wz-time .wz-fan-blades { animation: none !important; }
+  .pld-wz-goal[data-goal="net_metering"] .wz-meter-needle { transform: rotate(-60deg); }
+  .pld-wz-goal[data-goal="combination"] .wz-bat-halo { opacity: 0.3; }
+  .pld-wz-place .wz-hover { transform: translateY(-26px); }
+  .pld-wz-place .wz-drop { transform: none; opacity: 1; }
+  .pld-wz-place[data-place="busy"] .wz-ring { opacity: 0.6; transform: scale(1.6); }
+  .pld-wz-time .wz-sun { transform: rotate(-25deg); }
+  .pld-wz-time .wz-moon { transform: rotate(-200deg); }
+  .pld-wz-time .wz-night, .pld-wz-time .wz-stars, .pld-wz-time .wz-lamp-halo { opacity: 0; }
+  .pld-wz-time[data-pattern="morning"] .wz-sun { transform: rotate(-52deg); }
+  .pld-wz-time[data-pattern="balanced"] .wz-sun { transform: rotate(0deg); }
+  .pld-wz-time[data-pattern="evening"] .wz-sun { transform: rotate(-200deg); }
+  .pld-wz-time[data-pattern="evening"] .wz-moon { transform: rotate(-30deg); }
+  .pld-wz-time[data-pattern="evening"] .wz-night { opacity: 0.6; }
+  .pld-wz-time[data-pattern="evening"] .wz-stars, .pld-wz-time[data-pattern="evening"] .wz-lamp-halo { opacity: 0.9; }
+  .pld-wz-time[data-pattern="morning"] .wz-lit, .pld-wz-time[data-pattern="balanced"] .wz-lit, .pld-wz-time[data-pattern="evening"] .wz-lit { opacity: 1; }
+}

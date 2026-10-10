@@ -7,6 +7,7 @@
 // page that already has both (the company website).
 import { createRoot } from 'react-dom/client'
 import css from './estimate.css?inline'
+import wizardCss from './wizard.css?inline'
 import Estimate from './Estimate'
 
 function mount() {
@@ -30,7 +31,7 @@ function mount() {
   if (!document.getElementById('pld-estimate-style')) {
     const style = document.createElement('style')
     style.id = 'pld-estimate-style'
-    style.textContent = css
+    style.textContent = css + wizardCss
     document.head.appendChild(style)
   }
   createRoot(host).render(<Estimate apiBase={apiBase} embedded={script?.dataset.embedded === 'true'} />)
