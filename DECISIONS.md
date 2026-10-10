@@ -1711,3 +1711,26 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
 - Not inferred: the owner is named as "the owner" and the homes as "the owner's parents' house" and "the owner's
   wife's family house"; no pronoun is used for the owner anywhere on the site. The inverter sizes and the mounting
   words left the home cards (the chips carry the kWp); they remain on the engineering side and the proposal.
+
+## The estimate's result: the form folds away, the system builds itself, a day plays out
+
+- The owner (10 October): "after they entered their answers the form disappears and the estimate is shown along with
+  an animation like the number of panels shown, the batteries, inverter, their house with dots travelling showing the
+  flow of energy, then a 48 seconds (2 seconds duration per 'hour' of 24 hours) showing how it works with animation
+  of sun up to down to moon etc." Then: "they can just Estimate another one (closes this card and opens a fresh form)
+  or book my free roof visit - actually roof visit feels off, make it an on-site assessment."
+- The figures behind the animation are the sizing's own: each variant carries `production.typical_day`, 24 rows
+  averaged over the twelve months' typical days (what the panels make, what the house uses, what goes straight to
+  the house, into and out of the battery, to the grid and from it, kW at the meter; the battery's state in kWh).
+  Nothing in the scene is drawn from a number the engine did not produce.
+- The scene (`frontend/src/estimate/DayScene.tsx`): a build-up once (the house, the panels one by one with the
+  count and the kWp, the inverter, the battery when there is one, the meter and the pole), then the day from 6 AM
+  at two seconds an hour, the sun's arc, the moon, the sky's colours, dots along the paths in proportion to each
+  hour's kW, the battery's fill from its state, a readout and a caption that follow the row's figures. Play, pause,
+  replay and a 24-stop scrubber; nothing moves on its own under reduced motion; the loop pauses off-screen and in a
+  hidden tab; no library.
+- After the estimate the question card is gone; under the figures: "Book my free on-site assessment" and
+  "Estimate another one" (a fresh, empty form). A booked visit stays booked across estimates.
+- The visit is the "on-site assessment" from the owner's word, on the website and in the estimate; the earlier rule
+  that the customer never reads "assessment" stands for the documents (the roof check, the proposal), which keep
+  their names.
