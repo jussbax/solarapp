@@ -71,7 +71,7 @@ def test_quick_estimate_by_town_with_battery_alternative(ctx, pvgis, monkeypatch
     # a pin far from every town centre (here the middle of Laguna de Bay, with the radius shrunk) is flagged, not refused
     monkeypatch.setattr(quick_module, "OUT_OF_AREA_KM", 1.0)
     far = quick_estimate(QuickRequest(goal="net_metering", lat=14.40, lon=121.20, monthly_kwh=338, pattern="balanced"), pvgis, ctx)
-    assert not far["inputs"]["in_area"] and any("off the map of the Philippines" in w for w in far["warnings"])
+    assert not far["inputs"]["in_area"] and any("outside the Philippines" in w for w in far["warnings"])
     with pytest.raises(ValueError):
         quick_estimate(QuickRequest(goal="net_metering", town="Atlantis", monthly_kwh=338), pvgis, ctx)
 
@@ -82,7 +82,7 @@ def test_quick_estimate_refuses_very_small_usage(ctx, pvgis):
                 QuickRequest(goal="combination", town="Pila", province="Laguna", monthly_php=150, pattern="balanced")):
         with pytest.raises(ValueError) as e:
             quick_estimate(req, pvgis, ctx)
-        assert str(e.value) == TOO_LITTLE and "very little usage" in TOO_LITTLE
+        assert str(e.value) == TOO_LITTLE and "very small bill" in TOO_LITTLE
     small = quick_estimate(QuickRequest(goal="net_metering", town="Pila", province="Laguna", monthly_kwh=MIN_MONTHLY_KWH, pattern="balanced"), pvgis, ctx)
     assert small["system"]["panels"] >= 1
 
