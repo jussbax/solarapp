@@ -2045,7 +2045,9 @@ loads and the mounting detail are built (`docs/audits/round-13/step1.md` has wha
   person's name, and is refused before the first issue. "Reopen design" leaves both: the log is a record, not a status.
   The title block prints "Rev. {n}: {note} — {date}" for the latest entry beside the calculation stamp; the cover
   carries the sheet index (every sheet's number and name) and the revision table (the first issue and the last five
-  entries). An older database gets the two columns at start-up; an older record prints "Rev. 0" as before.
+  entries). An older database gets the two columns at start-up; an older record prints "Rev. 0" as before. The review's
+  finding 14: `Assessment.plans_issued_by` records the signed-in person who first built the set, revision 0's "By" on the
+  cover's table (a blank line with its reason when none was recorded: an older record, or a set built outside the API).
 - The circuits contract (brief 2.1). `pricing.choices.circuits`, written at the end of `generate_boq` from the figures
   it already computed (`design_checks.circuits_block`): seven records on every job in a fixed order, so the balloon
   numbers on the single-line diagram, the schedule and the design analysis never move: C1 the PV string (each), C2 the
@@ -2166,7 +2168,9 @@ assumptions print as assumptions); the DU's fault level from the service block t
   rule's placement, against 53 / 31 / 40 %; either field blank → "not checked" with the item named. The EGC per circuit by
   the breaker rating (the smallest table rating at or above it) against the provided conductor (the grounding run on the
   THHN line for the AC circuits, the array bonding item for the strings); the battery has no rack-EGC role, so its row
-  says "verify"; C7 carries the largest EGC the AC circuits need against the grounding run's gauge. The GEC line: the
+  is "not checked" naming the missing role (the review's finding 12 overruled the "verify" first built: a blank "provided"
+  is a missing provision on the bill, not a table the app lacks); C7 carries the largest EGC the AC circuits need against
+  the grounding run's gauge. The GEC line: the
   grounding run's gauge to the rod against the rod maximum (14 mm²).
 - The short-circuit note. The utility's fault current from `service.fault_level_ka` ("BLANK kA (from {DU}; verify)" when
   blank); the inverter's contribution from the new item field `fault_current_a`, else the labelled assumption 1.5 × the
@@ -2177,8 +2181,13 @@ assumptions print as assumptions); the DU's fault level from the service block t
   figure the office can type is missing (the conductor's area, the conduit's inside diameter, the panel's Isc for the
   string breaker), with the reason naming the item; else "pass", qualified by every assumption used and every table still
   to verify ("pass (ambient assumed 30 °C; THHN columns: verify; EGC table: verify)"), so a pass never stands on an
-  assumption alone. A table or role the app does not hold at all (the cable's 75 °C column, the battery-rack EGC) is a
-  "verify" qualifier, not a "not checked": the brief's hand-worked PV and battery rows pass.
+  assumption alone. A table the app does not hold at all (the cable's 75 °C column) is a "verify" qualifier, not a "not
+  checked": the brief's hand-worked PV row passes; a BOM role the bill lacks (the battery rack's EGC) is "not checked"
+  since the review (finding 12). The PV string row's continuous current is the PV article's 1.25 × Isc, the figure the
+  schedule sheet prints as the circuit current, and the design current 1.25 × that (the review's finding 2: with Imp as
+  the continuous current the "× 1.25" head was false for the row and the next-size-up test compared the derated ampacity
+  with Imp); a breaker whose typed interrupting rating is below the DU's typed fault level raises `aic_below_fault`,
+  hard and blocking (finding 1).
 - The warnings and their severity (2.4, the coordinator's decision a): `conductor_derated`, `terminal_ampacity` and
   `aic_below_fault` (the review's finding 1: a breaker whose typed interrupting rating is below the DU's typed fault level
   cannot clear the fault at the service) are hard and block the customer documents like the round-3 AC coordination (the
@@ -2239,7 +2248,13 @@ NSCP 2015 uplift check behind the BOM's L-foot count.
   printed in red on the sheet, never blocking: the fix is more screws per foot or a stronger fastener, the engineer's;
   the BOM keeps the rule's count); NOT CHECKED otherwise (`uplift_not_checked`, ordinary). A roof condition other than
   sound raises `roof_condition` (hard, not blocking); a tile roof, a concrete deck or "other" raises
-  `roof_type_out_of_scope` (ordinary) and the chain is not run for it. Each face is evaluated on its own construction
+  `roof_type_out_of_scope` (ordinary). The chain runs in two steps since the review (finding 9): the pressure chain to
+  T_panel for every roof type once V, h, the exposure constants, Kd and GCp are on file (the loads the signing engineer
+  needs for any mounting), the fastener step only on a roof with a drawn detail and the purlin spacing and pull-out typed;
+  a tile roof stops at the fastener step ("the tile hook's allowable withdrawal: not on file (Detail C waits on the
+  owner's word)"), and `stop` carries the reason, printed in the first blank cell of the sheet's chain. In the FAIL state
+  the details print "S = ______ (FAIL: the signing engineer's; the BOM carries the rule's 1.2 m)" and the plan key says
+  the feet are drawn at the rule's spacing, the count the BOM carries (finding 6). Each face is evaluated on its own construction
   (a blank field reading the project's default) for the rows it holds; the website estimate never reaches the check.
 - The sheet (`reports/plans_mounting.py`, one hook in `plans_pdf.py` after the array layouts): Detail A, rib-type metal
   sheet on steel C-purlins, and Detail B, corrugated sheet on purlins, both at 1:5 as sections along the rail at an L-foot
@@ -2283,8 +2298,14 @@ called from the plan set through one hook that returns the sheet's name and its 
   and the sheets print PASS or FAIL with the arithmetic, or the reason the rule is not checked. The sheets recompute
   it from the service block when the stored results predate it, so the warning and the sheet always agree.
 - Tags inside symbols are 6 pt (below the brief's 7 pt floor) so they fit the symbol; "≤" is not used (no glyph in
-  Montserrat), the limit is printed as a line of its own. The last sheet lists the diagram only as the datasheet
-  figures still blank on it.
+  Montserrat), the limit is printed as a line of its own. The last sheet lists the diagram's blank lines under its sheet
+  number with the rest of the set's (the review's finding 5, below). The review's smaller findings on the diagram: the
+  electrode caption sits to the right of the C7 balloon, clear of the EGC bus line and the electrode, and the service
+  block is wide enough for "fault level at the service 10.0 kA" on one line (finding 3); a grid-interactive inverter's
+  balloon leads with the role and the datasheet's type word follows ("6 kW grid-interactive (hybrid), 1Ø; the datasheet's
+  type: off-grid", finding 7); the panelboard's tag reads "C5 backfeed brk; C6 bypass feed" since C6 is a load-side feed
+  (finding 11); on a no-export job the 120 % block adds "(applied although nothing is exported: conservative; the DU's
+  view: verify)" (finding 10).
 
 ## The schedule of loads in the permit's format
 
@@ -2307,6 +2328,37 @@ Round 13, item 5 (brief section 5; `docs/audits/round-13/sld-and-loads.md`): its
   as equipment, under Settings › Pricing › System design; outside the pricing fingerprint, since the sheet reads
   them live and they move no price. The volts are the surveyed service voltage, else the wiring rules' 230 V
   labelled an assumption; a missing power factor leaves VA and A blank.
-- The last sheet is "Not yet in this set" and lists the schedule only while the service entrance is blank; the
-  cover's general notes split six and two so the bottom block, one table that cannot split, stays on the cover with
-  the longer sheet index (about 20 mm of slack for the sheets still to come).
+- The last sheet is "Not yet in this set" and lists the schedule's blank lines under its sheet number, the signing
+  engineer's own (the frame rating, fed from, the demand load, the branch-circuit figures) under their own heading (the
+  review's finding 5, below); the cover's general notes split six and two so the bottom block, one table that cannot
+  split, stays on the cover with the longer sheet index (about 20 mm of slack for the sheets still to come).
+
+## Round 13 review: the fixes
+
+The solar engineer's review of the ten-sheet set (`docs/audits/round-13/engineer-review.md`: merge with the fixes listed)
+and what was done about each finding (`docs/audits/round-13/fixes.md`). The two that would have passed an inspection
+failure through: a breaker whose typed interrupting rating is below the typed fault level now raises `aic_below_fault`,
+hard and blocking, through the existing mechanism; the PV string row's continuous current is the PV article's 1.25 × Isc
+when the datasheet is on file, so the schedule sheet, the "× 1.25" head and the next-size-up test agree. The rest: the
+diagram's two collisions and three labels, the site plan's label placement and depth dimension, the FAIL state's callout,
+the tile roof's pressure chain, the battery rack's EGC as a missing role, the dead load's label, cover note 6 naming its
+column, and revision 0's "By".
+
+- One collector for the set's blank lines (finding 5). `reports/plans_blanks.py`: `Blanks`, which every sheet module
+  appends to whenever it prints a blank line with its reason (`blanks.add(sheet, item, reason)` returns BLANK and stands
+  where BLANK stood; `n` for a figure printed in several cells; `engineer=True` for a line the set leaves to the signing
+  engineer by design). The last sheet prints "Blank lines in this set, by sheet" (one row per sheet and reason, with the
+  figures and the count of lines) beside "what the set still lacks" and "the signing engineer's lines", and shrinks the
+  block to the frame as the cover's index does, so the seed state's 283 blank lines still make one last sheet. The
+  design analysis prints the engine's "BLANK" words as the set's blank line and records them (the DU's fault level, each
+  breaker's AIC, the battery's short-circuit trip). The test: in the reviewer's typed state the blank lines pdftotext
+  counts per sheet, less the title block's signature line, equal the lines the last sheet lists for that sheet.
+- The site plan (finding 4): a face's depth dimension sits one gap further out than the eave's; every dimension figure's
+  box is collected and the face labels go through the same placement loop as the point labels (the centroid, the four
+  offsets, the strip along the bottom with a leader), keeping clear of the symbols, the figures and the labels before.
+- The mounting sheet keeps its two columns side by side when they overrun the frame by a little (the longer dead-load
+  label, a second face's column), shrinking them as the cover's index does, and stacks them only when they overrun by
+  more; the set keeps its sheet count in every state the review built.
+- The reviewer's typed state typed the 40 A breaker's AIC at 6 kA against the DU's 10 kA; with finding 1 that state
+  holds the set (409), which is the point. The rebuilt states type 10 kA, and a ninth state keeps the 6 kA to show the
+  refusal.
