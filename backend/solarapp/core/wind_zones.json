@@ -1,0 +1,430 @@
+{
+ "source": "Basic wind speed by province for the uplift check: NSCP 2015 Figure 207A.5-1A (the 3-s gust at 10 m, Occupancy Category II, by wind zone) is the figure the signing engineer reads the zone and the speed from. Shipped empty: every figure is typed under Settings > Mounting and wind with its source; a province without a typed figure leaves the uplift check \"not checked\". The province names are those of towns_ph.json.",
+ "fields": [
+  "zone",
+  "v_kmh",
+  "source"
+ ],
+ "provinces": {
+  "Abra": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Agusan del Norte": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Agusan del Sur": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Aklan": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Albay": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Antique": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Apayao": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Aurora": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Basilan": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Bataan": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Batanes": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Batangas": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Benguet": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Biliran": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Bohol": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Bukidnon": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Bulacan": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Cagayan": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Camarines Norte": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Camarines Sur": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Camiguin": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Capiz": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Catanduanes": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Cavite": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Cebu": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Cotabato": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Davao de Oro": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Davao del Norte": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Davao del Sur": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Davao Occidental": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Davao Oriental": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Dinagat Islands": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Eastern Samar": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Guimaras": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Ifugao": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Ilocos Norte": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Ilocos Sur": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Iloilo": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Isabela": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Kalinga": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "La Union": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Laguna": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Lanao del Norte": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Lanao del Sur": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Leyte": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Maguindanao del Norte": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Maguindanao del Sur": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Marinduque": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Masbate": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Metro Manila": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Misamis Occidental": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Misamis Oriental": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Mountain Province": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Negros Occidental": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Negros Oriental": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Northern Samar": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Nueva Ecija": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Nueva Vizcaya": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Occidental Mindoro": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Oriental Mindoro": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Palawan": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Pampanga": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Pangasinan": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Quezon": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Quirino": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Rizal": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Romblon": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Samar": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Sarangani": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Siquijor": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Sorsogon": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "South Cotabato": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Southern Leyte": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Special Geographic Area": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Sultan Kudarat": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Sulu": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Surigao del Norte": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Surigao del Sur": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Tarlac": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Tawi-Tawi": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Zambales": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Zamboanga del Norte": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Zamboanga del Sur": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  },
+  "Zamboanga Sibugay": {
+   "zone": "",
+   "v_kmh": null,
+   "source": ""
+  }
+ }
+}

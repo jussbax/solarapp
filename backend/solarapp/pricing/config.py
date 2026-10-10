@@ -228,6 +228,44 @@ class StringDesign(BaseModel):
     dc_breaker_sizes_a: list[float] = Field(default_factory=lambda: [16, 20, 25, 32, 40, 50, 63])
 
 
+class ExposureCategory(BaseModel):
+    """One exposure category's velocity-pressure constants, alpha and zg (NSCP 2015 Table 207A.9-1, which follows ASCE 7-10
+    Table 26.9-1: verify), as the signing engineer types them; blank until then. The app ships no figure."""
+    alpha: Optional[float] = Field(default=None, gt=0)
+    zg_m: Optional[float] = Field(default=None, gt=0)
+
+
+class WindZone(BaseModel):
+    """One province's wind zone and basic wind speed as the signing engineer reads them from NSCP 2015 Figure 207A.5-1A
+    (the 3-s gust at 10 m, Occupancy Category II) and types them, with the source line; blank until then."""
+    zone: str = Field(default="", max_length=40)
+    v_kmh: Optional[float] = Field(default=None, gt=0)
+    source: str = Field(default="", max_length=200)
+
+
+class MountingConfig(BaseModel):
+    """Round 13, item 3 (docs/audits/round-13/engineer-brief.md 3.4 and 3.5): the fastener, the feet and the wind inputs of the
+    uplift check (Settings > Mounting and wind). The app ships NO wind-code figure and NO fastener figure: no zone, no basic
+    wind speed, no exposure constant, no directionality factor, no pressure coefficient, no pull-out figure. Every one is
+    typed by the signing engineer or the office with its source, and the sheet prints each beside its source; until typed
+    the uplift check reads "not checked" and says what is missing. The two defaults here are ASSUMPTIONS the sheet labels."""
+    # ASSUMPTION: the L-foot item's set says "screw, rubber pad and bolt"; two screws per foot until the owner confirms (3.4)
+    screws_per_foot: int = Field(default=2, ge=1)
+    fastener_description: str = Field(default="", max_length=200)      # size, length, washer, as the maker's sheet names it
+    fastener_pullout_kn: Optional[float] = Field(default=None, gt=0)    # the maker's allowable withdrawal per screw, in the purlin material and thickness the office types
+    fastener_pullout_source: str = Field(default="", max_length=200)   # the maker's sheet it comes from (printed with the figure)
+    foot_spacing_max_m: Optional[float] = Field(default=None, gt=0)    # the rail maker's maximum span between feet (verify)
+    foot_spacing_max_source: str = Field(default="", max_length=200)
+    rail_position_fraction: float = Field(default=0.25, gt=0, lt=0.5)  # ASSUMPTION: the rails at the quarter points of the panel's dimension up the slope (the maker's clamping zone: verify)
+    rail_kg_per_m: Optional[float] = Field(default=None, ge=0)         # the rail's weight per metre for the dead load; blank = left out of D (the conservative side)
+    kd: Optional[float] = Field(default=None, gt=0, le=1)              # the wind directionality factor for components and cladding (NSCP 2015 Table 207A.6-1: verify)
+    kd_source: str = Field(default="", max_length=200)
+    exposures: dict[str, ExposureCategory] = Field(default_factory=lambda: {"B": ExposureCategory(), "C": ExposureCategory(), "D": ExposureCategory()})
+    exposure_source: str = Field(default="", max_length=200)
+    # by province (the names of core/towns_ph.json; core/wind_zones.json ships the list with every figure blank): only the typed rows live here
+    wind_zones: dict[str, WindZone] = Field(default_factory=dict)
+
+
 class BoqRoles(BaseModel):
     """Default item codes per role, resolved from the DB at import; editable."""
     rail: str = "BC-MNT-001"
@@ -441,6 +479,7 @@ class PricingConfig(BaseModel):
     quick: QuickConfig = Field(default_factory=QuickConfig)
     wiring: WiringRules = Field(default_factory=WiringRules)
     string_design: StringDesign = Field(default_factory=StringDesign)
+    mounting: MountingConfig = Field(default_factory=MountingConfig)   # round 13, item 3: the fastener, the feet and the wind inputs of the uplift check
     roles: BoqRoles = Field(default_factory=BoqRoles)
     imported_from: Optional[str] = None
     imported_at: Optional[str] = None

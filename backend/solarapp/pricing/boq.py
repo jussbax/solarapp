@@ -43,6 +43,7 @@ class RoofRow:
     panels: int
     panel_dim_along_row_m: float
     gap_m: float = 0.0
+    face_id: Optional[str] = None   # round 13, item 3: the face the row sits on, so the uplift check reads that face's roof construction; None = not a surveyed face (an overflow row)
 
     @property
     def length_m(self) -> float:
@@ -702,7 +703,7 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         "pv_gauge": pv_gauge, "pv_drop": pv_drop, "ac_current_a": i_ac, "ac_gauge": g_inv, "ac_drop": drop_inv,
         "ac_breaker_a": b_inv, "ac_grid_current_a": i_grid, "ac_grid_rating_known": grid_known, "ac_grid_breaker_a": b_grid, "ac_grid_gauge": g_grid, "ac_grid_drop": drop_grid,
         "inverter_code": inverter.code if inverter else None, "battery_code": battery.code if battery else None, "battery_units": battery_units,
-        "rows": [{"panels": x.panels, "length_m": x.length_m} for x in req.rows],
+        "rows": [{"panels": x.panels, "length_m": x.length_m, "face_id": x.face_id} for x in req.rows],
         "kind": req.kind, "battery_current_a": i_bat_max, "battery_breaker_min_a": i_bat_max * w.continuous_factor, "battery_circuit": battery_circuit,
         "battery_current_source": bat_cur["source"], "battery_current_basis": bat_cur["basis"],
         "dc_spds": dc_spds,

@@ -58,6 +58,31 @@ class RoofConstruction(BaseModel):
     mean_roof_height_m: Optional[float] = Field(default=None, gt=0)    # the wind check's h
     condition: str = Field(default="", max_length=400)
     condition_flag: ConditionFlag = ""                                 # other than sound: the sheet says to verify
+    # round 13, item 3 (3.4): the fastener's allowable withdrawal for this roof (its purlin material and thickness), with its
+    # source; overrides the settings' figure for the uplift check. Blank = the settings' figure, and "not checked" when that is blank too.
+    fastener_pullout_kn: Optional[float] = Field(default=None, gt=0)
+    fastener_pullout_source: str = Field(default="", max_length=200)
+
+
+Exposure = Literal["", "B", "C", "D"]
+
+
+class WindInputs(BaseModel):
+    """The wind figures the signing engineer types per project for the uplift check (round 13, 3.5), each with its source.
+    The app ships none: a blank leaves the check "not checked" and the sheet says what is missing. The basic wind speed
+    comes from the province's row under Settings > Mounting and wind unless typed here; the exposure category is B unless
+    typed (a labelled assumption); Kzt is 1.0 unless typed (a labelled assumption: no hill or ridge); the GCp per roof
+    zone (1 interior, 2 edge, 3 corner; negative for uplift) has no default at all."""
+    zone: str = Field(default="", max_length=40)
+    v_kmh: Optional[float] = Field(default=None, gt=0)
+    v_source: str = Field(default="", max_length=200)
+    exposure: Exposure = ""
+    kzt: Optional[float] = Field(default=None, gt=0)
+    kzt_source: str = Field(default="", max_length=200)
+    gcp_zone1: Optional[float] = None
+    gcp_zone2: Optional[float] = None
+    gcp_zone3: Optional[float] = None
+    gcp_source: str = Field(default="", max_length=200)
 
 
 class PanelboardCircuit(BaseModel):
@@ -399,6 +424,7 @@ class AssessmentDoc(BaseModel):
     service: ServiceEntrance = Field(default_factory=ServiceEntrance)
     roof_default: RoofConstruction = Field(default_factory=RoofConstruction)
     site: SitePlan = Field(default_factory=SitePlan)
+    wind: WindInputs = Field(default_factory=WindInputs)   # round 13, item 3: the uplift check's typed figures
 
     @model_validator(mode="before")
     @classmethod

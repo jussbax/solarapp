@@ -10,6 +10,7 @@ from .boq import NO_ITEM_PREFIX, BoqRequest, RoofRow, generate_boq
 from .catalog import Catalog, Item
 from .config import PricingConfig
 from .engine import BomLine, JobInputs, landed_cost, price_job
+from .uplift import apply_uplift
 
 
 @dataclass
@@ -76,7 +77,7 @@ def rows_from_layout(doc: AssessmentDoc, panel: CandidatePanel, selected_panel_r
             if face_left <= 0:
                 break
             n = min(per_row, face_left)
-            rows.append(RoofRow(n, dim, gap_m))
+            rows.append(RoofRow(n, dim, gap_m, face_id=fid))
             face_left -= n
             left -= n
     if left > 0:  # more panels than the layout holds (override): one more row
@@ -147,6 +148,9 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
         t_cold_c=site.get("t_cold_c"), t_hot_c=site.get("t_hot_c"),
     )
     boq = generate_boq(req, catalog, cfg_job)
+    # round 13, item 3: the uplift check per face from the roof construction and the typed wind figures; the L-foot count follows
+    # the feet on purlins only when the check passed (today's count with a note otherwise); its warnings print, none blocks
+    apply_uplift(doc, rows, db_panel, cfg_job, boq)
     warnings += boq.warnings
     generated = [{"code": l.code, "qty": l.qty, "role": l.role, "note": l.note} for l in boq.lines]
     lines, edit_warnings = apply_edits(boq.lines, doc, catalog)
