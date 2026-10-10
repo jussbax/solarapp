@@ -105,6 +105,8 @@ body.nav-open .nav { display: flex; flex-direction: column; gap: 4px; position: 
 .photo-card figcaption { padding: 0 8px; }
 .photo-card h3 { margin: 14px 0 6px; font-size: 17px; }
 .photo-card p { margin: 0; }
+.photo-card.wide { margin: 18px 0 22px; max-width: 784px; }
+.photo-card.wide figcaption { padding: 10px 8px 0; }
 
 /* faq */
 .faq details { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-bottom: 8px; }

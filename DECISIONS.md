@@ -1546,3 +1546,25 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   page); a project saved with its own terms keeps them until the finance
   module takes them over. The cashflow engine stays in the results behind
   the API for that module; no engineering screen reads it.
+
+## Round 5: the first real photos on the website
+
+- The owner sent thirteen drone frames of three installations (10 October) and asked that the audit team work on
+  the website with them. Only web versions are committed (`site/tools/photos.py`: exact 4:3 crops at 960 and 480 px,
+  WebP with a JPEG fallback, metadata dropped); the originals stay with the owner.
+- What a caption may say: only what the frame shows, or a process claim the site already makes about the company.
+  No town, size, system kind, date, customer name or address until the owner gives it and the customer has agreed;
+  then the town only. "Our installations", not "Recent", until the months are known. The marketing audit
+  (`docs/audits/round-5/marketing.md`) found the first captions claimed a fixing method and a fourth face the frames
+  did not show, and a lead ("measured on the roof first … after switch-on") no one had confirmed for those jobs;
+  all three were reworded to what is certain.
+- Which frames are published: 25 (hero and share image), 27 (card), 36 re-cropped to lose the yard and most of the
+  neighbour's house (card), 35 (card), 37 (About). Never: 29–32 (installation-day clutter, a sign, four people at
+  the gate) and 33–34 (the neighbour's house and washing fill the top third, the cable runs large). The share image
+  is cropped so the customer's aircon unit and its brand are out of the frame; every page shares the home roof
+  until a page has a photo of its own (`<!-- og_image -->`).
+- No "Our work" page until there are six or more sites each with a town, a size, a month and the customer's yes.
+- Open with the owner: per site the town, the kWp, battery or net metering, the month, whether the test-panel
+  visit was done and the customer's go-ahead; who flew the drone; site A's orange cable and how the rails are
+  fixed; whether site B's surface-laid cables are the final state (and an "after" frame); the hour site C was
+  photographed and how the design handled the palms.

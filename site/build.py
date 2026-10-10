@@ -9,6 +9,9 @@ estimate widget does the only dynamic work. Contact details are filled in
 at page load from the app's public profile (see static/site.js), so the
 owner edits them in Settings, not here.
 
+A page may name its own share image with ``<!-- og_image: /static/photos/x.jpg -->`` and
+``<!-- og_image_alt: ... -->``; the default is the home roof for every page.
+
 Blocks between ``<!-- placeholder:start -->`` and ``<!-- placeholder:end -->``
 are placeholders for photos that do not exist yet; the public build drops
 them so a visitor never reads "replace this card with a real photo".
@@ -44,7 +47,8 @@ def render_page(layout: str, page: Path, base_url: str = "", with_placeholders: 
     base = base_url.rstrip("/")
     html = layout
     html = html.replace("{{og_url}}", f'<meta property="og:url" content="{base}{path}" />' if base else "")
-    for key, default in (("title", "PL Development Inc."), ("description", ""), ("path", "/" + page.stem), ("nav", page.stem), ("extra_head", ""), ("extra_body", "")):
+    for key, default in (("title", "PL Development Inc."), ("description", ""), ("path", "/" + page.stem), ("nav", page.stem), ("extra_head", ""), ("extra_body", ""),
+                         ("og_image", "/static/photos/og-home.jpg"), ("og_image_alt", "Eight solar panels in two rows on the rib-type roof of a home, seen from above")):
         html = html.replace("{{" + key + "}}", meta.get(key, default))
     html = html.replace("{{base_url}}", base)
     return html.replace("{{body}}", body)

@@ -8,7 +8,8 @@
     <meta property="og:type" content="website" />
     <meta property="og:title" content="{{title}}" />
     <meta property="og:description" content="{{description}}" />
-    <meta property="og:image" content="{{base_url}}/static/photos/og-home.jpg" />
+    <meta property="og:image" content="{{base_url}}{{og_image}}" />
+    <meta property="og:image:alt" content="{{og_image_alt}}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     {{og_url}}
@@ -46,7 +47,7 @@
         <div class="foot-grid">
           <div>
             <div class="foot-brand"><img src="/brand/logo-mark-white.png" alt="" width="32" height="32" /> <span data-profile="company_name">PL Development Inc.</span></div>
-            <p class="muted"><span data-profile="address">Pila, Laguna</span><br />Installs in <span data-profile="service_area">Laguna and Batangas</span>.</p>
+            <p class="muted"><span data-profile="address">Pila, Laguna</span><br />Installs in <span data-profile="service_area">the whole Philippines</span>.</p>
             <p class="muted" data-profile-hide-if-empty="pee_name">Electrical plans signed and sealed by <span data-profile="pee_name"></span>, Professional Electrical Engineer<span data-profile-hide-if-empty="pee_license">, PRC No. <span data-profile="pee_license"></span></span>.</p>
           </div>
           <div class="is-empty" data-profile-hide-if-empty="phone,messenger,facebook,email">

@@ -117,9 +117,17 @@ script under `site/static/`). `python site/build.py` writes it to
 Contact details, the owner, the
 PEE, warranties, brands and the service area are filled in at page load
 from the company profile under Settings, so the pages never need editing
-for those. The estimate page (`/estimate`) embeds the widget. Photos are
-placeholders until real ones replace them (`site/pages/index.html` and
-`about.html`, the `.photo.placeholder` blocks).
+for those. The estimate page (`/estimate`) embeds the widget. Photos: the
+web versions live in `site/static/photos/` (made from the owner's originals
+by `python site/tools/photos.py IMG.jpg --name slug [--crop l,t,r,b]`: an
+exact 4:3 crop at 960 and 480 px, WebP and JPEG, camera metadata dropped;
+`--og` writes the 1200 × 630 share image). The home page carries a photo
+beside the hero and three installation cards; About carries one; a page may
+name its own share image with `<!-- og_image: ... -->`. The remaining
+`.photo.placeholder` blocks (the roof visit, the owner, the crew) wait for
+those photos and never reach the public build. Captions say only what the
+frame shows until the owner supplies the town, the size and the customer's
+go-ahead; no address or customer name is ever printed.
 
 The website runs as its own process from the same image
 (`solarapp.public:app`, the `solarapp-public` service): it serves the
