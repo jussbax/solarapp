@@ -24,17 +24,22 @@ const SOURCE = { x: 290, y: 208 }   // where the solar stream starts: the middle
 type Flow = 'prod' | 'house' | 'charge' | 'discharge' | 'export' | 'import'
 const FLOWS: Flow[] = ['prod', 'house', 'charge', 'discharge', 'export', 'import']
 /** The wiring. Solar: from the array, along the wall under the eave, down into the inverter's top; from the inverter's
- * side, down the wall beside the window and along it under the windows into the door. Battery: the inverter's bottom.
- * Grid: the inverter's right side to the meter and up the service drop to the pole, and back the same way on through
- * the inverter into the house. */
+ * side, down the wall beside the window and along it under the windows into the door. Battery: the inverter's bottom to
+ * the battery's side. Grid: the inverter's right side, high enough to pass over the battery with clear air (the wire at
+ * y 244, the battery's terminal at 255), to the meter and up the service drop to the pole, and back the same way on
+ * through the inverter into the house. */
 const PATH_D: Record<Flow, string> = {
   prod: `M ${SOURCE.x} ${SOURCE.y - 2} V 221 H 417 V 236`,
   house: 'M 417 272 H 388 V 302 H 270',
-  charge: 'M 417 284 V 306 H 482',
-  discharge: 'M 482 306 H 417 V 284',
-  export: 'M 434 260 H 596 V 240 L 672 174',
-  import: 'M 672 174 L 596 240 V 260 H 417 V 272 H 388 V 302 H 270',
+  charge: 'M 417 284 V 306 H 478',
+  discharge: 'M 478 306 H 417 V 284',
+  export: 'M 434 244 H 596 V 240 L 672 174',
+  import: 'M 672 174 L 596 240 V 244 H 417 V 272 H 388 V 302 H 270',
 }
+/** The battery's charge bars, top to bottom; the lit ones fill from the bottom through a clip the state of charge drives. */
+const BATT_BARS = [266, 281, 296, 311]
+const BATT_BOTTOM = 322, BATT_FULL = 56
+const BOLT = 'M 509 272 L 495 297 H 504 L 500 317 L 517 291 H 507 Z'
 /** The dots: the sun's power large and bright gold, the battery's gold, the grid's white. */
 const FLOW_DOT: Record<Flow, { cls: string; r: number }> = {
   prod: { cls: 'pld-scene-dot-sun', r: 5.5 },
@@ -237,7 +242,7 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
   const battFill = useRef<SVGRectElement>(null)
 
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '')
-  const skyId = `pld-sky-${uid}`, glowId = `pld-glow-${uid}`, shadeId = `pld-shade-${uid}`
+  const skyId = `pld-sky-${uid}`, glowId = `pld-glow-${uid}`, shadeId = `pld-shade-${uid}`, clipId = `pld-batt-${uid}`
 
   function clearDots() {
     for (let i = 0; i < POOL; i++) {
@@ -298,8 +303,8 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
       const h = Math.floor(t24) % 24, frac = t24 - Math.floor(t24)
       const soc = lerp(day[(h + 23) % 24].soc_kwh, day[h].soc_kwh, frac)
       const level = clamp01(soc / usable)
-      const full = 58, hgt = Math.max(1.5, full * level)
-      battFill.current.setAttribute('y', (325 - hgt).toFixed(1))
+      const hgt = Math.max(1, BATT_FULL * level)   // the clip over the lit bars: they fill from the bottom with the charge
+      battFill.current.setAttribute('y', (BATT_BOTTOM - hgt).toFixed(1))
       battFill.current.setAttribute('height', hgt.toFixed(1))
     }
     if (!withDots || dt <= 0) return
@@ -494,6 +499,9 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
             <stop offset="0.4" stopColor="#050812" stopOpacity="0.7" />
             <stop offset="1" stopColor="#050812" stopOpacity="1" />
           </linearGradient>
+          <clipPath id={clipId}>
+            <rect ref={battFill} x="478" y={BATT_BOTTOM - 1} width="56" height="1" />
+          </clipPath>
         </defs>
         <rect x="0" y="0" width="800" height="450" fill={`url(#${skyId})`} />
         <g ref={starsG} opacity="0" fill="#eef0f6">
@@ -561,11 +569,24 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
           </g>
           {hasBattery && (
             <g className={'pld-scene-piece' + on(step >= 4)}>
+              {/* a battery at a glance: the cell silhouette with its terminal, a light face, four charge bars that fill from
+                  the bottom with the state of charge, a gold bolt, and a gold outline while it charges or discharges */}
               <path d={PATH_D.charge} className="pld-scene-wire" />
-              <rect x="498" y="257" width="16" height="6" rx="1" fill="#9a9a92" />
-              <rect x="482" y="262" width="48" height={330 - 262} rx="4" fill="#23232a" stroke="#9a9a92" strokeWidth="1" />
-              <rect ref={battFill} x="487" y="324" width="38" height="1.5" fill={GOLD} opacity="0.92" />
-              <rect className="pld-scene-flash" x="478" y="253" width="56" height="81" rx="6" />
+              <rect className={'pld-scene-batt-glow' + on(live('charge') || live('discharge'))} x="474" y="251" width="64" height="83" rx="8" />
+              <rect data-part="battery-nub" x="496" y="255" width="20" height="6" rx="1.5" fill="#3a3a40" />
+              <rect data-part="battery-body" x="478" y="261" width="56" height={330 - 261} rx="5" fill="#d9d5ca" stroke="#2a2a2e" strokeWidth="1.5" />
+              <g fill="#b9b5aa">
+                {BATT_BARS.map((y) => (
+                  <rect key={y} x="484" y={y} width="44" height="11" rx="1.5" />
+                ))}
+              </g>
+              <g fill={GOLD} clipPath={`url(#${clipId})`}>
+                {BATT_BARS.map((y) => (
+                  <rect key={y} x="484" y={y} width="44" height="11" rx="1.5" />
+                ))}
+              </g>
+              <path d={BOLT} fill="#ffd54f" stroke="#2a2a2e" strokeWidth="1.2" strokeLinejoin="round" />
+              <rect className="pld-scene-flash" x="473" y="249" width="66" height="86" rx="7" />
             </g>
           )}
           <g className={'pld-scene-piece' + on(step >= 5)}>
