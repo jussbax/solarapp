@@ -1734,3 +1734,10 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
 - The visit is the "on-site assessment" from the owner's word, on the website and in the estimate; the earlier rule
   that the customer never reads "assessment" stands for the documents (the roof check, the proposal), which keep
   their names.
+
+## Moving house is answered on the phone, not on the page
+
+- The owner (10 October), on the FAQ "What if we move house?": "that's not how it works, yes, the net metering stays
+  on the house but we can help transfer the solar system to their new place, there so many variables at play so we
+  might as well just answer this over phone no need to put it on the FAQ." The question is gone from the home
+  page; nothing on the site says what happens on a move.
