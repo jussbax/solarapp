@@ -1602,3 +1602,28 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   the palms and the annex row under the eave. The engineer's list of the photos to take on the next job (fixings,
   clamps, under-array cabling, the roof exit, the combiner, the inverter wall, grounding, the two-way meter, the
   signage, a mid-day drone pass after clean-up) is in the report.
+
+## Three BOM roles the owner struck out
+
+- The owner, on the round-3 BOM (9 October): the L-foot fasteners are part
+  of the L-foot the company buys, placards are miscellaneous, and the
+  monitoring dongle comes with the inverter. The three roles (and their
+  counts) are gone from the settings and the BOM; a stored configuration
+  that still carries the keys loads with them ignored. The array bonding,
+  the AC disconnect and the optional export limiter stay as roles.
+- A BOM line whose code is not in the materials list now names its role
+  ("Export limiter (no item in the materials list)") instead of "Code not
+  found", so the crew and the PEE read what the design needs; it still
+  carries no price.
+
+## The estimate's location button fills the town in
+
+- The owner (10 October): "fix the awkward use my location button on the estimate since no map is shown anymore
+  on the widget." With the nationwide town picker there is no map, so a location that only set an invisible pin
+  left the two pickers blank and a hint saying "location set". Now the phone's location is turned into the
+  nearest town by the server (`GET /api/quick/place?lat&lon`, the same rate bucket as the towns list, "inside"
+  false beyond `OUT_OF_AREA_KM`), the Province and Town pickers fill themselves in, and the hint says "Your
+  location points at Pila, Laguna. Change it if that's not where the house is." The visitor can still pick
+  another town. The third column with its hidden "Or" label is gone; the action is a link in the hint under the
+  pickers ("At the house? Use my location and the town fills in."). If the lookup fails but the phone gave a
+  location, the estimate still runs on the pin as before; outside the Philippines the hint asks for the town.
