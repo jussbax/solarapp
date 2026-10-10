@@ -58,6 +58,37 @@ def test_build_base_url_writes_absolute_og_tags(build):
     assert '<meta property="og:url" content="https://pldevinc.com/" />' in home
 
 
+def test_build_stamps_the_stylesheet_and_the_scripts(build, tmp_path):
+    """A new build changes the stamp on site.css, site.js and the widget script, so a kept copy is never served after a redeploy;
+    the fonts keep their plain address (the stylesheet names them without a stamp, so the preload and the CSS agree)."""
+    import hashlib
+    out = tmp_path / "dist"
+    build.build(out)
+    html = (out / "index.html").read_text(encoding="utf-8")
+    css = hashlib.sha1((out / "static" / "site.css").read_bytes()).hexdigest()[:8]
+    js = hashlib.sha1((out / "static" / "site.js").read_bytes()).hexdigest()[:8]
+    assert f'href="/static/site.css?v={css}"' in html and f'src="/static/site.js?v={js}"' in html
+    assert 'href="/static/fonts/Montserrat-400.woff2"' in html
+    estimate = (out / "estimate.html").read_text(encoding="utf-8")
+    widget = build.WIDGET / "quick.js"
+    if widget.is_file():
+        assert f'src="/widget/quick.js?v={hashlib.sha1(widget.read_bytes()).hexdigest()[:8]}"' in estimate
+    else:
+        assert 'src="/widget/quick.js"' in estimate
+
+
+def test_cache_policy_keeps_stamped_assets_and_revalidates_the_rest():
+    from solarapp.caching import cache_control_for
+    assert cache_control_for("/static/site.css", "v=77c6a36d") == "public, max-age=31536000, immutable"
+    assert cache_control_for("/widget/quick.js", "v=f3695556") == "public, max-age=31536000, immutable"
+    assert cache_control_for("/assets/index-abc123.js") == "public, max-age=31536000, immutable"
+    assert cache_control_for("/static/site.css") == "no-cache" and cache_control_for("/widget/quick.js") == "no-cache"
+    assert cache_control_for("/static/site.css", "v=") == "no-cache"
+    assert cache_control_for("/static/photos/og-home.jpg") == "public, max-age=86400"
+    assert cache_control_for("/static/fonts/Montserrat-400.woff2") == "public, max-age=86400" and cache_control_for("/brand/logo-mark.png") == "public, max-age=86400"
+    assert cache_control_for("/") is None and cache_control_for("/estimate") is None and cache_control_for("/api/quick/status") is None
+
+
 def test_build_writes_every_page(build, tmp_path):
     out = tmp_path / "dist"
     pages = build.build(out, base_url="https://pldevinc.com")

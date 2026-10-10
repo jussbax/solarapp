@@ -392,6 +392,10 @@ def test_public_process_serves_the_site_and_forwards_only_the_estimate(tmp_path)
         # security headers
         h = pub.get("/").headers
         assert "default-src 'self'" in h["content-security-policy"] and h["x-content-type-options"] == "nosniff"
+        # cache policy: pages and unstamped assets revalidated, a stamped asset kept, the 404 page never kept
+        assert h["cache-control"] == "no-cache" and pub.get("/static/site.css").headers["cache-control"] == "no-cache"
+        assert pub.get("/static/site.css?v=77c6a36d").headers["cache-control"] == "public, max-age=31536000, immutable"
+        assert r.headers["cache-control"] == "no-cache"
         # the estimate calls cross with the token; the back office never does
         st = pub.get("/api/quick/status")
         assert st.status_code == 200 and "provinces" in st.json()

@@ -15,6 +15,7 @@ from sqlmodel import Session
 
 from .api import appliances, assessments, auth_routes, data_routes, leads, pricing_routes, quick_routes, settings_routes, users
 from .auth import bootstrap_owner
+from .caching import cache_control_for
 from .config import Settings, get_settings
 from .core.dataset import NasaReference, PvgisDataset
 from .db import init_engine
@@ -95,8 +96,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        if request.url.path.startswith("/widget/"):
-            response.headers.setdefault("Cache-Control", "no-cache")   # the estimate widget: revalidate, so a redeploy shows at once
+        cache = cache_control_for(request.url.path, request.url.query)   # the widget and the build's assets: stamped kept, else revalidated
+        if cache:
+            response.headers["Cache-Control"] = cache
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         path = request.url.path
         if path.startswith(EMBEDDABLE):
