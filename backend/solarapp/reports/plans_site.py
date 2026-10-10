@@ -27,6 +27,7 @@ from ..core.towns import nearest_town
 from ..schemas import AssessmentDoc
 from . import brand
 from .drawings import FACE_FILL, PANEL_FILL, STANDARD_SCALES, _north_arrow, _text
+from .plans_blanks import Blanks
 from .vicinity import MOSAIC_PX, current_file, is_current, metres_per_pixel
 
 SHEET_NAME = "Vicinity map and site plan"
@@ -442,17 +443,22 @@ def _d(s: Optional[str]) -> str:
 
 
 def site_sheet(doc: AssessmentDoc, geometry: list[dict], *, styles: dict, vicinity: Optional[dict], project_dir: Optional[Path],
-               blank: str) -> tuple[str, list, Optional[int]]:
+               blanks: Optional[Blanks] = None) -> tuple[str, list, Optional[int]]:
     """(the sheet's name, its flowables after the sheet marker, the site plan's scale denominator). `styles` carries the
-    builder's paragraph styles and helpers (h1, h2, body, small, cell, cellb, P, two_col)."""
+    builder's paragraph styles and helpers (h1, h2, body, small, cell, cellb, P, two_col); `blanks` is the set's collector
+    of blank lines (round 13 review, finding 5)."""
     h1, h2, body, small, P, two_col = styles["h1"], styles["h2"], styles["body"], styles["small"], styles["P"], styles["two_col"]
+    blanks = blanks if blanks is not None else Blanks()
+
+    def blank_addr() -> str:
+        return blanks.add(SHEET_NAME, "the address", "not typed on the project")
     lat, lon = doc.lat, doc.lon
     town_line = ""
     if lat is not None and lon is not None:
         (name, province, _la, _lo), km = nearest_town(lat, lon)
         town_line = f"nearest town centre {escape(name)}, {escape(province)} ({km:.1f} km)"
     pin_txt = f"pin {lat:.5f}, {lon:.5f}" if lat is not None and lon is not None else "no map pin"
-    left: list = [Paragraph(SHEET_NAME, h1), Paragraph(" · ".join(x for x in (escape(doc.address or blank), pin_txt, town_line) if x), body), Paragraph("Vicinity map", h2)]
+    left: list = [Paragraph(SHEET_NAME, h1), Paragraph(" · ".join(x for x in (escape(doc.address or blank_addr()), pin_txt, town_line) if x), body), Paragraph("Vicinity map", h2)]
     state = vicinity or {}
     upload, osm, err = state.get("upload") or {}, state.get("osm") or {}, state.get("error") or {}
     up_file = current_file(state, project_dir, "upload") if upload else None
@@ -483,7 +489,7 @@ def site_sheet(doc: AssessmentDoc, geometry: list[dict], *, styles: dict, vicini
     else:
         reason = str(err.get("reason") or "not prepared yet: press Prepare the map on the Site plan card")
         caption.append(f"vicinity map: not fetched ({escape(reason)}); the office may upload a screen grab (Site plan card › Vicinity map). "
-                       f"The pin {pin_txt.removeprefix('pin ')}, {escape(doc.address or blank)}; {town_line or 'no town behind the pin'}.")
+                       f"The pin {pin_txt.removeprefix('pin ')}, {escape(doc.address or blank_addr())}; {town_line or 'no town behind the pin'}.")
     drawing, scale_n, notes = site_plan_drawing(doc, geometry)
     site = doc.site
     legend: list[str] = []

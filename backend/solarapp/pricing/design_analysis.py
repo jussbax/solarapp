@@ -452,7 +452,7 @@ def short_circuit_note(service: dict, inverter: Optional[Item], battery: Optiona
         if battery.fault_current_a:
             out["battery"] = {"amps": float(battery.fault_current_a), "assumed": False, "text": f"{float(battery.fault_current_a):g} A ({battery.code}: the BMS's short-circuit trip on the item)"}
         else:
-            out["battery"] = {"amps": None, "assumed": False, "text": f"the BMS's short-circuit trip of {battery.code}; verify with the maker"}
+            out["battery"] = {"amps": None, "assumed": False, "text": f"BLANK A (the BMS's short-circuit trip of {battery.code}: not on the item; verify with the maker)"}
             out["unknown"].append(f"the battery's short-circuit trip ({battery.code}, Materials page)")
     seen: set[str] = set()
     for b in breakers:

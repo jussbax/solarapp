@@ -252,7 +252,7 @@ def test_the_short_circuit_note_prints_blank_lines_and_the_labelled_assumption_u
     brk = [cat.get("IAN-PRT-009"), cat.get("IAN-PRT-027"), cat.get("IAN-PRT-003")]
     sc = short_circuit_note({}, inv, bat, 1, 6000 / 230, brk, cfg)
     assert sc["utility_text"] == "BLANK kA (from the DU; verify)" and sc["inverter"]["assumed"] and sc["inverter"]["amps"] == pytest.approx(1.5 * 6000 / 230)
-    assert sc["inverter"]["text"].startswith("assumption: 1.5 × rated output current for one cycle, 39 A") and "BMS's short-circuit trip of FS-BAT-006; verify" in sc["battery"]["text"]
+    assert sc["inverter"]["text"].startswith("assumption: 1.5 × rated output current for one cycle, 39 A") and sc["battery"]["text"] == "BLANK A (the BMS's short-circuit trip of FS-BAT-006: not on the item; verify with the maker)"
     assert sc["aic_text"].startswith("breaker interrupting ratings (AIC) at or above the fault level at each point: BLANK") and len(sc["unknown"]) == 6
     # typed: the DU's figure from the service block, the inverter's and the battery's from the items, the AIC compared
     inv2, bat2 = deepcopy(inv), deepcopy(bat)
@@ -369,7 +369,7 @@ def test_the_sheet_prints_not_checked_with_the_reason_on_the_seed_then_passes_wi
     assert "not checked: the breaker's rating is not checked without Isc on file" in flat
     assert "not checked: fill: the conductor's area is not on the item (IAN-WIR-004); the conduit's inside diameter is not on the item (IAN-ENC-011)" in flat
     assert "pass (ambient assumed 30 °C; insulation assumed 90 °C; the cable's rating: verify" in flat                    # the battery row: never a bare pass
-    assert "BLANK kA (from the DU; verify)" in flat and "assumption: 1.5 × rated output current for one cycle" in flat and "the AIC is not on the breaker items; verify" in flat
+    assert "__________ kA (from the DU; verify)" in flat and "assumption: 1.5 × rated output current for one cycle" in flat and "the AIC is not on the breaker items; verify" in flat
     assert "GEC: 8 mm²" in flat and "at most 14 mm² for a rod electrode" in flat and flat.count("VERIFY") >= 10 and "confirmed in Settings" not in flat
     assert "assumption: outdoor ambient 35 °C" in flat and "assumption: indoor ambient 30 °C" in flat and "NEC 2014 Table 310.15(B)(16)" in flat
     assert "to be completed by the signing engineer" not in sheet          # the sheet carries the figures or the reason, never the old placeholder
@@ -417,7 +417,7 @@ def test_the_sheet_prints_not_checked_with_the_reason_on_the_seed_then_passes_wi
     flat = _flat(sheet)
     assert "10.7 % / 40 %" in flat and "pass (ambient assumed 30 °C; THHN columns: verify; EGC table: verify)" in flat and "pass (ambient assumed 35 °C" in flat
     assert "10 kA at the service, as the office typed from FLECO (verify)" in flat and "45 A (FS-INV-008: maximum output fault current on the item)" in flat
-    assert "IAN-PRT-027 10 kA at or above the DU's figure: holds" in flat and "IAN-PRT-009 BLANK" in flat and "16.91 A" in flat and "21.14 A" in flat
+    assert "IAN-PRT-027 10 kA at or above the DU's figure: holds" in flat and "IAN-PRT-009 __________" in flat and "16.91 A" in flat and "21.14 A" in flat
     assert "C1: 1.25 × 1.25 × Isc)" in flat   # the column head "Design A (× 1.25; C1: 1.25 × 1.25 × Isc)", wrapped in its cell
     assert "Design analysis: rows not checked" not in _flat(pages[-1])
     # a table ticked confirmed prints so

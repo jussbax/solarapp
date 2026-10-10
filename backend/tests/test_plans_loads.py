@@ -133,8 +133,12 @@ def test_the_sheet_prints_the_sample_in_the_permits_format(client):
     assert "a backfeed breaker on the load side of the existing panelboard" in flat and "100 A, 125 A" in flat
     assert "120 %: 40 A + 100 A = 140 A; limit 1.2 × 125 A = 150 A; PASS" in flat and "two-way meter" in flat and "FLECO, account 12-3456-7890" in flat
     assert "Filled by the signing engineer" in flat
-    # the last sheet no longer tables the audit, and the service block is surveyed, so it does not list the schedule either
-    assert "Refrigerator" not in last and "Schedule of loads" not in last and "Not yet in this set, and why" in last
+    # the last sheet no longer tables the audit; the schedule's blank lines are the engineer's (the frame rating, fed from, the
+    # demand load, the branch-circuit figures), listed under their own heading by sheet number (review finding 5)
+    flat_last = " ".join(last.split())
+    assert "Refrigerator" not in last and "Schedule of loads (service entrance blank)" not in last and "Not yet in this set, and why" in last
+    assert "The signing engineer's lines" in last and "main breaker AF (the frame rating)" in flat_last and "fed from the engineer names the panelboard feed" in flat_last
+    assert "demand load (W, VA, A) (× 3) the demand factors of PEC 2.20 (verify) are the engineer's" in flat_last
     assert res["pricing"]["design_blocked"] == []
 
 
@@ -156,8 +160,8 @@ def test_a_blank_service_block_and_no_planned_loads(client):
     assert f"Panelboard {BLANK}: 230 V (assumption), {BLANK} Ø (not surveyed), main breaker {BLANK} AT" in flat
     assert "Planned loads" not in flat and "not chosen (Site step)" in flat and "120 % rule: not checked" in flat
     assert f"{BLANK}, {BLANK} (not surveyed)" in flat and f"{BLANK}, account {BLANK}" in flat
-    # the last sheet lists the schedule only while the service entrance is blank
-    assert "Schedule of loads (service entrance blank)" in " ".join(last.split()) and "Site step" in " ".join(last.split())
+    # the last sheet lists the service entrance's blank lines under the schedule's sheet number while it is blank
+    assert "not surveyed (Site step › Service entrance)" in " ".join(last.split()) and "panelboard" in " ".join(last.split())
 
 
 def test_an_audit_without_appliances_still_builds_the_sheet(client):

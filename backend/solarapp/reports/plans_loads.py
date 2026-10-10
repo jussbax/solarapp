@@ -21,7 +21,8 @@ from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
 from ..pricing.service_checks import INTERCONNECTION_LABEL, poi_busbar_check
 from . import brand
-from .plans_pdf import BLANK, _f, _g, _line, _lines_by_role
+from .plans_blanks import BLANK, Blanks
+from .plans_pdf import _f, _g, _line, _lines_by_role
 from .plans_sld import poi_lines
 
 SHEET_NAME = "Schedule of loads"
@@ -90,12 +91,20 @@ def loads_sheet(doc: Any, results: dict, items: dict[str, dict], cfg: dict, st: 
     poi = choices.get("poi_busbar") or poi_busbar_check(svc, choices)[0]
     P = lambda t, style=None: Paragraph(t, style or st["cell"])  # noqa: E731
     cell, cellb = st["cell"], st["cellb"]
+    blanks: Blanks = st.get("blanks") or Blanks()
+    NOT_SURVEYED = "not surveyed (Site step › Service entrance)"
+
+    def blank(item: str, reason: str, **kw) -> str:
+        """A blank line on this sheet, recorded with its reason for the last sheet (round 13 review, finding 5); `engineer=True`
+        marks a line the set leaves to the signing engineer by design."""
+        return blanks.add(SHEET_NAME, item, reason, **kw)
 
     # the voltage: the surveyed service voltage, else the wiring rules' with the assumption label
     volts = svc.get("voltage_v") or wiring.get("ac_voltage")
     volts_txt = _g(svc.get("voltage_v"), "V") if svc.get("voltage_v") else f"{_g(wiring.get('ac_voltage'), 'V')} (assumption)"
     phase = svc.get("phase")
-    phase_txt = "1Ø 2W" if phase == 1 else f"3Ø, {BLANK} W (verify)" if phase == 3 else f"{BLANK} Ø (not surveyed)"
+    phase_txt = ("1Ø 2W" if phase == 1 else f"3Ø, {blank('wires of the 3-phase service', NOT_SURVEYED)} W (verify)" if phase == 3
+                 else f"{blank('service phase', NOT_SURVEYED)} Ø (not surveyed)")
     apps = list(audit.get("appliances") or [])
     grouped = load_groups(apps, loads_cfg, float(volts) if volts else None)
 
@@ -103,8 +112,9 @@ def loads_sheet(doc: Any, results: dict, items: dict[str, dict], cfg: dict, st: 
     flows.append(Paragraph(f"The energy audit's appliances in the permit's table, grouped as the format groups them, with the PV system as a source and the point of interconnection; "
                            f"{escape(VERIFY_COLUMNS)}. Circuit numbers, wires, conduits and breakers of the existing panelboard are {ENGINEERS} unless typed on the Site step; "
                            "a blank line is a figure the app does not hold, with its reason.", st["body"]))
-    head = (f"<b>Panelboard {escape(str(svc.get('panelboard') or BLANK))}</b>: {volts_txt}, {phase_txt}, main breaker {_g(svc.get('main_breaker_a'), 'AT') if svc.get('main_breaker_a') else BLANK + ' AT'} / {BLANK} AF "
-            f"(the frame rating is not surveyed), bus {_g(svc.get('busbar_a'), 'A')}, fed from {BLANK} (the engineer's)")
+    head = (f"<b>Panelboard {escape(str(svc.get('panelboard') or blank('panelboard', NOT_SURVEYED)))}</b>: {volts_txt}, {phase_txt}, "
+            f"main breaker {_g(svc.get('main_breaker_a'), 'AT') if svc.get('main_breaker_a') else blank('main breaker AT', NOT_SURVEYED) + ' AT'} / {blank('main breaker AF (the frame rating)', 'not surveyed: the engineer reads it off the existing panelboard', engineer=True)} AF "
+            f"(the frame rating is not surveyed), bus {_g(svc.get('busbar_a'), 'A') if svc.get('busbar_a') else blank('busbar rating', NOT_SURVEYED)}, fed from {blank('fed from', 'the engineer names the panelboard feed', engineer=True)} (the engineer's)")
     flows.append(Paragraph(head, st["body"]))
 
     rows: list[list] = []
@@ -114,22 +124,31 @@ def loads_sheet(doc: Any, results: dict, items: dict[str, dict], cfg: dict, st: 
         span_rows.append(len(rows) + 1)
         rows.append([P(text, cellb)] + [""] * (len(COLUMNS) - 1))
 
+    ENGINEERS_CIRCUITS = "the engineer's, from the existing panelboard (or typed on the Site step › Service entrance › existing circuits)"
+
     def app_row(ln: dict) -> list:
+        va = _f(ln["va"], 0) if ln["va"] is not None else blank(f"VA of {ln['name']}", "PF not set in Settings › System design")
+        amps = _f(ln["a"], 2) if ln["a"] is not None else blank(f"amperes of {ln['name']}", "PF not set in Settings › System design, or no voltage")
+        blank("wire, conduit and OCPD of the appliance lines", ENGINEERS_CIRCUITS, engineer=True, n=3)
         return ["", P(f"{_g(ln['qty'])} × {escape(ln['name'])}, {_g(ln['w_each'], 'W')} each" if ln["qty"] != 1 else f"1 × {escape(ln['name'])}, {_g(ln['w_each'], 'W')}"),
-                _f(ln["w"], 0), _f(ln["va"], 0), _g(volts), _f(ln["a"], 2), BLANK, BLANK, BLANK, "planned" if ln["status"] == "future" else "existing"]
+                _f(ln["w"], 0), va, _g(volts), amps, BLANK, BLANK, BLANK, "planned" if ln["status"] == "future" else "existing"]
 
     def subtotal(label: str, g: dict) -> list:
-        return ["", P(f"{escape(label)} subtotal", cellb), P(_f(g["w"], 0), cellb), P(_f(g["va"], 0) if g["va_known"] and g["lines"] else BLANK, cellb), _g(volts),
-                P(_f(g["a"], 2) if g["va_known"] and g["lines"] and volts else BLANK, cellb), "", "", "", ""]
+        return ["", P(f"{escape(label)} subtotal", cellb), P(_f(g["w"], 0), cellb), P(_f(g["va"], 0) if g["va_known"] and g["lines"] else blank(f"{label} subtotal VA", "PF not set in Settings › System design"), cellb), _g(volts),
+                P(_f(g["a"], 2) if g["va_known"] and g["lines"] and volts else blank(f"{label} subtotal amperes", "PF not set in Settings › System design, or no voltage"), cellb), "", "", "", ""]
 
     # the existing circuits as typed on the Site step, first and verbatim
     typed = list(svc.get("circuits") or [])
     if typed:
         heading("Existing circuits as typed on the Site step (the load figures are the engineer's)")
         for c in typed:
-            ocpd = (f"{_g(c.get('breaker_a'))} AT / {BLANK} AF" if c.get("breaker_a") else BLANK) + (f", {_g(c.get('poles'))}P" if c.get("poles") else "")
-            rows.append([escape(str(c.get("no") or BLANK)), P(escape(str(c.get("description") or BLANK))), BLANK, BLANK, _g(volts), BLANK,
-                         _g(c.get("wire_mm2")) if c.get("wire_mm2") else BLANK, _g(c.get("conduit_mm")) if c.get("conduit_mm") else BLANK, ocpd, "existing, as typed"])
+            no = str(c.get("no") or "")
+            ocpd = ((f"{_g(c.get('breaker_a'))} AT / {blank(f'AF of circuit {no}', 'the frame rating is not typed', engineer=True)} AF" if c.get("breaker_a") else blank(f"OCPD of circuit {no}", "not typed on the Site step"))
+                    + (f", {_g(c.get('poles'))}P" if c.get("poles") else ""))
+            blank(f"load figures (W, VA, A) of circuit {no}", "the engineer's: the audit holds loads, not the panelboard's circuits", engineer=True, n=3)
+            rows.append([escape(no or blank("circuit number", "not typed on the Site step")), P(escape(str(c.get("description") or blank(f"description of circuit {no}", "not typed on the Site step")))), BLANK, BLANK, _g(volts), BLANK,
+                         _g(c.get("wire_mm2")) if c.get("wire_mm2") else blank(f"wire of circuit {no}", "not typed on the Site step"), _g(c.get("conduit_mm")) if c.get("conduit_mm") else blank(f"conduit of circuit {no}", "not typed on the Site step"),
+                         ocpd, "existing, as typed"])
     # the audit's loads by group
     if apps and any(g["lines"] for g in grouped["groups"].values()):
         for key, label in GROUPS:
@@ -140,8 +159,8 @@ def loads_sheet(doc: Any, results: dict, items: dict[str, dict], cfg: dict, st: 
             heading(f"{label} ({pf_txt})")
             rows += [app_row(ln) for ln in g["lines"]]
             rows.append(subtotal(label, g))
-        rows.append(["", P("Connected load, existing", cellb), P(_f(grouped["existing_w"], 0), cellb), P(_f(grouped["existing_va"], 0) if grouped["existing_va"] is not None else BLANK, cellb), _g(volts),
-                     P(_f(grouped["existing_a"], 2) if grouped["existing_a"] is not None else BLANK, cellb), "", "", "", "the audit's nameplates × quantity"])
+        rows.append(["", P("Connected load, existing", cellb), P(_f(grouped["existing_w"], 0), cellb), P(_f(grouped["existing_va"], 0) if grouped["existing_va"] is not None else blank("connected load VA", "PF not set in Settings › System design"), cellb), _g(volts),
+                     P(_f(grouped["existing_a"], 2) if grouped["existing_a"] is not None else blank("connected load amperes", "PF not set in Settings › System design, or no voltage"), cellb), "", "", "", "the audit's nameplates × quantity"])
     else:
         heading("The energy audit has no appliances yet, so there is no schedule of loads to table.")
     planned = grouped["planned"]
@@ -150,8 +169,11 @@ def loads_sheet(doc: Any, results: dict, items: dict[str, dict], cfg: dict, st: 
         rows += [app_row(ln) for ln in planned["lines"]]
         rows.append(subtotal("Planned", planned))
     peak = (sizing.get("inverter") or {}).get("peak_load_kw")
+    blank("demand load (W, VA, A)", "the demand factors of PEC 2.20 (verify) are the engineer's", engineer=True, n=3)
     rows.append(["", P("Demand load", cellb), BLANK, BLANK, "", BLANK, "", "", "", P(f"the demand factors of PEC 2.20 (verify) are the engineer's; the hourly profile's coincident peak is {_f(peak, 2, 'kW')} (the audit's own figure)")])
-    rows.append(["", P("Main breaker", cellb), "", "", "", "", "", "", (_g(svc.get("main_breaker_a"), "AT") + f" / {BLANK} AF") if svc.get("main_breaker_a") else f"{BLANK} (not surveyed)",
+    rows.append(["", P("Main breaker", cellb), "", "", "", "", "", "",
+                 (_g(svc.get("main_breaker_a"), "AT") + f" / {blank('main breaker AF (the frame rating)', 'not surveyed: the engineer reads it off the existing panelboard', engineer=True)} AF") if svc.get("main_breaker_a")
+                 else f"{blank('main breaker', NOT_SURVEYED)} (not surveyed)",
                  P("its adequacy with the PV source: the engineer's")])
     if grouped["retiring"]:
         rows.append(["", P(f"{grouped['retiring']} retiring appliance{'s' if grouped['retiring'] > 1 else ''} on the audit not listed (to be removed)"), "", "", "", "", "", "", "", ""])
@@ -175,14 +197,18 @@ def loads_sheet(doc: Any, results: dict, items: dict[str, dict], cfg: dict, st: 
     inv_phase = f"{_g(inv_item.get('phase'))}Ø" if inv_item.get("phase") else "1Ø (the wiring rules')"
     pv_rows = [
         ("PV array", f"{int(sizing.get('panels') or 0)} × {_g((panel_l or {}).get('rating'), 'W')} = {kwp:.2f} kWp DC, {strings} string{'s' if strings != 1 else ''} of {per}"),
-        ("Inverter", f"{units} × {_g((inv_l or {}).get('rating'), 'kW')} AC ({escape(str((inv_l or {}).get('code') or BLANK))}), {_f(choices.get('ac_current_a'), 1, 'A')} at {_g(wiring.get('ac_voltage'), 'V')}, {inv_phase}"),
-        ("PV backfeed breaker", f"{_f(choices.get('ac_grid_breaker_a'), 0, 'A')} 2P (C5, {escape(str((_line(by_role, 'ac_breaker') or {}).get('code') or 'no item'))}); the inverter-output breaker {_f(choices.get('ac_breaker_a'), 0, 'A')} 2P (C4)"),
-        ("Wire", f"{escape(str(choices.get('ac_grid_gauge') or BLANK))} mm² THHN, 2 conductors × {_g(choices.get('ac_run_m'), 'm')}; the ground on the grounding run (C7)"),
+        ("Inverter", f"{units} × {_g((inv_l or {}).get('rating'), 'kW')} AC ({escape(str((inv_l or {}).get('code') or blank('inverter code', 'no inverter line on the BOM')))}), {_f(choices.get('ac_current_a'), 1, 'A')} at {_g(wiring.get('ac_voltage'), 'V')}, {inv_phase}"),
+        ("PV backfeed breaker", f"{_f(choices.get('ac_grid_breaker_a'), 0, 'A') if choices.get('ac_grid_breaker_a') else blank('PV backfeed breaker', 'no standard size covers the design current (the hard ac_circuit warning)')} 2P (C5, {escape(str((_line(by_role, 'ac_breaker') or {}).get('code') or 'no item'))}); "
+                               f"the inverter-output breaker {_f(choices.get('ac_breaker_a'), 0, 'A') if choices.get('ac_breaker_a') else blank('inverter-output breaker', 'no standard size covers the design current (the hard ac_circuit warning)')} 2P (C4)"),
+        ("Wire", f"{escape(str(choices.get('ac_grid_gauge') or blank('grid-side conductor gauge', 'no gauge sized (the hard ac_circuit warning)')))} mm² THHN, 2 conductors × {_g(choices.get('ac_run_m'), 'm')}; the ground on the grounding run (C7)"),
         ("Conduit", (f"{escape(str(conduit_l.get('name') or ''))} ({escape(str(conduit_l.get('code')))}), {_g(conduit_l.get('qty'), 'm')} allowance; its inside diameter is not on the item" if conduit_l and not str(conduit_l.get("code", "")).startswith("NO-ITEM-")
                      else "conduit: no item in the materials list")),
         ("Energy storage", "none (net metering)" if kind == "net_metering" else
-         f"{_g(choices.get('battery_units') or (bat_l or {}).get('qty'))} × {_g((bat_l or {}).get('rating'), 'kWh')} = {_f(choices.get('battery_nominal_kwh'), 2, 'kWh')}, {_f(bat_item.get('nominal_v'), 1, 'V')}, "
-         f"max discharge {_f(bat_item.get('continuous_a'), 0, 'A')} per unit; battery breaker {_f((choices.get('battery_circuit') or {}).get('breaker_a'), 0, 'A')} (C3)"),
+         f"{_g(choices.get('battery_units') or (bat_l or {}).get('qty'))} × {_g((bat_l or {}).get('rating'), 'kWh') if (bat_l or {}).get('rating') else blank('battery rating', 'no rating on the item (Materials page)')} = "
+         f"{_f(choices.get('battery_nominal_kwh'), 2, 'kWh') if choices.get('battery_nominal_kwh') else blank('battery bank kWh', 'no battery priced')}, "
+         f"{_f(bat_item.get('nominal_v'), 1, 'V') if bat_item.get('nominal_v') else blank('battery nominal voltage', 'not on the item (Materials page)')}, "
+         f"max discharge {_f(bat_item.get('continuous_a'), 0, 'A') if bat_item.get('continuous_a') else blank('battery maximum discharge', 'not on the item (Materials page)')} per unit; "
+         f"battery breaker {_f((choices.get('battery_circuit') or {}).get('breaker_a'), 0, 'A') if (choices.get('battery_circuit') or {}).get('breaker_a') else blank('battery breaker', 'no breaker sized (the hard battery_breaker warning)')} (C3)"),
         ("DC side", "the strings, the DC breakers and the SPDs are on the single-line diagram and the circuit schedule"),
     ]
     pv_t = Table([[P(k, cellb), P(v)] for k, v in pv_rows], colWidths=[40 * mm, 150 * mm], hAlign="LEFT")
@@ -193,10 +219,12 @@ def loads_sheet(doc: Any, results: dict, items: dict[str, dict], cfg: dict, st: 
     two_way = kind in ("net_metering", "combination")
     poi_rows = [
         ("Point of interconnection", (escape(INTERCONNECTION_LABEL.get(inter, inter)) if inter else "not chosen (Site step)") + (f"; {escape(str(svc['interconnection_note']))}" if svc.get("interconnection_note") else "")),
-        ("Existing main breaker, busbar", f"{_g(svc.get('main_breaker_a'), 'A')}, {_g(svc.get('busbar_a'), 'A')}" + ("" if svc.get("main_breaker_a") and svc.get("busbar_a") else " (not surveyed)")),
+        ("Existing main breaker, busbar", f"{_g(svc.get('main_breaker_a'), 'A') if svc.get('main_breaker_a') else blank('existing main breaker', NOT_SURVEYED)}, {_g(svc.get('busbar_a'), 'A') if svc.get('busbar_a') else blank('busbar rating', NOT_SURVEYED)}"
+                                          + ("" if svc.get("main_breaker_a") and svc.get("busbar_a") else " (not surveyed)")),
         ("120 % rule", "; ".join(escape(x) for x in poi_lines(poi, kind)) + f" ({escape(str(poi.get('source') or ''))})"),
-        ("Meter", ("two-way meter: installed by the DU after the CFEI" if two_way else "existing meter; nothing exported") + f"; meter number {escape(str(svc.get('meter_no') or BLANK))}"),
-        ("DU, account", f"{escape(str(svc.get('du_name') or BLANK))}, account {escape(str(svc.get('account_no') or BLANK))}; fault level at the service {_f(svc.get('fault_level_ka'), 1, 'kA') if svc.get('fault_level_ka') not in (None, '') else BLANK} (from the DU, verify)"),
+        ("Meter", ("two-way meter: installed by the DU after the CFEI" if two_way else "existing meter; nothing exported") + f"; meter number {escape(str(svc.get('meter_no') or blank('meter number', NOT_SURVEYED)))}"),
+        ("DU, account", f"{escape(str(svc.get('du_name') or blank('the DU', NOT_SURVEYED)))}, account {escape(str(svc.get('account_no') or blank('DU account number', NOT_SURVEYED)))}; "
+                        f"fault level at the service {_f(svc.get('fault_level_ka'), 1, 'kA') if svc.get('fault_level_ka') not in (None, '') else blank('the fault level at the service', 'from the DU, typed on the Site step › Service entrance; verify')} (from the DU, verify)"),
     ]
     poi_t = Table([[P(k, cellb), P(v)] for k, v in poi_rows], colWidths=[44 * mm, 146 * mm], hAlign="LEFT")
     poi_t.setStyle(st["kv_style"])

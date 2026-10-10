@@ -87,7 +87,7 @@ def test_plans_build_for_the_reference_record_on_a3(client):
     assert "Grounding and bonding" in schedule and "Voltage drop" in schedule and "Battery circuit" in schedule
     assert "Grid-side" in schedule and "Inverter output" in schedule   # pdftotext wraps the narrow cells
     assert "Design analysis: conductor derating" in analysis and "Sheet 8 of 10" in analysis   # test_design_analysis.py reads the sheet itself
-    assert "Not yet in this set, and why" in last and "Single-line diagram" in last and "String table" in last
+    assert "Not yet in this set, and why" in last and "Blank lines in this set, by sheet" in last and "String table" in last
     assert "Schedule of loads" in loads and "Refrigerator" in loads and "Connected load, existing" in loads   # the permit's format, its own sheet (round 13)
     assert "Refrigerator" not in last
     # the drop figures are the BOQ's

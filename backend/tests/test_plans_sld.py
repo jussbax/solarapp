@@ -157,8 +157,10 @@ def test_a_net_metering_job_has_no_battery_and_the_last_sheet_lists_only_what_is
     sld, last = _sld_page(pages), pages[-1]
     assert "no battery (net metering)" in sld and "ENERGY STORAGE" not in sld and "two-way meter" in sld
     assert not re.search(r"\bC3\b", sld)   # the battery circuit does not apply
-    # the diagram is in the set: the last sheet names only the datasheet figures still blank, and on which sheet they print blank
-    assert "Single-line diagram (figures blank)" in last and "Blank on sheet 5 where the Materials page is blank" in last
+    # the diagram is in the set: the last sheet lists the figures still blank on it under its sheet number (review finding 5)
+    flat_last = " ".join(last.split())
+    assert "Sheet 5 2 Inverter: MPPT window (low); Inverter: MPPT window (high) not on the item (Materials page)" in flat_last
+    assert "Sheet 5 1 Inverter: certificate none on file: type it on the Materials page" in flat_last and "Single-line diagram (figures blank)" not in last
 
 
 def test_a_blank_service_block_prints_a_blank_line_with_its_reason_everywhere(client):

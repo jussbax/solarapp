@@ -26,8 +26,8 @@ from ..pricing.uplift import DETAILS, PURLIN_WORDS, ROOF_TYPE_WORDS, SETTINGS_WH
 from ..schemas import AssessmentDoc
 from . import brand
 from .drawings import PANEL_FILL, STANDARD_SCALES, _hatch, _polygon_path, _text
+from .plans_blanks import BLANK, Blanks
 
-BLANK = "__________"
 FAIL_RED = colors.HexColor("#b3261e")
 SHEET_NAME = "Mounting detail and uplift check"
 SCALE = 5                                   # the details at 1:5
@@ -301,6 +301,11 @@ def mounting_sheet(doc: AssessmentDoc, results: dict, cfg: dict, items: dict[str
     h1, h2, body, small = st["h1"], st["h2"], st["body"], st["small"]
     two_col = st["two_col"]
     c7, c7b, grid7 = _styles(st)
+    blanks: Blanks = st.get("blanks") or Blanks()
+
+    def blank(item: str, reason: str, **kw) -> str:
+        """A blank line on this sheet, recorded with its reason for the last sheet (round 13 review, finding 5)."""
+        return blanks.add(SHEET_NAME, item, reason, **kw)
 
     def P(t: str) -> Paragraph:
         return Paragraph(t, c7)
@@ -317,7 +322,7 @@ def mounting_sheet(doc: AssessmentDoc, results: dict, cfg: dict, items: dict[str
     def item_text(role: str) -> str:
         l = by_role.get(role)
         if l is None:
-            return f"{BLANK} (no {role.replace('_', ' ')} line on the BOM)"
+            return f"{blank(role.replace('_', ' ') + ' item', 'no line for the role on the BOM (Pricing settings › BOM item roles)')} (no {role.replace('_', ' ')} line on the BOM)"
         code = str(l.get("code") or "")
         if code.startswith("NO-ITEM-") or not l.get("found", True):
             return f"no item in the materials list yet ({escape(role)})"
@@ -332,7 +337,7 @@ def mounting_sheet(doc: AssessmentDoc, results: dict, cfg: dict, items: dict[str
     # ---- the details (left column, top)
     fastener = str(mounting.get("fastener_description") or "").strip()
     foot_text = (f"S = {first['s_foot_m']:g} m (every {_ordinal(int(first['k_foot']))} purlin)" if first and first.get("s_foot_m") and first.get("k_foot")
-                 else f"S = {BLANK} (not checked)")
+                 else f"S = {blank('S, the foot spacing on the details', 'the uplift check is not checked (the inputs blank on the uplift table)', n=2)} (not checked)")
     det_w = 97.0
     det_a = detail_drawing("rib", det_w, "Detail A: rib-type metal sheet on steel C-purlins, 1:5", foot_text, (F, FS, FB))
     det_b = detail_drawing("corrugated", det_w, "Detail B: corrugated sheet on purlins, 1:5", foot_text, (F, FS, FB))
@@ -372,11 +377,11 @@ def mounting_sheet(doc: AssessmentDoc, results: dict, cfg: dict, items: dict[str
         ["5", P("<b>Splice</b>: " + item_text("splice")), P("one per rail joint (plan key)")],
         ["6", P("<b>Bonding lug and conductor</b>: " + item_text("earth_lug") + "; " + item_text("array_bonding")), P("a lug per rail line and per panel frame")],
         ["7", P("<b>Sealant</b>: " + item_text("sealant")), P("a bead at the penetration; the EPDM washer under the head")],
-        ["8", P("<b>Fastener</b>: " + (escape(fastener) if fastener else f"{BLANK} (not typed under {SETTINGS_WHERE})") + ", into the purlin"),
+        ["8", P("<b>Fastener</b>: " + (escape(fastener) if fastener else f"{blank('fastener (callout 8)', f'not typed under {SETTINGS_WHERE}')} (not typed under {SETTINGS_WHERE})") + ", into the purlin"),
          P(f"{screws} per foot" + (" (assumption)" if screws == 2 else "") + "; with the L-foot set")],
-        ["9", P("<b>Panel</b>: " + escape(str((by_role.get("panel") or {}).get("name") or BLANK)) + f", {_g(panel_l)} × {_g(panel_w)} m"), P("the frame on the rail")],
-        ["P", P("<b>Purlin</b>: " + _construction_words(first, "purlin")), P("as surveyed; drawn typical")],
-        ["S", P("<b>Roof sheet</b>: " + _construction_words(first, "sheet")), P("as surveyed; drawn typical")],
+        ["9", P("<b>Panel</b>: " + escape(str((by_role.get("panel") or {}).get("name") or blank("panel (callout 9)", "no panel line on the BOM"))) + f", {_g(panel_l)} × {_g(panel_w)} m"), P("the frame on the rail")],
+        ["P", P("<b>Purlin</b>: " + _construction_words(first, "purlin", blank)), P("as surveyed; drawn typical")],
+        ["S", P("<b>Roof sheet</b>: " + _construction_words(first, "sheet", blank)), P("as surveyed; drawn typical")],
     ]
     legend_t = _table7(["No.", "Role and item (the BOM)", "Note"], legend_rows, [8 * mm, 74 * mm, 36 * mm], c7, c7b, grid7)
 
@@ -384,7 +389,8 @@ def mounting_sheet(doc: AssessmentDoc, results: dict, cfg: dict, items: dict[str
     key_block.setStyle(two_col)
     dims_note = Paragraph(
         f"<b>Dimensions.</b> S: the foot spacing along the rail, from the uplift check (a multiple of the purlin spacing, at or under the rail maker's maximum span); "
-        f"C: the clearance under the panel, {BLANK} (the L-foot height is not on the item). Rail lines {_g(first['rail_to_rail_m']['value'] if first else None, 'm', 2)} apart, "
+        f"C: the clearance under the panel, {blank('C, the clearance under the panel (the L-foot height)', 'not on the L-foot item (Materials page)')} (the L-foot height is not on the item). "
+        f"Rail lines {_g(first['rail_to_rail_m']['value'], 'm', 2) if first else blank('rail-to-rail spacing', 'no face holds rows of panels')} apart, "
         f"the panel edge {_g(rail_frac * (panel_l if orientation == 'portrait' else panel_w), 'm', 2)} beyond each rail (assumption: the rails at the quarter points; the maker's clamping zone: verify). "
         "Drawn along the rail with the purlin under the foot shown cut; the chain puts a foot at a purlin crossing (the rails across the purlins): where the rails run with "
         "the purlins the feet are screwed into that purlin at the spacing shown, and the signing engineer verifies.", c7)
@@ -417,7 +423,7 @@ def mounting_sheet(doc: AssessmentDoc, results: dict, cfg: dict, items: dict[str
     else:
         for chunk_start in range(0, len(faces), 3):
             chunk = faces[chunk_start:chunk_start + 3]
-            right_col.append(_uplift_table(chunk, up, c7, c7b, grid7))
+            right_col.append(_uplift_table(chunk, up, c7, c7b, grid7, blank))
             right_col.append(Spacer(1, 1.5 * mm))
         lf = up.get("l_foot") or {}
         if status == "not checked":
@@ -454,32 +460,41 @@ def _ordinal(k: int) -> str:
     return {1: "1st", 2: "2nd", 3: "3rd"}.get(k, f"{k}th")
 
 
-def _construction_words(face: Optional[dict], what: str) -> str:
-    """The purlin or the roof sheet as surveyed, the blank fields named once with "not surveyed"."""
+def _construction_words(face: Optional[dict], what: str, blank=None) -> str:
+    """The purlin or the roof sheet as surveyed, the blank fields named once with "not surveyed"; `blank(item, reason)` records
+    the blank line for the last sheet when given."""
+    rec = blank or (lambda item, reason: BLANK)
     c = (face or {}).get("construction") or {}
     if what == "purlin":
         mat = PURLIN_WORDS.get(str(c.get("purlin_material") or ""), "")
         have = [escape(str(c.get("purlin_section"))) if c.get("purlin_section") else "", escape(mat), f"{_g(c.get('purlin_thickness_mm'))} mm" if c.get("purlin_thickness_mm") else "",
                 f"at {_g(c.get('purlin_spacing_m'))} m" if c.get("purlin_spacing_m") else ""]
-        blank = [n for n, v in zip(("section", "material", "thickness", "spacing"), have) if not v]
+        missing = [n for n, v in zip(("section", "material", "thickness", "spacing"), have) if not v]
         text = ", ".join(v for v in have if v)
-        return text + (f"; {', '.join(blank)} {BLANK} (not surveyed)" if blank and text else f"{BLANK} (not surveyed)" if blank else "")
+        if not missing:
+            return text
+        line = rec(f"purlin {', '.join(missing)}", "not surveyed (Roof faces › Roof construction)")
+        return text + (f"; {', '.join(missing)} {line} (not surveyed)" if text else f"{line} (not surveyed)")
     rt = ROOF_TYPE_WORDS.get(str(c.get("roof_type") or ""), "")
     prof = escape(str(c.get("sheet_profile"))) if c.get("sheet_profile") else ""
     if rt and prof:
         return f"{escape(rt)}; {prof}"
     if rt or prof:
-        return (escape(rt) or prof) + f"; {'profile' if rt else 'roof type'} {BLANK} (not surveyed)"
-    return f"{BLANK} (roof type and profile not surveyed)"
+        return (escape(rt) or prof) + f"; {'profile' if rt else 'roof type'} {rec('roof sheet ' + ('profile' if rt else 'type'), 'not surveyed (Roof faces › Roof construction)')} (not surveyed)"
+    return f"{rec('roof type and sheet profile', 'not surveyed (Roof faces › Roof construction)')} (roof type and profile not surveyed)"
 
 
-def _uplift_table(faces: list[dict], up: dict, c7: ParagraphStyle, c7b: ParagraphStyle, grid: TableStyle) -> Table:
+def _uplift_table(faces: list[dict], up: dict, c7: ParagraphStyle, c7b: ParagraphStyle, grid: TableStyle, blank=None) -> Table:
     """The chain as rows and the faces as columns: the step with its formula or clause (verify) in the first column, then
-    per face the figure and, in small type, its source or assumption."""
+    per face the figure and, in small type, its source or assumption. `blank(item, reason)` records each blank cell for the
+    last sheet; the first blank cell of a face's chain prints the reason the chain stopped there (review finding 9), the
+    later ones "(not computed)"."""
     wind = up.get("wind") or {}
     n = len(faces)
     label_w = 50 * mm
     face_w = (194 * mm - label_w) / n
+    rec = blank or (lambda item, reason, **kw: BLANK)
+    stop_said: set[str] = set()      # the faces whose chain-stop reason has printed
 
     def P(t: str) -> Paragraph:
         return Paragraph(t, c7)
@@ -490,6 +505,28 @@ def _uplift_table(faces: list[dict], up: dict, c7: ParagraphStyle, c7b: Paragrap
     def num(v: Any, unit: str = "", nd: int = 3) -> str:
         return BLANK if v is None else _g(v, unit, nd)
 
+    def face_name(f: dict) -> str:
+        return str(f.get("name") or "face")
+
+    def stop_reason(f: dict) -> str:
+        """Why the chain stopped on this face: the engine's `stop`, else the first missing input, else "not computed"."""
+        return str(f.get("stop") or (f.get("missing") or ["not computed"])[0])
+
+    def chain_blank(f: dict, what: str) -> str:
+        """A chain cell with no figure: the blank line, the stop's reason in the first such cell of the face, recorded either way."""
+        reason = stop_reason(f)
+        rec(f"{face_name(f)}: {what}", reason)
+        if face_name(f) in stop_said:
+            return f"{BLANK} (not computed)"
+        stop_said.add(face_name(f))
+        return f"{BLANK} " + _sm("not computed: " + escape(reason))
+
+    def ft(f: dict, fig: Optional[dict], what: str, unit: str = "", nd: Optional[int] = None, with_source: bool = True) -> str:
+        """A figure with its provenance; a missing one is recorded with the engine's reason."""
+        if not fig or fig.get("missing"):
+            rec(f"{face_name(f)}: {what}", str((fig or {}).get("missing") or "not on file"))
+        return _fig_text(fig, unit, nd, with_source)
+
     def per_face(fn) -> list:
         return [P(fn(f)) for f in faces]
 
@@ -498,29 +535,30 @@ def _uplift_table(faces: list[dict], up: dict, c7: ParagraphStyle, c7b: Paragrap
         rt = ROOF_TYPE_WORDS.get(str(c.get("roof_type") or ""), "")
         det = f.get("detail")
         h = (f.get("h_m") or {}).get("value")
-        parts = [(escape(rt) + (f" (Detail {det})" if det else " (no detail drawn)")) if rt else f"roof type {BLANK}",
-                 _construction_words(f, "purlin"),
-                 f"h {_g(h)} m" if h else f"h {BLANK}"]
+        where = "not surveyed (Roof faces › Roof construction)"
+        parts = [(escape(rt) + (f" (Detail {det})" if det else " (no detail drawn)")) if rt else f"roof type {rec(f'{face_name(f)}: roof type', where)}",
+                 _construction_words(f, "purlin", lambda item, reason: rec(f"{face_name(f)}: {item}", reason)),
+                 f"h {_g(h)} m" if h else f"h {rec(f'{face_name(f)}: mean roof height h', where)}"]
         if c.get("rafter_spacing_m"):
             parts.append(f"rafters at {_g(c['rafter_spacing_m'])} m")
         flag = c.get("condition_flag")
-        parts.append(f"condition {escape(str(flag))}" + (": verify the roof carries the array" if flag and flag != "sound" else "") if flag else f"condition {BLANK}")
+        parts.append(f"condition {escape(str(flag))}" + (": verify the roof carries the array" if flag and flag != "sound" else "") if flag else f"condition {rec(f'{face_name(f)}: roof condition', where)}")
         blanks = [n for n, v in (("roof type", rt), ("h", h), ("condition", flag)) if not v]
         return "; ".join(parts) + (" " + _sm(f"{', '.join(blanks)}: not surveyed") if blanks else "")
 
     def v_text(f: dict) -> str:
         v = wind.get("v_kmh") or {}
         if v.get("missing"):
-            return _fig_text(v)
-        zone = wind.get("zone") or BLANK
-        return f"{_g(v['value'])} km/h = {_g(float(v['value']) / 3.6, 'm/s', 2)}; zone {escape(str(zone))}, {escape(str(up.get('province') or BLANK))} " + _sm("source: " + escape(str(v.get("source") or "")))
+            return ft(f, v, "basic wind speed V")
+        zone = wind.get("zone") or rec(f"{face_name(f)}: wind zone", f"not set for the province under {SETTINGS_WHERE} nor typed on the project")
+        return f"{_g(v['value'])} km/h = {_g(float(v['value']) / 3.6, 'm/s', 2)}; zone {escape(str(zone))}, {escape(str(up.get('province') or rec(f'{face_name(f)}: province', 'the project has no map pin')))} " + _sm("source: " + escape(str(v.get("source") or "")))
 
     def exposure_text(f: dict) -> str:
         e = wind.get("exposure") or {}
         a, z = wind.get("alpha") or {}, wind.get("zg_m") or {}
-        head = f"{escape(str(e.get('value') or BLANK))}" + (" " + _sm(escape(str(e.get("note")))) if e.get("assumed") else "")
+        head = f"{escape(str(e.get('value') or rec(f'{face_name(f)}: exposure', 'not typed on the project')))}" + (" " + _sm(escape(str(e.get("note")))) if e.get("assumed") else "")
         if a.get("missing"):
-            return head + f"; alpha, zg {BLANK} " + _sm(escape(str(a["missing"])))
+            return head + f"; alpha, zg {rec(f'{face_name(f)}: alpha and zg', str(a['missing']))} " + _sm(escape(str(a["missing"])))
         return head + f"; alpha {_g(a.get('value'))}, zg {_g(z.get('value'), 'm')} " + _sm("source: " + escape(str(a.get("source") or "")))
 
     def result_text(f: dict) -> str:
@@ -536,48 +574,51 @@ def _uplift_table(faces: list[dict], up: dict, c7: ParagraphStyle, c7b: Paragrap
 
     def per_screw(f: dict) -> str:
         if f.get("t_screw_std_kn") is None:
-            return f"{BLANK} (not computed)"
+            return chain_blank(f, "the screw's share at the cap")
         holds = f.get("holds_std")
-        return (f"T_foot {num(f['t_foot_std_kn'], 'kN')} = {num(f['net_kpa'], 'kPa')} × {_g(f['s_std_m'])} m × {_g(f['strip_m']['value'], 'm', 3)}; "
-                f"{_g(f['screws_per_foot']['value'])} screws gives <b>{num(f['t_screw_std_kn'], 'kN')}</b> per screw against {_fig_text(f.get('pullout_kn'), 'kN')}: "
-                + (f"holds (ratio {num(f['ratio_std'], '', 2)})" if holds else f"<b>does not hold</b> (ratio {num(f['ratio_std'], '', 2)})"))
+        return (f"T_foot {_g(f['t_foot_std_kn'], 'kN', 3)} = {_g(f['net_kpa'], 'kPa', 3)} × {_g(f['s_std_m'])} m × {_g(f['strip_m']['value'], 'm', 3)}; "
+                f"{_g(f['screws_per_foot']['value'])} screws gives <b>{_g(f['t_screw_std_kn'], 'kN', 3)}</b> per screw against {ft(f, f.get('pullout_kn'), 'the allowable withdrawal', 'kN')}: "
+                + (f"holds (ratio {_g(f['ratio_std'], '', 2)})" if holds else f"<b>does not hold</b> (ratio {_g(f['ratio_std'], '', 2)})"))
 
     def spacing_text(f: dict) -> str:
         if f.get("s_foot_m") is None:
-            return f"{BLANK} (not computed)"
-        sa = f"s_allow {num(f['s_allow_m'], 'm')}" if f.get("s_allow_m") is not None else "no net uplift"
-        return (f"{sa} gives every {_ordinal(int(f['k_foot']))} purlin = {_g(f['s_foot_m'])} m: {num(f['t_screw_kn'], 'kN')} per screw, ratio {num(f['ratio'], '', 2)}; "
+            return chain_blank(f, "the spacing that holds")
+        sa = f"s_allow {_g(f['s_allow_m'], 'm', 3)}" if f.get("s_allow_m") is not None else "no net uplift"
+        return (f"{sa} gives every {_ordinal(int(f['k_foot']))} purlin = {_g(f['s_foot_m'])} m: {_g(f['t_screw_kn'], 'kN', 3)} per screw, ratio {_g(f['ratio'], '', 2)}; "
                 f"{_g(f.get('feet_per_rail'))} feet per rail piece")
 
     def feet_text(f: dict) -> str:
         rows = f.get("rows") or []
         if f.get("feet") is None:
-            return f"{BLANK} (not computed); the rule's {_g(f.get('l_foot_rule'))} on {len(rows)} row{'s' if len(rows) != 1 else ''} ({', '.join(_g(r['length_m'], 'm', 2) for r in rows)})"
+            return f"{chain_blank(f, 'the feet and screws')}; the rule's {_g(f.get('l_foot_rule'))} on {len(rows)} row{'s' if len(rows) != 1 else ''} ({', '.join(_g(r['length_m'], 'm', 2) for r in rows)})"
         return (f"{', '.join(str(r['feet_per_line']) for r in rows)} per rail line on the {len(rows)} row{'s' if len(rows) != 1 else ''} "
                 f"({', '.join(_g(r['length_m'], 'm', 2) for r in rows)}, two lines each): <b>{f['feet']} feet, {f['screws']} screws</b>; the BOQ rule's {_g(f.get('l_foot_rule'))}")
 
     def cap_text(f: dict) -> str:
         c = f.get("cap_m") or {}
         if f.get("s_std_m") is None:
-            return _fig_text(c, "m") + f"; purlins at {_fig_text(f.get('purlin_spacing_m'), 'm', with_source=False)}"
-        return _fig_text(c, "m") + f"; purlins at {_g(f['purlin_spacing_m']['value'])} m gives every {_ordinal(int(f['k_std']))} purlin = {_g(f['s_std_m'])} m"
+            return ft(f, c, "the foot spacing cap", "m") + f"; purlins at {ft(f, f.get('purlin_spacing_m'), 'the purlin spacing', 'm', with_source=False)}"
+        return ft(f, c, "the foot spacing cap", "m") + f"; purlins at {_g(f['purlin_spacing_m']['value'])} m gives every {_ordinal(int(f['k_std']))} purlin = {_g(f['s_std_m'])} m"
+
+    def chain(f: dict, key: str, what: str, unit: str = "", nd: int = 3) -> str:
+        return chain_blank(f, what) if f.get(key) is None else _g(f[key], unit, nd)
 
     rows = [
         [step("Roof construction", "surveyed per face; a blank reads the project's default")] + per_face(construction),
         [step("Basic wind speed V", "NSCP 2015 Fig. 207A.5-1A, 3-s gust at 10 m, Occupancy II (verify); the province's row, or the project's")] + per_face(v_text),
         [step("Exposure; alpha, zg", "NSCP Table 207A.9-1 (ASCE 7-10 26.9-1): verify")] + per_face(exposure_text),
-        [step("Mean roof height h", "surveyed, ground to mid-slope")] + per_face(lambda f: _fig_text(f.get("h_m"), "m")),
-        [step("Kz", "2.01 × (max(h, 4.6 m) / zg)^(2/alpha): verify")] + per_face(lambda f: num(f.get("kz"))),
-        [step("Kzt", "topographic factor, NSCP 207A.8: verify")] + per_face(lambda f: _fig_text(wind.get("kzt"))),
-        [step("Kd", "directionality, C&amp;C, NSCP Table 207A.6-1: verify")] + per_face(lambda f: _fig_text(wind.get("kd"))),
-        [step("qh", "0.613 Kz Kzt Kd V² (V in m/s), NSCP 207B.3-1: verify")] + per_face(lambda f: num(f.get("qh_pa"), "N/m²", 0)),
-        [step("GCp", "C&amp;C, the roof zone (1 interior, 2 edge, 3 corner), one panel's area; NSCP 207E.4-2: verify")] + per_face(lambda f: _fig_text(wind.get("gcp"))),
-        [step("Uplift on the panel p_up", "qh × |GCp|; no internal pressure on an array above the roof (assumption)")] + per_face(lambda f: num(f.get("p_up_kpa"), "kPa")),
+        [step("Mean roof height h", "surveyed, ground to mid-slope")] + per_face(lambda f: ft(f, f.get("h_m"), "mean roof height h", "m")),
+        [step("Kz", "2.01 × (max(h, 4.6 m) / zg)^(2/alpha): verify")] + per_face(lambda f: chain(f, "kz", "Kz")),
+        [step("Kzt", "topographic factor, NSCP 207A.8: verify")] + per_face(lambda f: ft(f, wind.get("kzt"), "Kzt")),
+        [step("Kd", "directionality, C&amp;C, NSCP Table 207A.6-1: verify")] + per_face(lambda f: ft(f, wind.get("kd"), "Kd")),
+        [step("qh", "0.613 Kz Kzt Kd V² (V in m/s), NSCP 207B.3-1: verify")] + per_face(lambda f: chain(f, "qh_pa", "qh", "N/m²", 0)),
+        [step("GCp", "C&amp;C, the roof zone (1 interior, 2 edge, 3 corner), one panel's area; NSCP 207E.4-2: verify")] + per_face(lambda f: ft(f, wind.get("gcp"), "GCp")),
+        [step("Uplift on the panel p_up", "qh × |GCp|; no internal pressure on an array above the roof (assumption)")] + per_face(lambda f: chain(f, "p_up_kpa", "p_up", "kPa")),
         [step("Panel and dead load D", "weight × 9.81 + the rail share, over the panel's area")]
-        + per_face(lambda f: f"{_g(f['panel']['length_m'])} × {_g(f['panel']['width_m'])} = {_g(f['panel']['area_m2'], 'm²', 3)}; {_fig_text(f.get('weight_kg'), 'kg')} + rail {_fig_text(f.get('rail_kg'), 'kg', 2)} gives {_fig_text(f.get('d_kpa'), 'kPa', 3, with_source=False)}"),
-        [step("Net uplift", "0.6D + 0.6W, NSCP 203.4: verify; zero when the dead load wins")] + per_face(lambda f: f"T_panel {num(f.get('t_panel_kn'), 'kN', 2)}; {num(f.get('net_kpa'), 'kPa')} on the panel"),
+        + per_face(lambda f: f"{_g(f['panel']['length_m'])} × {_g(f['panel']['width_m'])} = {_g(f['panel']['area_m2'], 'm²', 3)}; {ft(f, f.get('weight_kg'), 'the panel weight', 'kg')} + rail {ft(f, f.get('rail_kg'), 'the rail weight', 'kg', 2)} gives {ft(f, f.get('d_kpa'), 'the dead load D', 'kPa', 3, with_source=False)}"),
+        [step("Net uplift", "0.6D + 0.6W, NSCP 203.4: verify; zero when the dead load wins")] + per_face(lambda f: f"T_panel {chain(f, 't_panel_kn', 'T_panel', 'kN', 2)}; {chain(f, 'net_kpa', 'the net uplift', 'kPa')} on the panel"),
         [step("Rail lines", "each line carries half the panel across the rails")]
-        + per_face(lambda f: f"{escape(str(f.get('orientation') or ''))}: strip {_fig_text(f.get('strip_m'), 'm', 3, with_source=False)}; rails {_fig_text(f.get('rail_to_rail_m'), 'm', 2, with_source=False)} apart"),
+        + per_face(lambda f: f"{escape(str(f.get('orientation') or ''))}: strip {ft(f, f.get('strip_m'), 'the strip per rail line', 'm', 3, with_source=False)}; rails {ft(f, f.get('rail_to_rail_m'), 'the rail-to-rail spacing', 'm', 2, with_source=False)} apart"),
         [step("Foot spacing cap", "the rail maker's maximum span (or the BOQ rule's); a multiple of the purlin spacing")] + per_face(cap_text),
         [step("Per screw at the cap", "T_foot = net × S × strip; T_screw = T_foot / screws per foot, against the allowable withdrawal")] + per_face(per_screw),
         [step("Spacing that holds", "s_allow = screws × pull-out / (net × strip); S = the largest multiple of the purlin spacing at or under min(s_allow, cap)")] + per_face(spacing_text),
