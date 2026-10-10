@@ -1680,3 +1680,34 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   can just add logos of the brand we install rather than this." The card is gone from "Why people choose us"; a
   logo strip waits as a placeholder (dropped from the public build) until the owner sends the makers' logo files
   and the names; the profile's `brands` line stays for the proposal. No brand is named or drawn until then.
+
+## Round 7: a marketing website, not a blog
+
+- The owner (10 October), on the live site: "anti marketing or sales", "the website looks like a blog rather than a
+  marketing website", then "I want it marketing, salesy, dynamic not purely static and blog esque. Go." The round
+  ran as: the marketing specialist's anti-sales audit (`docs/audits/round-7/marketing-audit.md`, 24 lines ranked by
+  lost sales, the proof not yet used, the headline per page, the phone's first screen), the UX specialist as
+  designer (a worktree: photo heroes, a proof strip, the homes as swipeable proof cards, a stepper, an icon grid, a
+  compact FAQ, a sticky call to action on the phone), the copywriter on the merged layout (`copywriter.md`), the
+  specialist's final review (`marketing-review.md`), the coordinator's walk.
+- Dynamic, inside the site's rules: motion comes only from `site/static/site.css` and `site/static/site.js` (the
+  public site allows `script-src 'self'`, no inline script, no outside call): the hero photo breathes, sections
+  come in as they scroll into view, the ₱33,000 and the 3 count up once, cards lift under a pointer, the sticky bar
+  shows after the hero and hides while the band or the footer is in view; all of it off under
+  `prefers-reduced-motion`, and every page complete with JavaScript off. A block several pages share lives in
+  `site/partials/` and `<!-- include: name -->` pastes it at build time.
+- The phone's first screen is a roof, the promise and the gold button; the proof strip under it carries the four
+  figures the facts allow (more than ₱33,000 of credit on the owner's own bill; the owner's home on solar since
+  2023 and through every typhoon season since; three family homes in Laguna and Quezon City; one free visit).
+  Measured: no sideways scroll at nine widths, layout shift under 0.001, the home page about 500 KB on the phone,
+  every text passing contrast on every background including over the photos, nothing under 14.5 px on the phone.
+- The words: headlines ask for the want ("The bill goes down. With a battery, the lights stay on.", "Which one is
+  you?", "We live with what we sell.", "What you keep on when the street goes dark.", "Your meter runs both ways.",
+  "Our oldest roof is our own."); the honesty lives inside the sentence (an estimate to decide with, the roof visit
+  makes it exact; the panels do the saving, the battery buys the comfort); nothing beyond the owner's facts. The
+  estimate widget followed the same audit: the first option says what it gives, "Saved over 25 years" sits beside
+  the price, the booked visitor is thanked, the booking card lists the warranties and, once Settings carry them,
+  the owner's name and number.
+- Not inferred: the owner is named as "the owner" and the homes as "the owner's parents' house" and "the owner's
+  wife's family house"; no pronoun is used for the owner anywhere on the site. The inverter sizes and the mounting
+  words left the home cards (the chips carry the kWp); they remain on the engineering side and the proposal.
