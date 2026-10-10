@@ -48,6 +48,13 @@ ELECTRICAL_HEADERS: dict[str, tuple[str, ...]] = {
     "nominal_v": ("nominalv", "nominalvoltage", "batteryvoltage"),
     "capacity_ah": ("capacityah", "capacity", "ah"),
     "discharge_a_recommended": ("dischargearecommended", "recommendeddischargecurrent", "recommendeddischarge"),
+    # round 13: the design analysis's item figures, so a workbook may carry them as columns (brief 2.3)
+    "overall_area_mm2": ("overallarea", "overallareamm2", "conductorarea", "insulatedarea"),
+    "inner_diameter_mm": ("innerdiameter", "innerdiametermm", "insidediameter", "conduitinnerdiameter"),
+    "insulation_c": ("insulation", "insulationc", "insulationrating", "insulationtemperature"),
+    "ampacity_a": ("ampacity", "ampacitya", "ratedampacity", "cableampacity"),
+    "fault_current_a": ("faultcurrent", "faultcurrenta", "maxoutputfaultcurrent", "faultcontribution"),
+    "aic_ka": ("aic", "aicka", "interruptingrating", "interruptingcapacity"),
 }
 _INT_FIELDS = {"mppt_count", "phase", "battery_inputs"}
 _TEXT_FIELDS = {"certifications", "inverter_type", "battery_class", "mppt_currents_a"}

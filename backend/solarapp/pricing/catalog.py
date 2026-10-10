@@ -59,6 +59,14 @@ class Item:
     nominal_v: Optional[float] = None              # batteries: nominal voltage
     capacity_ah: Optional[float] = None            # batteries: capacity in Ah
     discharge_a_recommended: Optional[float] = None   # batteries: the recommended continuous discharge current (the soft check); continuous_a is the BMS maximum
+    # round 13: the six fields the design analysis sheet reads (docs/audits/round-13/engineer-brief.md, 2.3); blank = "not checked" or
+    # the labelled assumption, never a silent default
+    overall_area_mm2: Optional[float] = None      # wire items: the insulated conductor's overall cross-section (the conduit fill); from the PEC table or the maker's sheet
+    inner_diameter_mm: Optional[float] = None     # raceway items: the conduit's inside diameter (the conduit fill)
+    insulation_c: Optional[float] = None          # wire items: the insulation's temperature rating; blank reads as the derating setting's 90 °C with the note
+    ampacity_a: Optional[float] = None            # wire items: the maker's ampacity at the insulation rating; blank = the wiring rules' table figure with "verify"
+    fault_current_a: Optional[float] = None       # inverters: the maximum output fault current; batteries: the BMS's short-circuit trip (the short-circuit note)
+    aic_ka: Optional[float] = None                # protective devices: the interrupting rating (AIC), compared with the DU's fault level when both are typed
 
     @property
     def is_hybrid_inverter(self) -> bool:
@@ -91,6 +99,9 @@ ELECTRICAL_FIELDS = (
     # round 12: the datasheet fields; on the list so a materials re-import keeps them when its row has no value (store.KEEP_WHEN_BLANK)
     "max_system_voltage_v", "inverter_type", "phase", "battery_class", "charge_v_max", "charge_a_max", "mppt_currents_a", "battery_inputs",
     "nominal_v", "capacity_ah", "discharge_a_recommended",
+    # round 13: the design analysis's item figures (the conductor's area and insulation, the conduit's inside diameter, the cable's
+    # ampacity, the fault contributions, the breakers' interrupting rating); kept on a materials re-import like the rest
+    "overall_area_mm2", "inner_diameter_mm", "insulation_c", "ampacity_a", "fault_current_a", "aic_ka",
 )
 # the electrical fields that hold text, blank when unknown (the rest are numbers or flags, None when unknown)
 ELECTRICAL_TEXT_FIELDS = ("certifications", "inverter_type", "battery_class", "mppt_currents_a")

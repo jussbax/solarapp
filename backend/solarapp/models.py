@@ -176,6 +176,14 @@ class MaterialItem(SQLModel, table=True):
     nominal_v: Optional[float] = None              # batteries: nominal voltage
     capacity_ah: Optional[float] = None            # batteries: capacity
     discharge_a_recommended: Optional[float] = None   # batteries: recommended continuous discharge current
+    # Round 13 (docs/audits/round-13/engineer-brief.md, 2.3): the six figures the design analysis sheet reads from the items;
+    # blank = the row prints "not checked" or the labelled assumption. Added to an older database at start-up like the rest.
+    overall_area_mm2: Optional[float] = None       # wires: the insulated conductor's overall cross-section (conduit fill)
+    inner_diameter_mm: Optional[float] = None      # raceways: the conduit's inside diameter (conduit fill)
+    insulation_c: Optional[float] = None           # wires: the insulation's temperature rating (°C); blank reads as 90 with the note
+    ampacity_a: Optional[float] = None             # wires: the maker's ampacity at the insulation rating; blank = the wiring rules' table with "verify"
+    fault_current_a: Optional[float] = None        # inverters: maximum output fault current; batteries: the BMS's short-circuit trip
+    aic_ka: Optional[float] = None                 # protective devices: the interrupting rating (AIC)
     updated_at: datetime = Field(default_factory=utcnow)
 
 

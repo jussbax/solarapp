@@ -1226,6 +1226,13 @@ export interface MaterialItem {
   nominal_v?: number | null
   capacity_ah?: number | null
   discharge_a_recommended?: number | null
+  // round 13: the design analysis's item figures (docs/audits/round-13/engineer-brief.md, 2.3); blank = not checked or the labelled assumption
+  overall_area_mm2?: number | null
+  inner_diameter_mm?: number | null
+  insulation_c?: number | null
+  ampacity_a?: number | null
+  fault_current_a?: number | null
+  aic_ka?: number | null
 }
 
 export interface FaceSimulation {
@@ -1343,9 +1350,31 @@ export interface CircuitRecord {
   checks: { design_le_ocpd: boolean | null; ampacity_ge_ocpd: boolean | null; ocpd_le_derated: boolean | null; terminal_ge_design: boolean | null; next_size_up_used: boolean | null; fill_ok: boolean | null; egc_ok: boolean | null }
   status: 'pass' | 'fail' | 'not checked'
   notes: string[]
+  // round 13, item 2: written by the design analysis (pricing/design_analysis.py) on a project's results; absent on a record computed before it
+  conductor_code?: string | null
+  ampacity_base_column?: string | null
+  conductor_area_mm2?: number | null
+  /** The assumptions and the tables still to verify a pass stands on ("ambient assumed 30 °C", "THHN columns: verify"). */
+  qualifiers?: string[]
+  /** Why the row is "not checked": the figures the app does not hold. */
+  not_checked?: string[]
+}
+/** The job-level block of the design analysis sheet (round 13, item 2): the short-circuit note, the GEC line, the tables used with
+ * their sources and flags, the assumptions, the rows not checked and the codes that block the documents. */
+export interface DesignAnalysisBlock {
+  ambient: { outdoor_c: number; outdoor_source: string; outdoor_basis: string; indoor_c: number; tmy_max_air_c: number | null }
+  assumptions: string[]
+  tables: { key: string; label: string; source: string; verified: boolean; values: unknown }[]
+  short_circuit: { utility_ka: number | null; du_name: string | null; utility_text: string; aic_text: string; unknown: string[]; inverter: { amps: number | null; assumed: boolean; text: string } | null; battery: { amps: number | null; assumed: boolean; text: string } | null; aic: { code: string; name: string; aic_ka: number | null; ok: boolean | null }[] }
+  gec: { gauge_mm2: number | null; max_mm2: number; source: string; verified: boolean; rod_code: string | null; text: string; ok: boolean | null }
+  not_checked: { id: string; name: string; reasons: string[] }[]
+  qualifiers: Record<string, string[]>
+  blocking: string[]
+  statuses: Record<string, 'pass' | 'fail' | 'not checked'>
 }
 export interface PricingChoicesExtra {
   circuits?: CircuitRecord[]
+  design_analysis?: DesignAnalysisBlock
   pv_run_m?: number
   ac_run_m?: number
   grounding_run_m?: number

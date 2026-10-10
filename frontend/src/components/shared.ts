@@ -25,6 +25,8 @@ export const SETTINGS_ENTRIES: SettingsEntry[] = [
   { id: 'program', route: '/settings/pricing/program', label: 'Program of works', lead: 'The site day, the durations the schedule assumes, the payment terms a proposal starts from, and when money moves.', owner: true, sections: ['program'] },
   { id: 'savings', route: '/settings/pricing/savings', label: 'Customer savings', lead: 'Tariff, export credit, price rise, the analysis period and the lifetimes the customer savings count on.', owner: true, sections: ['economics'] },
   { id: 'system', route: '/settings/pricing/system', label: 'System design', lead: 'Losses after the panels and how many evenings the battery must carry.', owner: true, sections: ['system_losses', 'sizing'] },
+  // round 13: the design analysis sheet's tables (every value a cited stand-in with its source and a verify flag) and its assumptions
+  { id: 'analysis', route: '/settings/pricing/analysis', label: 'Design analysis', lead: "The derating tables and the grounding conductor sizes the plan set's design analysis sheet checks against: every value a cited stand-in with its source, ticked confirmed once the owner or the PEE has checked it; the ambient temperatures and the conduit height are assumptions.", owner: true, sections: ['derating', 'grounding'] },
   { id: 'account', route: '/settings/account', label: 'Your account', lead: 'Your password, two-step verification, security keys and devices.' },
   { id: 'people', route: '/settings/people', label: 'People', lead: 'Who can sign in to the back office.', owner: true },
   { id: 'data', route: '/settings/data', label: 'Weather and data', lead: 'The weather dataset every calculation runs on.' },
