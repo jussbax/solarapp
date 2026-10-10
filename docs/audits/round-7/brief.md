@@ -41,6 +41,16 @@ profile at page load; the net-metering example (500 kWh a month in Tanauan: 4.1 
 under 4 years, about two thirds off) is the engine's. The owner answers after-sales as above. No financing, no
 guaranteed savings, no utility name, "estimate", "roof check", "proposal".
 
+## The owner's go (10 October, later): "Let's work on the bigger ask, I want it marketing, salesy, dynamic not purely
+static and blog esque. Go."
+"Dynamic" within the site's rules: motion and life from the site's own CSS and `site/static/site.js` only (the
+public site's security policy allows no inline scripts and no outside libraries or calls): a hero photo that
+breathes, sections that come in as you scroll, numbers that count up, cards that lift, a sticky call to action on
+the phone, the three homes as swipeable proof on the phone; all of it off under `prefers-reduced-motion`, and the
+page still complete with JavaScript off. The photos on file (site/static/photos/, web sizes; the originals for new
+crops in /tmp/claude-0/-home-user/2a22d1e9-a264-58af-86c3-f169033ed722/scratchpad/site-photos/originals/ with
+site/tools/photos.py to cut them) are the material; no stock images, no icons that imply a brand.
+
 ## What this round must deliver
 1. Marketing and sales: an anti-sales audit of every page and the estimate widget's texts: every line that could
    make a buyer walk away, in rank order, with the replacement; and the proof the site is not yet using (the
