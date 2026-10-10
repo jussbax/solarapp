@@ -125,7 +125,7 @@ the town name; no stock images.
    Image: the installer on a roof with the meter in hand.
 
 Landing-page headline options for the estimate page (the page's own
-heading is "How much solar does your house need?"):
+heading is "What would your bill be with solar?"):
 
 - "See what solar would do to your bill. Four questions, one minute, free."
 - "Your ₱4,000 bill, down to a few hundred. Find out in a minute."

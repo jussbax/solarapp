@@ -310,9 +310,9 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
       )}
 
       <section className="pld-card">
-        <h1 className="pld-h1">How much solar does your house need?</h1>
+        <h1 className="pld-h1">What would your bill be with solar?</h1>
         <p className="pld-lead">
-          Four questions, about a minute. You'll see the system size, the price and what it saves each month. For an exact figure, we measure your roof. The visit is free.
+          Four questions, about a minute. You'll see your bill before and after, the price, and how many panels it takes. Nobody calls unless you book the free roof visit, which gives the exact figure.
         </p>
         {(status === 'down' || (status && !status.enabled)) && <div className="pld-note pld-warn">{downNote}</div>}
 
@@ -455,7 +455,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
           </div>
 
           <div className="pld-line">
-            <b>The system:</b> {systemLine(shown)}. Needs about {Math.round(shown.system.roof_area_m2)} m² of roof.
+            <b>What goes in:</b> {systemLine(shown)}. Needs about {Math.round(shown.system.roof_area_m2)} m² of roof.
           </div>
           <div className="pld-line">
             <b>What it makes:</b> about {n0(prod.annual_kwh / 12)} kWh a month, {makesPct}% of the {n0(result.inputs.monthly_kwh)} kWh you use.
@@ -477,7 +477,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                 </>
               ) : (
                 <>
-                  <b>Add a battery ({other.system.battery_kwh.toFixed(0)} kWh{other.system.battery_note ? `, ${other.system.battery_note}` : ''}) for brownouts:</b> about {php0(other.price.total - shown.price.total)} more
+                  <b>Add a battery for brownouts:</b> about {php0(other.price.total - shown.price.total)} more ({other.system.battery_kwh.toFixed(0)} kWh{other.system.battery_note ? `, ${other.system.battery_note}` : ''})
                   {other.economics && `, bill ${other.economics.bill_after_monthly < SMALL_BILL ? 'small' : `about ${php0(other.economics.bill_after_monthly)}`} a month, pays for itself in ${years(other.economics.payback_years, other.economics.analysis_years)}`}.{' '}
                   <button type="button" className="pld-link" onClick={() => setWithBattery(true)}>
                     Show with the battery
@@ -488,14 +488,14 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
           )}
 
           <div className="pld-book" id="pld-book" ref={bookRef}>
-            <h3 className="pld-h3">Want the exact figure? The roof visit is free.</h3>
+            <h3 className="pld-h3">Want the exact figure? We come and measure. The visit is free.</h3>
             {leadSent ? (
               <div className="pld-thanks">
                 <p>
-                  Thank you, {firstName(lead.name)}. {profile?.owner_name || 'We'} will message or call you {profile?.callback_promise || 'within one working day'} to pick a day; visits are usually within the week.
+                  Thank you, {firstName(lead.name)}. {profile?.owner_name || 'We'} will message or call you {profile?.callback_promise || 'within one working day'} to pick a day; visits are usually within the week. Nothing more to do for now; keep a recent bill where you can find it.
                 </p>
                 <p>
-                  Then: the roof visit, about an hour and free; your roof check card the same evening; the energy audit over your bill and appliances; your proposal within two working days, valid {validDays} days. Have a recent bill handy.
+                  What happens next: the roof visit, about an hour and free; your roof check card the same evening; the energy audit over your bill and appliances; your proposal within two working days, valid {validDays} days.
                 </p>
                 <div className="pld-row">
                   {messengerHref && (
