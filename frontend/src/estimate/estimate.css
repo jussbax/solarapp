@@ -106,6 +106,8 @@
 .pld-scene-panels.on .pld-scene-panel.on polygon { stroke: #e2bd4e; animation: pld-scene-sunlit 2.4s ease-in-out infinite; }
 .pld-scene-pulse { opacity: 0; transition: opacity .6s ease; transform-box: fill-box; transform-origin: center; }
 .pld-scene-pulse.on { animation: pld-scene-pulse 1.6s ease-in-out infinite; }
+.pld-scene-batt-glow { fill: none; stroke: #ffd54f; stroke-width: 3; opacity: 0; transition: opacity .6s ease; }
+.pld-scene-batt-glow.on { opacity: .8; animation: pld-scene-batt-pulse 1.6s ease-in-out infinite; }
 .pld-scene-piece { opacity: 0; }
 .pld-scene-piece.on { opacity: 1; animation: pld-scene-arrive .5s ease-out backwards; }
 .pld-scene-flash { fill: none; stroke: var(--pld-gold); stroke-width: 1; opacity: 0; }
@@ -144,6 +146,7 @@
 @keyframes pld-scene-flash-stroke { 0% { stroke: #C9A227; stroke-width: 5; } 55% { stroke: #C9A227; stroke-width: 3; } 100% { stroke: #a9b7cc; stroke-width: 1; } }
 @keyframes pld-scene-sunlit { 0%, 100% { stroke: #c9ad5a; stroke-width: 1; } 50% { stroke: #ffd54f; stroke-width: 1.6; } }
 @keyframes pld-scene-pulse { 0%, 100% { transform: scale(0.8); } 50% { transform: scale(1.25); } }
+@keyframes pld-scene-batt-pulse { 0%, 100% { opacity: .35; } 50% { opacity: .9; } }
 @keyframes pld-scene-arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pld-scene-flash { 0% { opacity: .95; stroke-width: 5; } 100% { opacity: 0; stroke-width: 1; } }
 @keyframes pld-scene-settle { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
