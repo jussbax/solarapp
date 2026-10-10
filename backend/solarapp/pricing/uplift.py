@@ -25,7 +25,10 @@ The chain, every figure verify:
 The verdict is on the design the BOM carries: PASS when a foot spacing on the purlins holds (the BOM's L-foot count then
 follows the feet per rail line); FAIL when even a foot on every purlin does not hold (the fix is more screws per foot or a
 stronger fastener, the signing engineer's; the BOM keeps the rule's count with a note); NOT CHECKED when an input is
-blank, naming it. The app ships none of the figures: the zone, the speed, the exposure constants, Kd, GCp and the
+blank, naming it. The chain runs in two steps (review finding 9): the pressure chain to T_panel for every roof type once
+the wind figures and h are on file, the fastener step only on a roof with a drawn detail and the purlin spacing and
+pull-out typed (a tile roof stops at the fastener step until Detail C and its hook are on file); `stop` carries the
+reason the chain stopped, printed in the first blank cell of the sheet's chain. The app ships none of the figures: the zone, the speed, the exposure constants, Kd, GCp and the
 pull-out are typed with their sources, printed with them, and a blank stops the chain at its line. Nothing here reaches
 the website estimate or the customer documents.
 """
@@ -180,14 +183,13 @@ def evaluate_face(face: Optional[RoofFace], construction: RoofConstruction, wind
     out["roof_type_words"] = ROOF_TYPE_WORDS.get(roof_type, "")
     out["detail"] = DETAILS.get(roof_type)
     out["construction"] = construction.model_dump()
-    # the roof type decides the detail; a type out of scope or not surveyed is said so
+    # the roof type decides the detail; a type out of scope or not surveyed is said so. The pressure chain runs for every type
+    # (review finding 9: the loads are what the signing engineer needs for any mounting); the fastener step stops below
     if not roof_type:
         out["notes"].append("roof type: not surveyed; the detail that applies is blank")
     elif roof_type in TILE_TYPES:
-        out["missing"].append(f"{name}: a tile roof; the tile detail and its hook wait on the owner's word, so the chain is not run")
-        out["warnings"].append({"code": "roof_type_out_of_scope", "message": f"{name}: {ROOF_TYPE_WORDS[roof_type]} roof; the mounting detail is not drawn for it yet (the tile bracket and screw wait on the owner's word) and the uplift check is not run. The structural check is the signing engineer's."})
+        out["warnings"].append({"code": "roof_type_out_of_scope", "message": f"{name}: {ROOF_TYPE_WORDS[roof_type]} roof; the mounting detail is not drawn for it yet (the tile bracket and screw wait on the owner's word), so the uplift check stops at the fastener step. The structural check is the signing engineer's."})
     elif roof_type not in DETAILS:
-        out["missing"].append(f"{name}: roof type {ROOF_TYPE_WORDS.get(roof_type, roof_type)} is out of scope; the structural check is the signing engineer's")
         out["warnings"].append({"code": "roof_type_out_of_scope", "message": f"{name}: mounting detail not drawn for {ROOF_TYPE_WORDS.get(roof_type, roof_type)}; the structural check is the signing engineer's."})
     if construction.condition_flag and construction.condition_flag != "sound":
         out["warnings"].append({"code": "roof_condition", "hard": True, "message": (
@@ -223,7 +225,10 @@ def evaluate_face(face: Optional[RoofFace], construction: RoofConstruction, wind
                                  note=f"assumption: the rails at {m.rail_position_fraction:g} of the panel's dimension up the slope from each edge (the maker's clamping zone: verify)")
     weight = float(panel.weight_kg or 0)
     if weight > 0:
-        out["weight_kg"] = _fig(weight, f"the item ({panel.weight_source})" if panel.weight_source else "the item")
+        # the item's weight is whatever the materials list carries (a packing figure when the datasheet import filled it from the volume); the direction is
+        # conservative (less dead load, more net uplift) and the label says so (review finding 13)
+        out["weight_kg"] = _fig(weight, (f"the item's weight on file ({panel.weight_source})" if panel.weight_source else "the item's weight on file")
+                                + "; the module's net weight from the datasheet: verify")
     else:
         out["weight_kg"] = _fig(0.0, "", assumed=True, note="assumption: the panel's weight is not on the item; the dead load is taken as zero (the conservative side)")
     rail_m = 2.0 * along
@@ -235,9 +240,19 @@ def evaluate_face(face: Optional[RoofFace], construction: RoofConstruction, wind
         out["rail_kg"] = _fig(0.0, "", assumed=True, note=f"assumption: the rail's weight per metre is not set under {SETTINGS_WHERE}; left out of the dead load (the conservative side)")
     d_kpa = (weight + rail_kg) * G / 1000.0 / area if area > 0 else None
     out["d_kpa"] = _fig(d_kpa, "") if d_kpa is not None else _missing("the panel's area")
-    # the chain, stopped at the first blank
-    missing = [x["missing"] for x in (wind["v_kmh"], out["h_m"], wind["alpha"], wind["kd"], wind["gcp"], out["purlin_spacing_m"], out["pullout_kn"]) if x["missing"]]
-    out["missing"] += missing
+    # the chain in two steps (review finding 9): the pressure chain to T_panel runs for every roof type once V, h, the exposure
+    # constants, Kd and GCp are on file (the loads the signing engineer needs for any mounting); the fastener step needs the
+    # purlin spacing and the pull-out, and a drawn detail: a tile roof stops there until Detail C and its hook are on file.
+    # The first blank stops the chain at its line and `stop` carries the reason (the sheet prints it in the first blank cell).
+    pressure_missing = [x["missing"] for x in (wind["v_kmh"], out["h_m"], wind["alpha"], wind["kd"], wind["gcp"]) if x["missing"]]
+    if roof_type in TILE_TYPES:
+        fastener_missing = [f"{name}: the tile hook's allowable withdrawal: not on file (Detail C waits on the owner's word)"]
+    elif roof_type and roof_type not in DETAILS:
+        fastener_missing = [f"{name}: roof type {ROOF_TYPE_WORDS.get(roof_type, roof_type)} is out of scope (no mounting set drawn); the structural check is the signing engineer's"]
+    else:
+        fastener_missing = [x["missing"] for x in (out["purlin_spacing_m"], out["pullout_kn"]) if x["missing"]]
+    out["missing"] += pressure_missing + fastener_missing
+    out["stop"] = (pressure_missing + fastener_missing or [None])[0]
     out["assumptions"] += [x["note"] for x in (wind["exposure"], wind["kzt"], wind["gcp"], out["weight_kg"], out["rail_kg"], out["rail_to_rail_m"]) if x["assumed"] and x["note"]]
     for key in ("v_ms", "kz", "qh_pa", "p_up_kpa", "t_panel_kn", "net_kpa", "cap_m", "s_std_m", "k_std", "t_foot_std_kn", "t_screw_std_kn", "ratio_std",
                 "s_allow_m", "s_foot_m", "k_foot", "t_foot_kn", "t_screw_kn", "ratio", "feet", "feet_per_rail", "screws", "l_foot_rule"):
@@ -255,9 +270,9 @@ def evaluate_face(face: Optional[RoofFace], construction: RoofConstruction, wind
         cap = float(r.rail_length_m) / max(int(r.l_feet_per_rail) - 1, 1)
         out["cap_m"] = _fig(cap, "", assumed=True, note=f"assumption: the BOQ rule's spacing, {r.rail_length_m:g} m rails with {r.l_feet_per_rail} feet each, caps the span until the rail maker's maximum is typed under {SETTINGS_WHERE}")
         out["assumptions"].append(out["cap_m"]["note"])
-    if out["missing"]:
+    out["rows"] = [{"length_m": row.length_m, "panels": row.panels, "feet_per_line": None} for row in rows if row.panels > 0]
+    if pressure_missing:
         out["status"] = "not checked"
-        out["rows"] = [{"length_m": row.length_m, "panels": row.panels, "feet_per_line": None} for row in rows if row.panels > 0]
         out["feet"] = None
         return out
     v_ms = float(wind["v_kmh"]["value"]) / 3.6
@@ -265,6 +280,12 @@ def evaluate_face(face: Optional[RoofFace], construction: RoofConstruction, wind
     qh = velocity_pressure_pa(v_ms, kz, float(wind["kzt"]["value"]), float(wind["kd"]["value"]))
     p_up = qh * abs(float(wind["gcp"]["value"])) / 1000.0
     net = ASD * p_up - ASD * float(d_kpa or 0.0)
+    out.update({"v_ms": v_ms, "kz": kz, "qh_pa": qh, "p_up_kpa": p_up, "t_panel_kn": max(net * area, 0.0), "net_kpa": net})
+    if fastener_missing:
+        out["status"] = "not checked"
+        out["feet"] = None
+        return out
+    out["rows"] = []
     strip = float(out["strip_m"]["value"])
     pullout = float(out["pullout_kn"]["value"])
     screws = int(m.screws_per_foot)
@@ -274,7 +295,7 @@ def evaluate_face(face: Optional[RoofFace], construction: RoofConstruction, wind
         k_std = 1
         out["notes"].append(f"the purlin spacing {s_p:g} m exceeds the maximum foot span {cap:g} m: a foot on every purlin spans more than the rail maker allows (verify)")
     s_std = k_std * s_p
-    out.update({"v_ms": v_ms, "kz": kz, "qh_pa": qh, "p_up_kpa": p_up, "t_panel_kn": max(net * area, 0.0), "net_kpa": net, "k_std": k_std, "s_std_m": s_std})
+    out.update({"k_std": k_std, "s_std_m": s_std})
     t_foot_std = max(net, 0.0) * s_std * strip
     t_screw_std = t_foot_std / screws
     out.update({"t_foot_std_kn": t_foot_std, "t_screw_std_kn": t_screw_std, "ratio_std": t_screw_std / pullout, "holds_std": t_screw_std <= pullout + 1e-9})

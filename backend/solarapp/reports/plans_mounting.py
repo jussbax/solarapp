@@ -20,7 +20,7 @@ from reportlab.graphics.shapes import Circle, Drawing, Ellipse, Group, Line, Pol
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import KeepInFrame, Paragraph, Spacer, Table, TableStyle
 
 from ..pricing.uplift import DETAILS, PURLIN_WORDS, ROOF_TYPE_WORDS, SETTINGS_WHERE, TILE_TYPES
 from ..schemas import AssessmentDoc
@@ -336,8 +336,17 @@ def mounting_sheet(doc: AssessmentDoc, results: dict, cfg: dict, items: dict[str
 
     # ---- the details (left column, top)
     fastener = str(mounting.get("fastener_description") or "").strip()
-    foot_text = (f"S = {first['s_foot_m']:g} m (every {_ordinal(int(first['k_foot']))} purlin)" if first and first.get("s_foot_m") and first.get("k_foot")
-                 else f"S = {blank('S, the foot spacing on the details', 'the uplift check is not checked (the inputs blank on the uplift table)', n=2)} (not checked)")
+    rail_len = float(roles.get("rail_length_m") or 2.4)
+    lfr = int(roles.get("l_feet_per_rail") or 3)
+    rule_spacing = rail_len / max(lfr - 1, 1)
+    if first and first.get("status") == "pass" and first.get("s_foot_m") and first.get("k_foot"):
+        foot_text = f"S = {first['s_foot_m']:g} m (every {_ordinal(int(first['k_foot']))} purlin)"
+    elif first and first.get("status") == "fail":
+        # review finding 6: the detail must not tell the crew to screw a foot on every purlin while the bill carries the rule's feet
+        foot_text = (f"S = {blank('S, the foot spacing on the details', 'FAIL: the signing engineer gives the spacing (more screws per foot or a stronger fastener); the BOM keeps the feet by the BOQ rule', n=2)} "
+                     f"(FAIL: the signing engineer's; the BOM carries the rule's {rule_spacing:g} m)")
+    else:
+        foot_text = f"S = {blank('S, the foot spacing on the details', 'the uplift check is not checked (the inputs blank on the uplift table)', n=2)} (not checked)"
     det_w = 97.0
     det_a = detail_drawing("rib", det_w, "Detail A: rib-type metal sheet on steel C-purlins, 1:5", foot_text, (F, FS, FB))
     det_b = detail_drawing("corrugated", det_w, "Detail B: corrugated sheet on purlins, 1:5", foot_text, (F, FS, FB))
@@ -353,9 +362,6 @@ def mounting_sheet(doc: AssessmentDoc, results: dict, cfg: dict, items: dict[str
         panel_l = float(geometry[0].get("panel_length_m") or 2.0) if geometry else 2.0
         panel_w = float(geometry[0].get("panel_width_m") or 1.0) if geometry else 1.0
     orientation = str((first or {}).get("orientation") or "portrait")
-    rail_len = float(roles.get("rail_length_m") or 2.4)
-    lfr = int(roles.get("l_feet_per_rail") or 3)
-    rule_spacing = rail_len / max(lfr - 1, 1)
     rail_frac = float(mounting.get("rail_position_fraction") or 0.25)
     purlin_m = (first or {}).get("purlin_spacing_m", {}).get("value") if first else None
     s_foot = (first or {}).get("s_foot_m") if first and first.get("status") == "pass" else None
@@ -363,6 +369,9 @@ def mounting_sheet(doc: AssessmentDoc, results: dict, cfg: dict, items: dict[str
     if first and first.get("status") == "pass":
         key_note = (f"Feet (black squares) on every {_ordinal(int(first['k_foot']))} purlin, {first['s_foot_m']:g} m along the rail; purlins at {purlin_m:g} m (dashed), "
                     f"from the check on {escape(str(first['name']))}.")
+    elif first and first.get("status") == "fail":
+        key_note = (f"Purlins at {purlin_m:g} m (dashed); the feet are drawn at the BOQ rule's {rule_spacing:g} m ({lfr} per {rail_len:g} m rail), the count the BOM carries, "
+                    f"because the check FAILED on {escape(str(first['name']))}: S is the signing engineer's (more screws per foot or a stronger fastener).")
     elif purlin_m:
         key_note = f"Purlins at {purlin_m:g} m (dashed); the feet are drawn at the BOQ rule's {rule_spacing:g} m ({lfr} per {rail_len:g} m rail) because the check is not passed."
     else:
@@ -450,9 +459,16 @@ def mounting_sheet(doc: AssessmentDoc, results: dict, cfg: dict, items: dict[str
     ]
     sheet = Table([[left_col, right_col]], colWidths=[196 * mm, 194 * mm], hAlign="LEFT")
     sheet.setStyle(two_col)
-    # the two columns side by side when they fit the sheet; else one under the other, the chain's table splitting over the sheets it needs
+    # the two columns side by side when they fit the sheet; a little over (a longer source label, a second face's column) they
+    # shrink to the frame as the cover's index does; well over, one under the other, the chain's table splitting over the sheets it needs
     avail = (297 - 2 * 10 - 30) * mm - 5 * mm - sum(f.wrap(390 * mm, 10000)[1] for f in head) - 8
-    flow: list = head + ([sheet] if sheet.wrap(390 * mm, 10000)[1] <= avail else left_col + [Spacer(1, 3 * mm)] + right_col)
+    height = sheet.wrap(390 * mm, 10000)[1]
+    if height <= avail:
+        flow: list = head + [sheet]
+    elif height <= avail * 1.15:
+        flow = head + [KeepInFrame(390 * mm, avail, [sheet], mode="shrink", hAlign="LEFT")]
+    else:
+        flow = head + left_col + [Spacer(1, 3 * mm)] + right_col
     return MountingSheet(SHEET_NAME, flow, missing_entries)
 
 

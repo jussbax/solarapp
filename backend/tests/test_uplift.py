@@ -13,6 +13,7 @@ BOM keeps its 24 L-feet without the figures."""
 from __future__ import annotations
 
 import json
+import subprocess
 from copy import deepcopy
 from pathlib import Path
 
@@ -128,19 +129,29 @@ def test_a_weak_fastener_closes_the_feet_to_every_purlin_and_a_hopeless_one_fail
 
 
 def test_a_blank_input_reads_not_checked_and_names_it():
-    cases = [
+    """A blank pressure input (V, GCp, h, Kd, the exposure constants) stops the chain at its line: Kz and everything after it
+    blank, `stop` naming it. A blank fastener input (the purlin spacing, the pull-out) stops it at the fastener step: the pressure
+    chain to T_panel still runs (review finding 9, the loads the signing engineer needs), the spacing and the feet stay blank."""
+    pressure = [
         ({**WIND, "v_kmh": None}, CONSTRUCTION, _cfg(), "basic wind speed V: not set for Laguna under Settings"),
         ({**WIND, "gcp_zone1": None, "gcp_zone2": None, "gcp_zone3": None}, CONSTRUCTION, _cfg(), "GCp per roof zone: not typed on the project"),
-        (WIND, {**CONSTRUCTION, "purlin_spacing_m": None}, _cfg(), "purlin spacing not surveyed"),
         (WIND, {**CONSTRUCTION, "mean_roof_height_m": None}, _cfg(), "mean roof height h not surveyed"),
-        (WIND, CONSTRUCTION, _cfg(pullout=None), "allowable withdrawal: not typed under Settings"),
         (WIND, CONSTRUCTION, _cfg(kd=None), "Kd (directionality"),
         (WIND, CONSTRUCTION, _cfg(exposures=False), "exposure B: alpha and zg not typed"),
     ]
-    for wind, construction, cfg, reason in cases:
+    for wind, construction, cfg, reason in pressure:
         f = _face(_doc(wind, construction), cfg, [RoofRow(2, 1.134, 0.0, "f1")])
-        assert f["status"] == "not checked" and any(reason in m for m in f["missing"]), (reason, f["missing"])
-        assert f["kz"] is None and f["t_screw_kn"] is None and f["feet"] is None and f["l_foot_rule"] == 6
+        assert f["status"] == "not checked" and any(reason in m for m in f["missing"]) and reason in f["stop"], (reason, f["missing"])
+        assert f["kz"] is None and f["t_panel_kn"] is None and f["t_screw_kn"] is None and f["feet"] is None and f["l_foot_rule"] == 6
+    fastener = [
+        (WIND, {**CONSTRUCTION, "purlin_spacing_m": None}, _cfg(), "purlin spacing not surveyed"),
+        (WIND, CONSTRUCTION, _cfg(pullout=None), "allowable withdrawal: not typed under Settings"),
+    ]
+    for wind, construction, cfg, reason in fastener:
+        f = _face(_doc(wind, construction), cfg, [RoofRow(2, 1.134, 0.0, "f1")])
+        assert f["status"] == "not checked" and f["missing"] == [f["stop"]] and reason in f["stop"], (reason, f["missing"])
+        assert f["kz"] == pytest.approx(0.576, abs=0.001) and f["qh_pa"] == pytest.approx(926, abs=2) and f["t_panel_kn"] == pytest.approx(2.39, abs=0.02)
+        assert f["s_std_m"] is None and f["t_screw_kn"] is None and f["feet"] is None and f["l_foot_rule"] == 6
     # the province's row under Settings stands in for the project's V; the project's own figure wins over it
     cfg = _cfg()
     cfg.mounting.wind_zones["Laguna"] = WindZone(zone="II", v_kmh=150, source="test: the settings row")
@@ -160,6 +171,12 @@ def test_the_roof_type_and_condition_warn_and_the_tile_and_deck_are_out_of_scope
     assert f["status"] == "not checked" and f["detail"] is None and any(w["code"] == "roof_type_out_of_scope" for w in f["warnings"])
     t = _face(_doc(construction={**CONSTRUCTION, "roof_type": "tile_clay"}), _cfg(), [RoofRow(2, 1.134, 0.0, "f1")])
     assert t["status"] == "not checked" and "owner's word" in t["missing"][0]
+    # review finding 9: the tile roof runs the pressure chain to T_panel and stops at the fastener step, with the stop's reason
+    assert t["kz"] == pytest.approx(0.576, abs=0.001) and t["t_panel_kn"] == pytest.approx(2.39, abs=0.02) and t["s_std_m"] is None and t["feet"] is None
+    assert t["missing"] == [t["stop"]] and t["stop"] == "Main roof: the tile hook's allowable withdrawal: not on file (Detail C waits on the owner's word)"
+    # the reviewer's tile state, exposure C at h 4 m: Kz 0.849 (the formula's 0.8495), qh 1,365 to 1,367 N/m², printed although the hook is not on file
+    tc = _face(_doc(wind={**WIND, "exposure": "C"}, construction={**CONSTRUCTION, "roof_type": "tile_clay", "mean_roof_height_m": 4.0}), _cfg(), [RoofRow(2, 1.134, 0.0, "f1")])
+    assert tc["kz"] == pytest.approx(0.8495, abs=0.001) and tc["qh_pa"] == pytest.approx(1366, abs=2) and tc["status"] == "not checked" and tc["s_std_m"] is None
     c = _face(_doc(construction={**CONSTRUCTION, "roof_type": "corrugated_metal", "condition_flag": "rusted", "condition": "rust at the eave"}), _cfg(), [RoofRow(2, 1.134, 0.0, "f1")])
     assert c["status"] == "pass" and c["detail"] == "B"
     w = next(w for w in c["warnings"] if w["code"] == "roof_condition")
@@ -313,4 +330,9 @@ def test_the_sheet_prints_the_chain_with_its_sources_and_the_verdict(client):
     assert next(l for l in res["pricing"]["lines"] if l["role"] == "l_foot")["qty"] == 36
     sheet = flat(next(p for p in _pdf_pages(client.get(f"/api/assessments/{aid}/plans.pdf").content) if "Standard details" in p))
     assert "FAIL: even a foot on every purlin" in sheet and "ratio 3.20" in sheet and "L-feet on the BOM: 36" in sheet
+    # review finding 6: the details and the plan key no longer tell the crew to screw a foot on every purlin while the bill carries 36 at 1.2 m
+    assert "S = __________ (FAIL: the signing engineer's; the BOM carries the rule's 1.2 m)" in sheet and "S = 0.6 m" not in sheet
+    reading = subprocess.run(["pdftotext", "-", "-"], input=client.get(f"/api/assessments/{aid}/plans.pdf").content, capture_output=True, check=True).stdout.decode()
+    key_note = flat(next(p for p in reading.split("\f") if "Standard details" in p))   # reading order: the plan key's note comes out whole
+    assert "the feet are drawn at the BOQ rule's 1.2 m (3 per 2.4 m rail), the count the BOM carries, because the check FAILED on Main roof (south): S is the signing engineer's" in key_note
     client.post("/api/pricing/config/reset")
