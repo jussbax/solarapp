@@ -66,6 +66,8 @@ export default function Wizard(p: WizardProps) {
   const [dir, setDir] = useState<Dir>('next')
   // the card on its way out: rendered once more, inert, for the length of the slide
   const [ghost, setGhost] = useState<{ index: number; dir: Dir } | null>(null)
+  // the first card is simply there on page load; only a change of card slides in (the slide starts off the stage's edge)
+  const [slid, setSlid] = useState(false)
   // card 1 starts with nothing pressed: the state carries a default, but the question has not been answered yet
   const [goalDone, setGoalDone] = useState(false)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -92,6 +94,7 @@ export default function Wizard(p: WizardProps) {
       fromH.current = stageRef.current?.offsetHeight ?? 0
       setGhost({ index: card, dir: d })
     }
+    setSlid(true)
     setDir(d)
     setCard(to)
   }
@@ -305,7 +308,7 @@ export default function Wizard(p: WizardProps) {
             {renderCard(ghost.index, true)}
           </div>
         )}
-        <div key={card} className={`pld-wz-card pld-wz-enter pld-wz-enter-${dir}`} role="group" aria-labelledby={`${id}-q${card}`}>
+        <div key={card} className={`pld-wz-card${slid ? ` pld-wz-enter pld-wz-enter-${dir}` : ''}`} role="group" aria-labelledby={`${id}-q${card}`}>
           {renderCard(card, false)}
         </div>
       </div>

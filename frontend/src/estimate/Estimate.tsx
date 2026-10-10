@@ -12,8 +12,6 @@ const phpAbout = (v: number) => {
   return `${v < 0 ? '-' : ''}${text}`
 }
 const n0 = (v: number) => Math.round(v).toLocaleString()
-/** A kWh figure as the scene's chips print it: up to two decimals, trailing zeros dropped (11.7, 10.24, 15). */
-const kwh2 = (v: number) => Number(v.toFixed(2)).toString()
 const years = (v: number | null | undefined, horizon: number) => (v == null ? `more than ${horizon} years` : v < 1 ? 'under a year' : `${v.toFixed(1)} years`)
 /** A bill under this prints as "a small bill": the fixed charges never go away, and the grid still bills the hours it steps in. */
 const SMALL_BILL = 100
@@ -24,33 +22,31 @@ const PATTERN_WORDS: Record<string, string> = { morning: 'mostly in the morning'
 
 /** The battery the price includes (the catalogue unit); anything under half a kWh is no battery at all. */
 const hasBattery = (v: Variant) => v.system.battery_kwh >= 0.5
-/** The article a figure is spoken with: "a 6 kW", "an 8 kW", "an 11.7 kWh", "a 12 kWh", "an 18 kWh". */
-const an = (v: number | string, cap = false) => {
-  const a = /^(8|11(\.|$)|18(\.|$))/.test(String(v)) ? 'an' : 'a'
-  return cap ? a[0].toUpperCase() + a.slice(1) : a
-}
 /** The place after "estimate" or "a house": " for Pila, Laguna" / " in Pila, Laguna"; a pin reads " near Quezon City, Metro Manila";
  * a pin outside the Philippines adds nothing (the warning says where it fell). */
 const placeAfter = (place: string, word: 'for' | 'in') => (place.startsWith('near ') ? ` ${place}` : place.startsWith('outside') ? '' : ` ${word} ${place}`)
 
-/** What goes on the house, every figure inside one sentence: "6 panels of 585 W (3.51 kWp) on about 15 m² of roof, a 6 kW hybrid
- * inverter and a 12 kWh lithium battery, enough for a typical night of your use when the grid is down". Without a roof figure
- * (the copied summary) the panels stand alone. */
-function systemLine(v: Variant, roofM2?: number) {
+/** What goes on the house, in words: the panel count and what the battery carries; the sizes wait for the proposal. */
+function systemLine(v: Variant) {
   const s = v.system
-  const panels = `${s.panels} ${s.panels === 1 ? 'panel' : 'panels'} of ${Math.round(s.panel_wp)} W (${s.kwp.toFixed(2)} kWp)${roofM2 == null ? '' : ` on about ${roofM2} m² of roof`}`
-  const inverter = s.inverter_units > 1 ? `${s.inverter_units} hybrid inverters of ${s.inverter_kw} kW` : `${an(s.inverter_kw)} ${s.inverter_kw} kW hybrid inverter`
-  if (!hasBattery(v)) return `${panels} and ${inverter}`
-  const kwh = kwh2(s.battery_kwh)
-  return `${panels}, ${inverter} and ${an(kwh)} ${kwh} kWh lithium battery${s.battery_note ? `, ${s.battery_note}` : ''}`
+  const panels = `${s.panels} ${s.panels === 1 ? 'panel' : 'panels'} on the roof`
+  if (!hasBattery(v)) return `${panels} and a hybrid inverter on the wall; a battery can be added whenever you want lights in a brownout too`
+  return `${panels}, a hybrid inverter on the wall and a lithium battery${s.battery_note ? `, ${s.battery_note}` : ''}`
 }
 
-/** The share of what the house uses that the system serves, said as what serves it; the production ratio has its own words ("of what you use"). */
-function coveredLine(v: Variant) {
-  const pct = Math.round(v.production.coverage_pct)
-  if (v.goal === 'net_metering') return `The house takes ${pct}% of what it uses straight from the panels; the rest of the day's sun goes back through the meter as credit on your bill.`
-  if (v.goal === 'off_grid') return `The panels and the battery cover ${pct}% of what you use; the grid is only the spare.`
-  return `Between them, the panels by day and the battery after dark cover ${pct}% of what you use.`
+/** What the system does for the house, by goal; "a small bill" only where the panels make more than the house uses. */
+function doesLine(v: Variant, makesPct: number) {
+  if (v.goal === 'off_grid') return 'The panels and the battery carry an ordinary day on their own, and the grid is only the spare; nothing is sold back, so once the battery is full the extra sun goes unused. In long rainy spells the grid still steps in; your proposal says how much.'
+  if (v.goal === 'net_metering') return "By day the panels run the house; the rest of the day's sun goes back through the meter as credit on your bill, at your electric company's generation rate; the evening runs on the grid, as it does today, so what still comes is a smaller bill."
+  return `By day the panels run the house and fill the battery; the battery carries the evening; the extra goes to your electric company and comes back as credit at its generation rate, so what still comes is ${makesPct > 100 ? 'a small bill for the fixed charges and the hours the grid covers' : 'a smaller bill'}.`
+}
+
+/** The system in the forwarded summary: the panel count and the battery in words, the sizes left to the visit. */
+function summarySystem(v: Variant) {
+  const s = v.system
+  const panels = `${s.panels} ${s.panels === 1 ? 'panel' : 'panels'}`
+  const battery = hasBattery(v) ? ` and a battery${s.battery_note ? `, ${s.battery_note}` : ''}` : ', and a battery can be added later'
+  return `${panels}${battery}; the exact layout and sizes come from the free on-site assessment.`
 }
 
 /** The other variant's bill inside a clause: "the bill about ₱1,252 a month", or "a small bill" under SMALL_BILL. */
@@ -236,7 +232,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
   const other: Variant | null = result && shown ? (shown === result ? result.alternative : result) : null
   const stickyShown = !!(result && shown && !leadSent && !bookInView)
 
-  // the sticky price bar steps aside while the booking form (with its own button) is on screen:
+  // the sticky bar steps aside while the booking form (with its own button) is on screen:
   // from the point where a good part of the form is visible, not from its first pixel
   useEffect(() => {
     const el = bookRef.current
@@ -294,11 +290,10 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
     const e = shown.economics
     const links = [messengerHref ? `Questions: ${bareUrl(messengerHref)}` : '', estimateUrl ? `Run your own: ${bareUrl(estimateUrl)}` : ''].filter(Boolean).join(' · ')
     return [
-      `Solar estimate from ${profile?.company_name || 'PL Development Inc.'}${placeAfter(result.inputs.place, 'for')}:`,
+      `Solar estimate from ${profile?.company_name || 'PL Development Inc.'} for a house${placeAfter(result.inputs.place, 'in')}:`,
       e ? `Bill ${php0(e.bill_before_monthly)} → ${e.bill_after_monthly < SMALL_BILL ? 'a small bill' : `about ${php0(e.bill_after_monthly)} a month`}; about ${phpAbout(e.savings_year1)} saved in the first year; pays for itself in ${years(e.payback_years, e.analysis_years)}.` : '',
       `Price ${php0(shown.price.total)}, installed, permits and VAT included.`,
-      `What it takes: ${systemLine(shown)}.`,
-      e ? `Saved over ${e.analysis_years} years: about ${phpAbout(e.lifetime_net)}, after paying for the system and its upkeep.` : '',
+      summarySystem(shown),
       'This is an estimate, not a quotation; the free on-site assessment makes it exact.',
       links,
     ]
@@ -383,7 +378,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                   <div className="pld-hero-sub">
                     {e.bill_after_monthly < SMALL_BILL
                       ? `about ${php0(e.savings_monthly)} a month stays in your pocket; what still comes is your electric company's fixed charges, and the grid's hours in long rainy spells`
-                      : `about ${php0(e.savings_monthly)} a month stays in your pocket; what still comes is your electric company's fixed charges`}
+                      : `about ${php0(e.savings_monthly)} a month stays in your pocket; what still comes is your electric company's fixed charges and the hours the grid covers`}
                   </div>
                 </div>
                 <div className="pld-hero-grid">
@@ -396,11 +391,6 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                     <div className="pld-hero-label">Estimated price</div>
                     <div className="pld-hero-mid pld-gold">{php0(shown.price.total)}</div>
                     <div className="pld-hero-sub">the whole job: installed, permits and papers filed, VAT included</div>
-                  </div>
-                  <div>
-                    <div className="pld-hero-label">Saved over {e.analysis_years} years</div>
-                    <div className="pld-hero-mid">about {phpAbout(e.lifetime_net)}</div>
-                    <div className="pld-hero-sub">after paying for the system, its upkeep and replacement parts</div>
                   </div>
                 </div>
               </>
@@ -419,14 +409,10 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
           </div>
 
           <div className="pld-line">
-            <b>What you get:</b> {systemLine(shown, Math.round(shown.system.roof_area_m2))}.
+            <b>What you get:</b> {systemLine(shown)}.
           </div>
           <div className="pld-line">
-            <b>What it does:</b> the panels make about {n0(prod.annual_kwh / 12)} kWh a month, {makesPct}% of the {n0(result.inputs.monthly_kwh)} kWh you use.
-            {makesPct > 100 && shown.goal !== 'off_grid' && ' By day the panels run the house first; the extra goes to your electric company and comes back as credit at its generation rate, so what still comes is a small bill for the fixed charges and the hours the grid covers.'}
-            {shown.goal === 'off_grid' && ' Sized so the panels and the battery carry an ordinary day on their own; once the battery is full, the extra sun goes unused, because nothing is sold back.'}
-            {shown.goal === 'off_grid' && prod.annual_import_kwh > 50 && ` The grid still steps in for about ${n0(prod.annual_import_kwh)} kWh a year, mostly in the rainy months.`}
-            {' '}{coveredLine(shown)}
+            <b>What it does:</b> {doesLine(shown, makesPct)}
           </div>
           {other && (
             <div className="pld-line pld-alt">
@@ -441,7 +427,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                 </>
               ) : (
                 <>
-                  <b>Want the lights on when the street goes dark?</b> {an(kwh2(other.system.battery_kwh), true)} {kwh2(other.system.battery_kwh)} kWh battery is about {php0(other.price.total - shown.price.total)} more{other.system.battery_note ? `, ${other.system.battery_note}` : ''}
+                  <b>Want the lights on when the street goes dark?</b> A battery is about {php0(other.price.total - shown.price.total)} more{other.system.battery_note ? `, ${other.system.battery_note}` : ''}
                   {other.economics && `; ${billWords(other.economics.bill_after_monthly)}, pays for itself in ${years(other.economics.payback_years, other.economics.analysis_years)}`}.{' '}
                   <button type="button" className="pld-link" onClick={() => setWithBattery(true)}>
                     Show it with the battery
@@ -450,6 +436,20 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
               )}
             </div>
           )}
+
+          <div className="pld-line pld-visit">
+            <h3 className="pld-h3">What the free visit settles</h3>
+            <p>This estimate comes from your answers and a typical roof. One free visit, with the test panel and meters on your roof and your bill on the table, settles:</p>
+            <ul>
+              <li>how many panels your roof really holds, and where they go: the sun and the shade read face by face</li>
+              <li>{hasBattery(shown) ? 'what your battery carries on a brownout night, from your own appliances rather than a typical house: the fridge, the fans, the Wi-Fi, the aircon if you size for it' : 'what a battery would carry on a brownout night, from your own appliances, if you want one'}</li>
+              <li>the exact price to your roof: every panel, rail, cable and breaker listed, and what is due when</li>
+              <li>your savings year by year, and what {e ? `${e.analysis_years} years` : 'the years'} add up to on your roof</li>
+              <li>{shown.goal === 'off_grid' ? 'the plans signed and sealed by a Professional Electrical Engineer and the permit, filed by us' : 'the plans signed and sealed by a Professional Electrical Engineer, the permit and the net metering papers, filed by us'}</li>
+              <li>{shown.goal === 'off_grid' ? 'the dates: permit, installation day by day and switch-on' : 'the dates: permit, installation day by day, switch-on and the two-way meter'}</li>
+            </ul>
+            <p>Then your proposal, within two working days, every peso and every part on paper, and you decide with all of it in front of you.</p>
+          </div>
 
           <div className="pld-book" id="pld-book" ref={bookRef}>
             <h3 className="pld-h3">{leadSent ? `Your on-site assessment is booked, ${firstName(lead.name)}.` : 'The exact figure is one free visit away.'}</h3>
@@ -531,7 +531,6 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
 
           <p className="pld-hint pld-basis">
             Worked out for a house{placeAfter(result.inputs.place, 'in')} using about {n0(result.inputs.monthly_kwh)} kWh a month, {PATTERN_WORDS[result.inputs.pattern] ?? 'spread through the day'}.
-            {e && ` About ${e.co2_t_per_year.toFixed(1)} tonnes of CO₂ avoided a year.`}
             {' '}This is an estimate, not a quotation: on the free on-site assessment we measure your roof and the sun on it, and the proposal that follows is exact.
           </p>
         </section>
@@ -540,8 +539,8 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
       {stickyShown && shown && (
         <div className="pld-sticky">
           <div>
-            <div className="pld-sticky-label">Estimated price</div>
-            <div className="pld-sticky-price">{php0(shown.price.total)}</div>
+            <div className="pld-sticky-label">{e ? 'Your new monthly bill' : 'Estimated price'}</div>
+            <div className="pld-sticky-price">{e ? (e.bill_after_monthly < SMALL_BILL ? 'a small bill' : `about ${php0(e.bill_after_monthly)}`) : php0(shown.price.total)}</div>
           </div>
           <a className="pld-btn pld-primary" href="#pld-book" onClick={goBook}>
             Book my free on-site assessment
