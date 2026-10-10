@@ -476,6 +476,40 @@ class RevisionIn(BaseModel):
     note: str = Field(min_length=1, max_length=400)
 
 
+class VicinityUpload(BaseModel):
+    """The office's screen grab (round 13, 4.1): re-encoded as PNG without EXIF, the longer side capped at 2,400 px."""
+    file: str = ""
+    uploaded_at: str = ""
+    note: str = ""          # the attribution the office types, printed in the sheet's caption
+    width: int = 0
+    height: int = 0
+
+
+class VicinityFetched(BaseModel):
+    """The mosaics composed from map tiles for one pin (rounded to five decimals): the files by zoom and where they came from."""
+    files: dict[str, str] = Field(default_factory=dict)
+    fetched_at: str = ""
+    pin: tuple[float, float] = (0.0, 0.0)
+    host: str = ""
+    attribution: str = ""
+    tiles_fetched: int = 0
+    tiles_cached: int = 0
+
+
+class VicinityError(BaseModel):
+    reason: str = ""
+    at: str = ""
+
+
+class VicinityMap(BaseModel):
+    """The vicinity map on record: the upload wins when present, else the fetched mosaics, else nothing and the sheet
+    prints the pin with the reason of the last failure."""
+    source: Optional[Literal["upload", "osm"]] = None
+    upload: Optional[VicinityUpload] = None
+    osm: Optional[VicinityFetched] = None
+    error: Optional[VicinityError] = None
+
+
 class AssessmentOut(BaseModel):
     id: int
     created_at: datetime
@@ -489,6 +523,7 @@ class AssessmentOut(BaseModel):
     # round 13: the plan set's first issue (revision 0) and its revision log; empty until the plans PDF is first generated
     plans_issued_at: Optional[datetime] = None
     revisions: list[RevisionEntry] = Field(default_factory=list)
+    vicinity_map: Optional[VicinityMap] = None   # round 13, item 4: the map on record (see VicinityMap)
 
 
 class LoginIn(BaseModel):

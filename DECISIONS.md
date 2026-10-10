@@ -2083,3 +2083,52 @@ loads and the mounting detail are built (`docs/audits/round-13/step1.md` has wha
 - Not in step 1, by the brief's order: the 120 % busbar rule and the `poi_busbar` warning (item 1, with the
   single-line diagram that prints it), the derating engine and its settings (item 2), the wind fields and settings
   (item 3), the vicinity map and the drawn outlines (item 4).
+
+## The vicinity map and the site plan
+
+Round 13, item 4 (`docs/audits/round-13/engineer-brief.md`, section 4), 10 October 2026: the sheet after the cover of the
+plans for the PEE, "Vicinity map and site plan" (`docs/audits/round-13/site.md` has what was built and every departure).
+
+- The vicinity map is composed on the server from OpenStreetMap tiles under the tile usage policy (`reports/vicinity.py`):
+  two 3 × 3 mosaics per project (zoom 16, about 1.8 km across, and a zoom-12 inset of about 28 km), eighteen tiles fetched
+  one at a time under a process-wide lock, each with an 8 s timeout and one retry, a 429 stopping the run at once and the
+  first tile that fails after its retry abandoning the whole run (no partial map; a dead host costs two timeouts, never
+  minutes); a User-Agent `PLDSolarApp/<round> (+website; e-mail)` that names the app and the company's contact (the
+  website from the settings, the e-mail from Settings › Company), and no request at all when neither is known: the fetch
+  is refused with that reason rather than sent anonymously. Every tile is cached under `data/tiles/{z}/{x}/{y}.png` for 30
+  days; the composed mosaics live under `data/projects/{id}/` with the pin they were made for (five decimals) and go with
+  the record on delete. Pillow draws the pin as the brand's marker, a north arrow (tiles are north-up), a scale bar (200 m
+  on the main map, 5 km on the inset) and the attribution strip "Map data © OpenStreetMap contributors, ODbL — host,
+  fetched date, zoom". The tile address and the attribution line are settings (`SOLARAPP_MAP_TILES_URL` with `{z}/{x}/{y}`,
+  `SOLARAPP_MAP_TILES_ATTRIBUTION`), so another provider replaces the tile server without a code change; a blank address
+  switches the fetch off.
+- The fetch never runs inside the request that builds the PDF. "Prepare the map" on the Site plan card
+  (`POST /api/assessments/{id}/vicinity-map/fetch`) composes it and keeps the result on the record (`Assessment.vicinity_map`);
+  pressing it again fetches nothing while the mosaics on record were made for the saved pin, "Refresh map" (`force`)
+  remakes them from the cache, and a moved pin remakes them. The page presses it once on its own before the first plans
+  download of a record that has never tried, with "Preparing the map…" in the bar, so the brief's "runs when the plans are
+  first generated" holds without the PDF request waiting on the network. A failure (no outside access, a timeout, a 429)
+  is kept with its reason; the sheet prints the pin, the address, the nearest town and "vicinity map: not fetched
+  (reason); the office may upload a screen grab", and the Documents card says the same under the plans row.
+- The upload is the override and the fallback: a PNG or JPEG of at most 8 MB (`POST /api/assessments/{id}/vicinity-map`,
+  multipart with a `note` for the attribution the office types), decoded and re-encoded by Pillow with the EXIF orientation
+  applied and every chunk dropped, the longer side capped at 2,400 px, stored as `vicinity-upload.png` in the project's
+  folder. When present it prints instead of the fetched map, captioned "uploaded by the office on {date}; {note}";
+  `DELETE` removes it and the fetched map prints again. `GET /api/assessments/{id}/vicinity-map.png` serves whichever
+  prints, for the card's preview.
+- The site plan (`reports/plans_site.py`) is drawn with ReportLab primitives at a standard scale (the largest of the
+  layout sheets' list that fits a 190 × 226 mm box with its dimension margins), true north up, metres east and north of
+  the pin: each face's plan outline with the slope foreshortened by cos(tilt), rotated so the eave's outward normal
+  points to the azimuth (a south face's eave at the bottom, an east face's at the right, the ridge to the west), the used
+  panels inside, the face named with its panel count, the eave as a black dimension and the plan depth as a grey one; the
+  eave midpoint at `plan_offset_m` when typed, else the face laid side by side in a strip below the site with 1 m gaps and
+  the note "relative positions not surveyed; faces shown in true orientation only"; the lot (dash-dot, its edge lengths)
+  and the house (solid, its overall width and depth) from the typed corners by the brief's equirectangular projection;
+  when both exist, the setback from each house wall's midpoint straight out to the property line as a dimension, with
+  "verify the zoning setback"; the inverter (a square), the battery (plates), the POI (a filled circle) and the meter (an
+  M in a circle) at their points, each with the typed location in the legend; the pin as a small cross; a 0–1–5 m scale
+  bar and the north arrow. A missing input prints its reason: "property line: not surveyed", "house outline: not
+  surveyed", "setbacks: not computed (the lot and the house outline are both needed)", "… location: not chosen (Site
+  step)". The sheet's scale is stated in the title block.
+- Nothing invented: no map is drawn that was not fetched or uploaded, no outline or position that was not typed; the
+  Leaflet draw tools for the outlines stay a later step (the corners are typed on the Site plan card).

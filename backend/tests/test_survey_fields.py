@@ -112,8 +112,9 @@ def test_a_face_offset_is_a_pair_of_metres(client):
 
 
 def test_the_plan_set_and_the_quick_estimate_are_unchanged_by_the_fields(client):
-    """Nothing on a sheet reads the fields yet (step 1): the surveyed record builds the same five sheets as the plain one;
-    the website estimate's document carries the blank defaults and no new code path reads them."""
+    """The service and construction fields are on no sheet yet (steps 1 to 3): the surveyed record builds the same sheets as
+    the plain one (the site sheet of item 4 reads `site` and the offsets, tested in test_plans_site.py); the website
+    estimate's document carries the blank defaults and no new code path reads them."""
     import shutil
     import subprocess
 
@@ -126,5 +127,5 @@ def test_the_plan_set_and_the_quick_estimate_are_unchanged_by_the_fields(client)
     if shutil.which("pdftotext"):
         text = subprocess.run(["pdftotext", "-layout", "-", "-"], input=r.content, capture_output=True, check=True).stdout.decode()
         pages = [p for p in text.split("\f") if p.strip()]
-        assert len(pages) == 5 and "FLECO" not in text and "busbar" not in text.lower()
+        assert len(pages) == 6 and "FLECO" not in text and "busbar" not in text.lower()   # six since the site sheet (item 4) joined the set
     assert AssessmentDoc().service == ServiceEntrance() and AssessmentDoc().site == SitePlan()

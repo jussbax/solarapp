@@ -201,6 +201,20 @@ export const api = {
   /** "Issue a revision" of the plan set (round 13): appends the next number with the note; 409 before the plans were first generated. */
   issueRevision: (id: number, note: string) => request<AssessmentOut>(`/api/assessments/${id}/revisions`, { method: 'POST', body: JSON.stringify({ note }) }),
   cardUrl: (id: number, nextStep = '') => `/api/assessments/${id}/card.png${nextStep ? `?next_step=${encodeURIComponent(nextStep)}` : ''}`,
+  // round 13, item 4: the vicinity map. "Prepare the map" composes it on the server from map tiles under their usage policy and keeps it
+  // with the project (never during the plans build); the office's upload is the override; the PNG route serves whichever prints.
+  prepareVicinityMap: (id: number, force = false) => request<AssessmentOut>(`/api/assessments/${id}/vicinity-map/fetch${force ? '?force=true' : ''}`, { method: 'POST' }),
+  uploadVicinityMap: async (id: number, file: File, note: string) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('note', note)
+    const res = await safeFetch(`/api/assessments/${id}/vicinity-map`, { method: 'POST', body: fd, credentials: 'same-origin' })
+    if (res.status === 401) onUnauthorized?.()
+    if (!res.ok) throw new ApiError(res.status, describeDetail(await detailOf(res), res.status))
+    return (await res.json()) as AssessmentOut
+  },
+  removeVicinityUpload: (id: number) => request<AssessmentOut>(`/api/assessments/${id}/vicinity-map`, { method: 'DELETE' }),
+  vicinityMapUrl: (id: number, which: '' | 'upload' | 'z16' | 'z12' = '') => `/api/assessments/${id}/vicinity-map.png${which ? `?which=${which}` : ''}`,
   /** Fetch a generated document, so a 409 (stale results) or an outage becomes a message in the bar and never a raw JSON page. */
   fetchDocument: async (url: string): Promise<FetchedDocument> => {
     const res = await safeFetch(url, { credentials: 'same-origin' })

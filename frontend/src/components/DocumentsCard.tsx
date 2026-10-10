@@ -1,6 +1,14 @@
-import type { Results, RevisionEntry } from '../types'
+import type { Results, RevisionEntry, VicinityMap } from '../types'
 import Field from './Field'
 import { fmtDateShort } from '../fmt'
+
+/** The vicinity map's state in one line under the plans row (round 13, item 4): what sheet 2 will print, and where to act when it is nothing. */
+function vicinityLine(v: VicinityMap | null | undefined): string {
+  if (v?.upload) return `Vicinity map: the screen grab uploaded on ${fmtDateShort(v.upload.uploaded_at)} prints on sheet 2 (Site plan card › Vicinity map).`
+  if (v?.osm) return `Vicinity map: composed from map tiles on ${fmtDateShort(v.osm.fetched_at)}; prints on sheet 2 (Site plan card › Vicinity map to refresh or upload).`
+  if (v?.error) return `Vicinity map: not fetched (${v.error.reason}). Sheet 2 prints the pin and this note; press Prepare the map again or upload a screen grab on the Site plan card.`
+  return 'Vicinity map: not prepared yet. The first plans download prepares it from map tiles; or press Prepare the map (or upload a screen grab) on the Site plan card.'
+}
 
 export type DocState = 'ready' | 'needs_calculation' | 'needs_pricing' | 'test_weather'
 
@@ -48,6 +56,7 @@ export default function DocumentsCard({
   plansIssuedAt,
   revisions,
   onIssueRevision,
+  vicinity,
 }: {
   results: Results | null
   stale: boolean
@@ -62,6 +71,8 @@ export default function DocumentsCard({
   plansIssuedAt?: string | null
   revisions?: RevisionEntry[]
   onIssueRevision?: () => void
+  /** Round 13, item 4: the vicinity map on record, so the office is told here what sheet 2 will print. */
+  vicinity?: VicinityMap | null
 }) {
   const revs = revisions ?? []
   const last = revs.length ? revs[revs.length - 1] : null
@@ -108,6 +119,11 @@ export default function DocumentsCard({
                     ) : (
                       <span className="muted">Not issued yet: the first download is revision 0; later changes are issued as numbered revisions here.</span>
                     )}
+                  </div>
+                )}
+                {r.key === 'plans' && (
+                  <div className="muted doc-vicinity" data-testid="plans-vicinity" data-source={vicinity?.source ?? (vicinity?.error ? 'error' : 'none')}>
+                    {vicinityLine(vicinity)}
                   </div>
                 )}
                 {r.key === 'card' && (

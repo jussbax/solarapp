@@ -960,6 +960,15 @@ export interface RevisionEntry {
   by: string
 }
 
+/** Round 13, item 4: the vicinity map on record. The office's upload wins over the mosaics composed from map tiles; `error` is the
+ * last fetch failure with its reason (the sheet prints the pin and that reason instead of a map). Null until anything was tried. */
+export interface VicinityMap {
+  source: 'upload' | 'osm' | null
+  upload: { file: string; uploaded_at: string; note: string; width: number; height: number } | null
+  osm: { files: Record<string, string>; fetched_at: string; pin: [number, number]; host: string; attribution: string; tiles_fetched: number; tiles_cached: number } | null
+  error: { reason: string; at: string } | null
+}
+
 export interface AssessmentOut {
   id: number
   created_at: string
@@ -973,6 +982,7 @@ export interface AssessmentOut {
   /** Round 13: when the plans for the PEE were first generated (revision 0); null until then. */
   plans_issued_at?: string | null
   revisions?: RevisionEntry[]
+  vicinity_map?: VicinityMap | null
 }
 
 export interface DataStatus {

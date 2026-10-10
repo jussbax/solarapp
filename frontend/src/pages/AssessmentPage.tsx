@@ -360,6 +360,18 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
           /* a cross-origin shell: it still navigates below */
         }
       }
+      if (url === api.plansUrl(aid) && a && !a.vicinity_map && doc.lat != null && !dirty) {
+        // the first plans download prepares the vicinity map (round 13, item 4) before the build, so the PDF request itself
+        // never waits on the tile server; a failure is kept with its reason and the sheet prints the pin and that note
+        setBusy('Preparing the map...')
+        try {
+          setA(await api.prepareVicinityMap(aid))
+        } catch {
+          /* the sheet says what is missing; the download goes on */
+        } finally {
+          setBusy(null)
+        }
+      }
       const d = await api.fetchDocument(url)
       if (url === api.quotationUrl(aid) && a && !a.proposal_issued_at) {
         // the proposal is issued for the record from here: the head shows it with the date and the price locks
@@ -435,6 +447,33 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
     } finally {
       setBusy(null)
     }
+  }
+
+  // the vicinity map (round 13, item 4): prepared from map tiles on the server, or the office's screen grab, kept with the record
+  const vicinityBlocked = isNew ? 'Save the project first: the map is composed around the saved pin.' : dirty ? 'Save your edits first: the map is composed around the saved pin.' : doc.lat == null || doc.lon == null ? 'Set the map pin first.' : null
+  const vicinityAction = async (what: string, call: () => Promise<AssessmentOut>, done: string) => {
+    if (isNew) return
+    setBusy(what)
+    setError(null)
+    try {
+      const r = await call()
+      setA(r)
+      if (r.vicinity_map?.error && !r.vicinity_map.osm && !r.vicinity_map.upload) setError(`Vicinity map not fetched: ${r.vicinity_map.error.reason}`)
+      else setToast(done)
+    } catch (e) {
+      fail(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+  const vicinityControls = {
+    state: a?.vicinity_map ?? null,
+    previewUrl: a?.vicinity_map?.upload || a?.vicinity_map?.osm ? api.vicinityMapUrl(aid) : null,
+    busy: !!busy,
+    blocked: vicinityBlocked,
+    onPrepare: (force: boolean) => vicinityAction('Preparing the map...', () => api.prepareVicinityMap(aid, force), 'Map prepared'),
+    onUpload: (file: File, note: string) => vicinityAction('Uploading...', () => api.uploadVicinityMap(aid, file, note), 'Screen grab uploaded'),
+    onRemoveUpload: () => vicinityAction('Removing...', () => api.removeVicinityUpload(aid), 'Upload removed'),
   }
 
   const reopen = async () => {
@@ -543,7 +582,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
 
           {/* round 13: the survey record the plan set reads; a draft saved before the fields existed reads them blank */}
           <ServiceEntranceCard value={doc.service ?? emptyService()} onChange={(service) => patch({ service })} />
-          <SitePlanCard value={doc.site ?? emptySite()} onChange={(site) => patch({ site })} />
+          <SitePlanCard value={doc.site ?? emptySite()} onChange={(site) => patch({ site })} vicinity={vicinityControls} />
 
           <div className="card" id="card-faces">
             <h2>Roof faces</h2>
@@ -776,6 +815,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 plansIssuedAt={a?.plans_issued_at ?? null}
                 revisions={a?.revisions ?? []}
                 onIssueRevision={issueRevision}
+                vicinity={a?.vicinity_map ?? null}
               />
             </div>
           </div>

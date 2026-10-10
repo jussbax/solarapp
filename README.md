@@ -86,7 +86,14 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    line for each field it does not hold; the revision line), the cover
    and general notes with the sheet index and the revision log (the first
    download is revision 0; "Issue a revision" on the Documents card
-   appends a numbered, noted entry), one array layout per roof face at a
+   appends a numbered, noted entry), the vicinity map and site plan (the
+   map composed on the server from OpenStreetMap tiles under their usage
+   policy when the office presses "Prepare the map" on the Site plan card
+   or first downloads the plans, or the office's own screen grab uploaded
+   there, which prints instead; the roof faces drawn in true orientation at
+   their typed offsets with the lot and house outlines, the setbacks and the
+   inverter, battery, POI and meter points; `SOLARAPP_MAP_TILES_URL` swaps
+   the tile provider), one array layout per roof face at a
    stated standard scale with dimension lines, strings and a north arrow,
    the equipment and circuit schedule from the BOM, and a last sheet that
    says what still waits on the datasheets (the single-line diagram, the
