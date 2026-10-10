@@ -1,10 +1,10 @@
 // The four questions of the public estimate, one card at a time: the visitor answers, the card slides
-// away and the next one slides in. Every answer draws a cue above the question (an inline SVG that
-// reacts to the choice: the house under the sun, the pin dropping on the town, the meter filling, the
-// day and the night over the house). The state lives in Estimate.tsx and comes in as props; this
-// file holds the order of the cards, the slide and the cues. The words of the questions and the
-// choices are the ones the form carried before.
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+// away and the next one slides in. Two cards carry a cue above the question (an inline SVG that reacts
+// to the answer): the meter dial that fills with the monthly use, and the house in section with the
+// people in it, more of them in the morning or in the evening as the slider moves. The state lives in
+// Estimate.tsx and comes in as props; this file holds the order of the cards, the slide and the cues.
+// The words of the questions and the choices are the ones the form carried before.
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { EstimateStatus, Goal, Pattern, Town } from './types'
 
 const GOALS: { id: Goal; title: string; text: string }[] = [
@@ -12,6 +12,7 @@ const GOALS: { id: Goal; title: string; text: string }[] = [
   { id: 'combination', title: 'A lower bill, and lights in a brownout', text: 'Solar by day, battery at night and during brownouts. Extra power still earns credit on your bill.' },
   { id: 'off_grid', title: 'Battery first, nothing sold back', text: 'More panels and a battery carry the house day and night; the grid steps in only when both fall short, and nothing is sold back. For homes that would rather keep their own power than sell it, and for places where net metering is out of reach.' },
 ]
+/** The three stops of the slider on the last card, left to right. */
 const PATTERNS: { id: Pattern; title: string; text: string }[] = [
   { id: 'morning', title: 'Mostly morning', text: 'Cooking, laundry, the pump and aircon early in the day.' },
   { id: 'balanced', title: 'All day', text: 'Someone is home most of the day.' },
@@ -68,46 +69,68 @@ export default function Wizard(p: WizardProps) {
   const [dir, setDir] = useState<Dir>('next')
   // the card on its way out: rendered once more, inert, for the length of the slide
   const [ghost, setGhost] = useState<{ index: number; dir: Dir } | null>(null)
-  const [minH, setMinH] = useState(0)
-  // cards 1 and 4 start with nothing pressed: the state carries a default, but the question has not been answered yet
+  // card 1 starts with nothing pressed: the state carries a default, but the question has not been answered yet
   const [goalDone, setGoalDone] = useState(false)
-  const [patternDone, setPatternDone] = useState(false)
   const stageRef = useRef<HTMLDivElement>(null)
   const qRef = useRef<HTMLHeadingElement>(null)
   const pending = useRef(0)
   const mounted = useRef(false)
-  // the latest run and go: a choice schedules them 350 ms later, after the state it set has rendered
-  const latest = useRef({ run: p.run, go: (_to: number) => {} })
+  // the stage's height before a change, for the easing to the new card's height
+  const fromH = useRef(0)
+  // the latest go: a choice schedules it 350 ms later, after the state it set has rendered
+  const goRef = useRef((_to: number) => {})
 
   const kwhNum = num(p.kwh)
   const phpNum = num(p.php)
   const hasUse = (Number.isFinite(kwhNum) && kwhNum > 0) || (Number.isFinite(phpNum) && phpNum > 0)
   const hasPlace = !!p.townName || !!p.pin
-  const answered = [goalDone, hasPlace, hasUse, patternDone]
+  const patternIdx = Math.max(0, PATTERNS.findIndex((s) => s.id === p.pattern))
+  // the last card always has an answer: the slider stands at "All day" until it is moved
+  const answered = [goalDone, hasPlace, hasUse, true]
 
   const go = (to: number) => {
     if (to === card || to < 0 || to > LAST) return
     window.clearTimeout(pending.current)
     const d: Dir = to > card ? 'next' : 'back'
     if (!reducedMotion()) {
-      setMinH(stageRef.current?.offsetHeight ?? 0)
+      fromH.current = stageRef.current?.offsetHeight ?? 0
       setGhost({ index: card, dir: d })
     }
     setDir(d)
     setCard(to)
   }
   useEffect(() => {
-    latest.current = { run: p.run, go }
+    goRef.current = go
   })
 
   useEffect(() => {
     if (!ghost) return
-    const t = window.setTimeout(() => {
-      setGhost(null)
-      setMinH(0)
-    }, SLIDE_MS + 40)
+    const t = window.setTimeout(() => setGhost(null), SLIDE_MS + 40)
     return () => window.clearTimeout(t)
   }, [ghost])
+  // the stage eases from the old card's height to the new one's over the slide, so the buttons under it do not jump
+  useLayoutEffect(() => {
+    const stage = stageRef.current
+    const from = fromH.current
+    fromH.current = 0
+    if (!stage || !from) return
+    const to = stage.offsetHeight
+    if (Math.abs(to - from) < 2) return
+    stage.style.transition = 'none'
+    stage.style.height = `${from}px`
+    stage.getBoundingClientRect()
+    stage.style.transition = `height ${SLIDE_MS}ms cubic-bezier(0.2, 0.7, 0.2, 1)`
+    stage.style.height = `${to}px`
+    const clear = () => {
+      stage.style.transition = ''
+      stage.style.height = ''
+    }
+    const t = window.setTimeout(clear, SLIDE_MS + 40)
+    return () => {
+      window.clearTimeout(t)
+      clear()
+    }
+  }, [card])
   // the new card's question takes the focus (not on the first paint: the page has just loaded)
   useEffect(() => {
     if (!mounted.current) {
@@ -126,14 +149,7 @@ export default function Wizard(p: WizardProps) {
     p.setGoal(g)
     setGoalDone(true)
     window.clearTimeout(pending.current)
-    pending.current = window.setTimeout(() => latest.current.go(1), LAND_MS)
-  }
-  const choosePattern = (pt: Pattern) => {
-    if (p.busy) return
-    p.setPattern(pt)
-    setPatternDone(true)
-    window.clearTimeout(pending.current)
-    // the last answer lands; the visitor presses "Show my estimate" when ready
+    pending.current = window.setTimeout(() => goRef.current(1), LAND_MS)
   }
   const enterGoesNext = (ev: KeyboardEvent<HTMLInputElement>) => {
     if (ev.key !== 'Enter') return
@@ -146,7 +162,6 @@ export default function Wizard(p: WizardProps) {
     let cue: ReactNode = null
     let body: ReactNode = null
     if (i === 0) {
-      cue = <GoalCue goal={goalDone ? p.goal : ''} />
       body = (
         <div className="pld-choices">
           {GOALS.map((g) => {
@@ -161,7 +176,6 @@ export default function Wizard(p: WizardProps) {
         </div>
       )
     } else if (i === 1) {
-      cue = <PlaceCue town={p.townName} province={p.province} busy={p.geoBusy} located={!!p.pin} />
       body = (
         <>
           <div className="pld-row">
@@ -236,26 +250,41 @@ export default function Wizard(p: WizardProps) {
         </>
       )
     } else {
-      cue = <TimeCue pattern={patternDone ? p.pattern : ''} />
+      const stop = PATTERNS[patternIdx]
+      cue = <PeopleCue pattern={stop.id} />
       body = (
-        <div className="pld-choices">
-          {PATTERNS.map((pt) => {
-            const on = patternDone && p.pattern === pt.id
-            return (
-              <button key={pt.id} type="button" className={`pld-choice ${on ? 'on' : ''}`} onClick={() => choosePattern(pt.id)} aria-pressed={on}>
-                <b>{pt.title}</b>
-                <small>{pt.text}</small>
-              </button>
-            )
-          })}
+        <div className="pld-wz-slider">
+          <input
+            type="range"
+            className="pld-wz-range"
+            min={0}
+            max={PATTERNS.length - 1}
+            step={1}
+            value={patternIdx}
+            onChange={(ev) => p.setPattern(PATTERNS[Number(ev.target.value)].id)}
+            aria-labelledby={qid}
+            aria-valuetext={stop.title}
+          />
+          <div className="pld-wz-stops" aria-hidden="true">
+            {PATTERNS.map((s, k) => (
+              <span key={s.id} className={k === patternIdx ? 'on' : ''}>
+                {s.title}
+              </span>
+            ))}
+          </div>
+          <div className="pld-wz-stop-text">
+            <b>{stop.title}.</b> {stop.text}
+          </div>
         </div>
       )
     }
     return (
       <>
-        <div className="pld-wz-cue" aria-hidden="true">
-          {cue}
-        </div>
+        {cue && (
+          <div className="pld-wz-cue" aria-hidden="true">
+            {cue}
+          </div>
+        )}
         <h2 className="pld-wz-q" id={qid} tabIndex={-1} ref={copy ? undefined : qRef}>
           {QUESTIONS[i]}
         </h2>
@@ -278,7 +307,7 @@ export default function Wizard(p: WizardProps) {
           {card + 1} of {QUESTIONS.length}
         </span>
       </div>
-      <div className="pld-wz-stage" ref={stageRef} style={minH ? { minHeight: minH } : undefined}>
+      <div className="pld-wz-stage" ref={stageRef}>
         {ghost && (
           <div className={`pld-wz-card pld-wz-leave pld-wz-leave-${ghost.dir}`} aria-hidden="true" inert>
             {renderCard(ghost.index, true)}
@@ -296,7 +325,7 @@ export default function Wizard(p: WizardProps) {
           </button>
         )}
         {last ? (
-          <button type="button" className="pld-btn pld-primary pld-wide" onClick={p.run} disabled={!p.ready || p.busy || !p.enabled || !patternDone}>
+          <button type="button" className="pld-btn pld-primary pld-wide" onClick={p.run} disabled={!p.ready || p.busy || !p.enabled}>
             {p.busy ? 'Working it out…' : 'Show my estimate'}
           </button>
         ) : (
@@ -306,175 +335,11 @@ export default function Wizard(p: WizardProps) {
         )}
       </div>
       {last && !p.ready && <div className="pld-hint pld-center">{!hasPlace ? 'Pick your town and enter your monthly use first.' : 'Enter your monthly use first.'}</div>}
-      {last && p.ready && !patternDone && <div className="pld-hint pld-center">Choose one first.</div>}
     </div>
   )
 }
 
 /* ---------- the cues: inline SVG, 800×260, gold on dark; the words carry the meaning, these are aria-hidden ---------- */
-
-const SUN_RAYS = Array.from({ length: 8 }, (_, k) => {
-  const a = (k * Math.PI) / 4
-  const c = Math.cos(a)
-  const s = Math.sin(a)
-  return `M${(30 * c).toFixed(1)} ${(30 * s).toFixed(1)}L${(38 * c).toFixed(1)} ${(38 * s).toFixed(1)}`
-}).join('')
-const STARS: [number, number, number][] = [[62, 42, 2], [128, 24, 1.5], [214, 62, 1.5], [296, 30, 2], [462, 22, 1.5], [524, 46, 2], [592, 72, 1.5], [704, 30, 2], [762, 74, 1.5], [360, 48, 1.2]]
-/** A crescent, 44 units tall, centred on its group's origin. */
-const MOON = 'M0-22A22 22 0 1 1 0 22A26 26 0 0 0 0-22Z'
-
-/** The house every cue shares: walls, roof, door, two windows, the panels on the roof, the aircon unit on the right wall. */
-function House() {
-  return (
-    <g className="wz-house">
-      <rect className="wz-wall" x="320" y="132" width="160" height="74" />
-      <path className="wz-roof" d="M304 134L400 78L496 134" />
-      <path className="wz-panel" d="M322 122L379 90L374 81L317 113Z" />
-      <path className="wz-panel-lines" d="M341 111L336 102M361 100L356 91" />
-      <path className="wz-panel" d="M478 122L421 90L426 81L483 113Z" />
-      <path className="wz-panel-lines" d="M459 111L464 102M439 100L444 91" />
-      <rect className="wz-door" x="389" y="168" width="22" height="38" />
-      <g className="wz-lit">
-        <rect className="wz-win-halo" x="330" y="140" width="46" height="40" rx="8" />
-        <rect className="wz-win-halo" x="424" y="140" width="46" height="40" rx="8" />
-        <rect className="wz-win-fill" x="338" y="148" width="30" height="24" />
-        <rect className="wz-win-fill" x="432" y="148" width="30" height="24" />
-        <rect className="wz-ac-halo" x="480" y="154" width="36" height="26" rx="6" />
-      </g>
-      <rect className="wz-win" x="338" y="148" width="30" height="24" />
-      <path className="wz-win-bars" d="M353 148V172M338 160H368" />
-      <rect className="wz-win" x="432" y="148" width="30" height="24" />
-      <path className="wz-win-bars" d="M447 148V172M432 160H462" />
-      <rect className="wz-ac" x="486" y="159" width="26" height="16" rx="2" />
-      <circle className="wz-fan" cx="499" cy="167" r="5" />
-      <path className="wz-fan-blades" d="M499 162V172M494 167H504" />
-    </g>
-  )
-}
-
-/** The pole at the right, its wire to the house, the street lamp, and the neighbour's house beyond it. */
-function Street() {
-  return (
-    <g className="wz-street">
-      <line className="wz-pole" x1="640" y1="206" x2="640" y2="92" />
-      <path className="wz-pole" d="M622 100H658" />
-      <path className="wz-wire" d="M497 136Q560 126 626 102" />
-      <path className="wz-wire wz-wire-far" d="M654 102Q720 118 800 112" />
-      <path className="wz-pole" d="M640 120H612" />
-      <circle className="wz-lamp-halo" cx="608" cy="123" r="16" />
-      <circle className="wz-lamp" cx="608" cy="123" r="5" />
-      <rect className="wz-nwall" x="690" y="160" width="70" height="46" />
-      <path className="wz-nroof" d="M684 162L725 130L766 162" />
-      <rect className="wz-nwin" x="700" y="172" width="16" height="14" />
-      <rect className="wz-nwin" x="734" y="172" width="16" height="14" />
-    </g>
-  )
-}
-
-function Sky({ clip }: { clip: string }) {
-  return (
-    <g clipPath={clip}>
-      <rect className="wz-night" x="0" y="0" width="800" height="206" />
-      <g className="wz-stars">
-        {STARS.map(([x, y, r], i) => (
-          <circle key={i} cx={x} cy={y} r={r} />
-        ))}
-      </g>
-    </g>
-  )
-}
-
-/** Card 1: the house; the sun and the meter running backwards for a lower bill; a dark street with lit windows and a glowing battery for the brownout; the battery and a faded grid line for nothing sold back. */
-function GoalCue({ goal }: { goal: Goal | '' }) {
-  const id = useId()
-  return (
-    <svg className="pld-wz-svg pld-wz-goal" viewBox="0 0 800 260" data-goal={goal} focusable="false">
-      <defs>
-        <clipPath id={`${id}-r`}>
-          <rect x="0" y="0" width="800" height="260" rx="14" />
-        </clipPath>
-      </defs>
-      <g clipPath={`url(#${id}-r)`}>
-        <rect className="wz-bg" x="0" y="0" width="800" height="260" />
-        <Sky clip={`url(#${id}-r)`} />
-        <rect className="wz-ground" x="0" y="206" width="800" height="54" />
-      </g>
-      <line className="wz-horizon" x1="0" y1="206" x2="800" y2="206" />
-      <g className="wz-sun" transform="translate(150 72)">
-        <path className="wz-rays" d={SUN_RAYS} />
-        <circle r="22" />
-      </g>
-      <g className="wz-moon" transform="translate(640 58)">
-        <path d={MOON} />
-      </g>
-      <Street />
-      <House />
-      <g className="wz-meter">
-        <rect className="wz-meter-box" x="296" y="150" width="22" height="24" rx="2" />
-        <circle className="wz-meter-dial" cx="307" cy="160" r="6" />
-        <line className="wz-meter-needle" x1="307" y1="160" x2="307" y2="155" />
-        <path className="wz-meter-back" d="M296 182A12 12 0 0 1 318 182" />
-        <path className="wz-meter-back" d="M300 178L296 182L300 186" />
-      </g>
-      <g className="wz-battery">
-        <rect className="wz-bat-halo" x="254" y="164" width="46" height="48" rx="10" />
-        <rect className="wz-bat-nub" x="272" y="171" width="10" height="5" />
-        <rect className="wz-bat" x="262" y="176" width="30" height="30" rx="3" />
-        <rect className="wz-cell" x="267" y="181" width="20" height="5" />
-        <rect className="wz-cell" x="267" y="189" width="20" height="5" />
-        <rect className="wz-cell" x="267" y="197" width="20" height="5" />
-      </g>
-    </svg>
-  )
-}
-
-/** Card 2: a simple outline with a pin that drops and bounces onto it; the town's name under it once chosen, "near you" while the phone's location is being read. */
-function PlaceCue({ town, province, busy, located }: { town: string; province: string; busy: boolean; located: boolean }) {
-  const id = useId()
-  const state = town ? 'town' : busy ? 'busy' : located ? 'located' : province ? 'province' : ''
-  const dropped = state === 'town' || state === 'located'
-  const label = town ? town : busy || located ? 'near you' : province
-  const sub = town ? province : ''
-  return (
-    <svg className="pld-wz-svg pld-wz-place" viewBox="0 0 800 260" data-place={state} focusable="false">
-      <defs>
-        <clipPath id={`${id}-r`}>
-          <rect x="0" y="0" width="800" height="260" rx="14" />
-        </clipPath>
-      </defs>
-      <g clipPath={`url(#${id}-r)`}>
-        <rect className="wz-bg" x="0" y="0" width="800" height="260" />
-        <path className="wz-grid" d="M160 0V260M320 0V260M480 0V260M640 0V260M0 70H800M0 140H800M0 210H800" />
-        <path className="wz-land" d="M70 150C120 92 220 70 320 96C380 112 420 68 500 80C600 94 700 68 740 122C772 164 702 222 600 232C480 246 380 216 280 236C180 252 84 218 70 150Z" />
-        <path className="wz-road" d="M110 190C250 170 300 118 420 142S600 192 720 150" />
-        <g className="wz-towns">
-          <circle cx="212" cy="150" r="3" />
-          <circle cx="318" cy="112" r="3" />
-          <circle cx="528" cy="110" r="3" />
-          <circle cx="612" cy="172" r="3" />
-          <circle cx="690" cy="120" r="3" />
-        </g>
-      </g>
-      <circle className="wz-target" cx="400" cy="150" r="14" />
-      <circle className="wz-ring" cx="400" cy="150" r="14" />
-      <ellipse className="wz-shadow" cx="400" cy="151" rx="18" ry="5" />
-      <g key={`${state}:${town}`} className={`wz-pin ${dropped ? 'wz-drop' : state ? 'wz-hover' : 'wz-away'}`} transform="translate(400 150)">
-        <path d="M0 0C-4-14-22-22-22-40a22 22 0 1 1 44 0C22-22 4-14 0 0Z" />
-        <circle cy="-40" r="8" />
-      </g>
-      {label && (
-        <text className="wz-town" x="400" y="196" textAnchor="middle">
-          {label}
-        </text>
-      )}
-      {sub && (
-        <text className="wz-prov" x="400" y="226" textAnchor="middle">
-          {sub}
-        </text>
-      )}
-    </svg>
-  )
-}
 
 const DIAL_LEN = Math.PI * 120
 const TICKS = [180, 135, 90, 45, 0]
@@ -519,40 +384,125 @@ function UseCue({ kwh, php }: { kwh: number; php: number }) {
   )
 }
 
-/** Card 4: the sun arcs and the moon rises over the house; the windows and the aircon light in the morning, all day or in the evening to match the pattern. A 6-second loop; a still frame under reduced motion. */
-function TimeCue({ pattern }: { pattern: Pattern | '' }) {
+const SUN_RAYS = Array.from({ length: 8 }, (_, k) => {
+  const a = (k * Math.PI) / 4
+  const c = Math.cos(a)
+  const s = Math.sin(a)
+  return `M${(28 * c).toFixed(1)} ${(28 * s).toFixed(1)}L${(36 * c).toFixed(1)} ${(36 * s).toFixed(1)}`
+}).join('')
+const STARS: [number, number, number][] = [[60, 40, 2], [122, 70, 1.5], [300, 30, 1.8], [470, 24, 1.5], [560, 52, 2], [700, 36, 1.5], [775, 80, 1.5], [220, 44, 1.3]]
+/** A crescent, 40 units tall, centred on its group's origin. */
+const MOON = 'M0-20A20 20 0 1 1 0 20A24 24 0 0 0 0-20Z'
+
+/** A silhouette with its feet at the group's origin: standing, or seated facing right (mirror it to face left). */
+function Person({ x, y = 215, pose, scale = 1, when, basket = false }: { x: number; y?: number; pose: 'stand' | 'sit' | 'sit-left'; scale?: number; when: string; basket?: boolean }) {
+  const flip = pose === 'sit-left' ? ' scale(-1 1)' : ''
+  return (
+    <g className={`wz-person ${when}`} transform={`translate(${x} ${y}) scale(${scale})${flip}`}>
+      {pose === 'stand' ? (
+        <>
+          <circle cy="-70" r="8" />
+          <rect x="-10" y="-61" width="20" height="36" rx="7" />
+          <rect x="-9" y="-26" width="7" height="26" rx="2.5" />
+          <rect x="2" y="-26" width="7" height="26" rx="2.5" />
+          {basket && <rect className="wz-basket" x="9" y="-38" width="22" height="16" rx="3" />}
+        </>
+      ) : (
+        <>
+          <circle cy="-62" r="8" />
+          <rect x="-10" y="-53" width="20" height="31" rx="7" />
+          <rect x="-8" y="-25" width="25" height="9" rx="4" />
+          <rect x="11" y="-20" width="7" height="20" rx="2.5" />
+        </>
+      )}
+    </g>
+  )
+}
+
+/** Card 4: the house in section and the people in it. Morning: a dawn sky and four of them (table, stove, laundry, a child); all day: daylight and two; evening: dusk, the lamp and the windows on, four around the TV and the table with the fan on. */
+function PeopleCue({ pattern }: { pattern: Pattern }) {
   const id = useId()
   return (
-    <svg className="pld-wz-svg pld-wz-time" viewBox="0 0 800 260" data-pattern={pattern} focusable="false">
+    <svg className="pld-wz-svg pld-wz-people" viewBox="0 0 800 260" data-pattern={pattern} focusable="false">
       <defs>
         <clipPath id={`${id}-r`}>
           <rect x="0" y="0" width="800" height="260" rx="14" />
         </clipPath>
         <clipPath id={`${id}-sky`}>
-          <rect x="0" y="0" width="800" height="206" rx="14" />
+          <rect x="0" y="0" width="800" height="215" />
         </clipPath>
+        <linearGradient id={`${id}-dawn`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#24242e" />
+          <stop offset="0.55" stopColor="#5a4626" />
+          <stop offset="1" stopColor="#b08a2e" />
+        </linearGradient>
+        <linearGradient id={`${id}-day`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#3b3b3a" />
+          <stop offset="1" stopColor="#5e5d58" />
+        </linearGradient>
+        <linearGradient id={`${id}-dusk`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#171b33" />
+          <stop offset="1" stopColor="#3b2a3c" />
+        </linearGradient>
       </defs>
       <g clipPath={`url(#${id}-r)`}>
         <rect className="wz-bg" x="0" y="0" width="800" height="260" />
-        <Sky clip={`url(#${id}-r)`} />
-        <rect className="wz-ground" x="0" y="206" width="800" height="54" />
-      </g>
-      <g clipPath={`url(#${id}-sky)`}>
-        <g className="wz-sun">
-          <g transform="translate(400 70)">
-            <path className="wz-rays" d={SUN_RAYS} />
-            <circle r="22" />
-          </g>
+        <rect className="wz-sky wz-sky-morning" x="0" y="0" width="800" height="215" fill={`url(#${id}-dawn)`} />
+        <rect className="wz-sky wz-sky-day" x="0" y="0" width="800" height="215" fill={`url(#${id}-day)`} />
+        <rect className="wz-sky wz-sky-evening" x="0" y="0" width="800" height="215" fill={`url(#${id}-dusk)`} />
+        <g className="wz-stars">
+          {STARS.map(([x, y, r], i) => (
+            <circle key={i} cx={x} cy={y} r={r} />
+          ))}
         </g>
-        <g className="wz-moon">
-          <g transform="translate(400 70)">
-            <path d={MOON} />
-          </g>
+        <g clipPath={`url(#${id}-sky)`}>
+          <circle className="wz-sun-low" cx="80" cy="216" r="24" />
         </g>
+        <g className="wz-sun-high" transform="translate(92 64)">
+          <path className="wz-rays" d={SUN_RAYS} />
+          <circle r="20" />
+        </g>
+        <g className="wz-moon" transform="translate(740 56)">
+          <path d={MOON} />
+        </g>
+        <rect className="wz-ground" x="0" y="215" width="800" height="45" />
       </g>
-      <line className="wz-horizon" x1="0" y1="206" x2="800" y2="206" />
-      <Street />
-      <House />
+      <line className="wz-horizon" x1="0" y1="215" x2="800" y2="215" />
+      {/* the street lamp */}
+      <line className="wz-pole" x1="720" y1="215" x2="720" y2="112" />
+      <path className="wz-pole" d="M720 124H694" />
+      <circle className="wz-lamp-halo" cx="690" cy="127" r="16" />
+      <circle className="wz-lamp" cx="690" cy="127" r="5" />
+      {/* the house in section: the rooms, the furniture */}
+      <rect className="wz-inside" x="160" y="112" width="480" height="103" />
+      <rect className="wz-warm" x="160" y="112" width="480" height="103" />
+      <path className="wz-roof" d="M140 114L400 50L660 114" />
+      <path className="wz-walls" d="M160 215V112H640V215" />
+      <line className="wz-part" x1="400" y1="112" x2="400" y2="150" />
+      <rect className="wz-win" x="250" y="126" width="46" height="30" />
+      <rect className="wz-win" x="452" y="126" width="46" height="30" />
+      <path className="wz-furn" d="M166 215V176H230V215" />
+      <circle className="wz-burner-on" cx="184" cy="176" r="7" />
+      <circle className="wz-burner-on" cx="208" cy="176" r="7" />
+      <circle className="wz-furn" cx="184" cy="176" r="5" />
+      <circle className="wz-furn" cx="208" cy="176" r="5" />
+      <path className="wz-furn" d="M300 180H390M306 180V215M384 180V215M292 215V168M292 192H304M398 215V168M398 192H386" />
+      <rect className="wz-sofa" x="428" y="170" width="98" height="45" rx="8" />
+      <path className="wz-furn" d="M434 192H520" />
+      <path className="wz-furn" d="M552 215V174M540 215H564" />
+      <circle className="wz-fan-on" cx="552" cy="160" r="12" />
+      <circle className="wz-furn" cx="552" cy="160" r="14" />
+      <rect className="wz-tv-on" x="584" y="146" width="48" height="36" />
+      <rect className="wz-furn" x="584" y="146" width="48" height="36" rx="2" />
+      <path className="wz-furn" d="M608 182V192M594 192H622" />
+      {/* the people: more of them in the morning and in the evening */}
+      <Person x={290} pose="sit" when="wz-at-morning wz-at-day" />
+      <Person x={248} pose="stand" when="wz-at-morning" />
+      <Person x={412} pose="stand" when="wz-at-morning" basket />
+      <Person x={344} pose="stand" scale={0.6} when="wz-at-morning wz-at-evening" />
+      <Person x={450} pose="sit" when="wz-at-day wz-at-evening" />
+      <Person x={486} pose="sit" when="wz-at-evening" />
+      <Person x={400} pose="sit-left" when="wz-at-evening" />
     </svg>
   )
 }
