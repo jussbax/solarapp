@@ -1741,3 +1741,22 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   on the house but we can help transfer the solar system to their new place, there so many variables at play so we
   might as well just answer this over phone no need to put it on the FAQ." The question is gone from the home
   page; nothing on the site says what happens on a move.
+
+## The estimate's questions are cards, one at a time, with cues that answer back
+
+- The owner (10 October): "instead of a form, find a way to make the questions into a card so they will not feel
+  pressured when answering it with a slight card change animation when clicked on next or something, make it
+  interactive, their answers showing cues on the screen, for example when choosing daytime nighttime energy use,
+  you can show some animation that denotes day time and night time and so on."
+- `frontend/src/estimate/Wizard.tsx` and `wizard.css` (the second inline stylesheet of the widget): four cards,
+  "1 of 4" with dots, Back and Next, the words of the questions unchanged. A choice on the first card lands for a
+  third of a second and advances; the town and the usage cards advance on Next; the last card's choice lands and
+  waits for "Show my estimate" (the builder had it run the estimate on the choice; the coordinator made it wait, so
+  the visitor presses the button on every card the same way). The card slides out and the next slides in (320 ms;
+  instant under reduced motion; one card in the DOM apart from the slide).
+- The cues, inline SVG above each question, gold on ink: the house with the meter spinning backwards for "a lower
+  bill", the dark street with lit windows and a glowing battery for "lights in a brownout", the full battery and the
+  faded grid line for "nothing sold back"; a pin that drops onto the town with its name; a dial that fills with the
+  kWh or the pesos; and the day-and-night loop (the sun's arc, then the moon, the windows and the aircon lit in the
+  morning, all day or in the evening to match the pattern). Nothing in a cue claims a figure.
+- `estimateAnother` brings back card 1 with nothing pressed; the result and its day scene follow the last card.
