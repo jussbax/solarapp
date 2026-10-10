@@ -27,7 +27,7 @@ def build():
 
 def test_public_build_drops_placeholders_and_keeps_them_on_request(build):
     layout = (SITE / "layout.html").read_text(encoding="utf-8")
-    for page, marker in (("index.html", "Recent installations"), ("about.html", "Photo: the owner")):
+    for page, marker in (("index.html", "Photo: the test panel"), ("about.html", "Photo: the owner")):
         src = (SITE / "pages" / page).read_text(encoding="utf-8")
         assert "<!-- placeholder:start -->" in src and marker in src
         public = build.render_page(layout, SITE / "pages" / page)
@@ -37,15 +37,16 @@ def test_public_build_drops_placeholders_and_keeps_them_on_request(build):
     # the public home page still has its real sections and the layout's frame
     home = build.render_page(layout, SITE / "pages" / "index.html")
     assert "What you get on paper" in home and "How it works" in home and "Solar engineering for homes" in home
+    assert "Recent installations" in home and "/static/photos/rib-roof-eight-960.jpg" in home   # the real photos stay
     assert "Contact details appear here" not in home
 
 
 def test_build_base_url_writes_absolute_og_tags(build):
     layout = (SITE / "layout.html").read_text(encoding="utf-8")
     relative = build.render_page(layout, SITE / "pages" / "about.html")
-    assert '<meta property="og:image" content="/brand/icon-512.png" />' in relative and "og:url" not in relative
+    assert '<meta property="og:image" content="/static/photos/og-home.jpg" />' in relative and "og:url" not in relative
     absolute = build.render_page(layout, SITE / "pages" / "about.html", base_url="https://pldevinc.com/")
-    assert '<meta property="og:image" content="https://pldevinc.com/brand/icon-512.png" />' in absolute
+    assert '<meta property="og:image" content="https://pldevinc.com/static/photos/og-home.jpg" />' in absolute
     assert '<meta property="og:url" content="https://pldevinc.com/about" />' in absolute
     home = build.render_page(layout, SITE / "pages" / "index.html", base_url="https://pldevinc.com")
     assert '<meta property="og:url" content="https://pldevinc.com/" />' in home
@@ -56,6 +57,7 @@ def test_build_writes_every_page(build, tmp_path):
     pages = build.build(out, base_url="https://pldevinc.com")
     assert set(pages) >= {"index.html", "about.html", "estimate.html", "net-metering.html", "brownouts.html", "privacy.html", "404.html"}
     assert (out / "static" / "site.css").is_file() and (out / "static" / "site.js").is_file()
+    assert (out / "static" / "photos" / "og-home.jpg").is_file() and (out / "static" / "photos" / "rib-roof-eight-480.webp").is_file()
     estimate = (out / "estimate.html").read_text(encoding="utf-8")
     assert 'data-embedded="true"' in estimate
     css = (out / "static" / "site.css").read_text(encoding="utf-8")
