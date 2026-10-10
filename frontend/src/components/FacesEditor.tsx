@@ -1,7 +1,8 @@
-import { newFace, newId, type FaceShape, type RoofFace, type ShadeObstacle, type WallEdge, type WallObstacle, type Warning } from '../types'
+import { emptyRoofConstruction, newFace, newId, type FaceShape, type RoofFace, type ShadeObstacle, type WallEdge, type WallObstacle, type Warning } from '../types'
 import { COMPASS, compassLabel } from './compass'
 import NumberInput from './NumberInput'
 import Field from './Field'
+import { RoofConstructionFields } from './SurveyCards'
 
 const SHAPES: { id: FaceShape; label: string }[] = [
   { id: 'rect', label: 'Rectangle' }, { id: 'hip', label: 'Hip face' }, { id: 'tri', label: 'Triangle' },
@@ -84,6 +85,24 @@ export default function FacesEditor({ faces, warnings, onChange }: { faces: Roof
               </Field>
               <Field label="Panel count (override)" unit="panels">
                 {(id) => <NumberInput id={id} value={f.panel_count_override} onChange={(v) => update(i, { panel_count_override: v == null ? null : Math.max(0, Math.round(v)) })} allowEmpty min={0} step={1} placeholder="auto" />}
+              </Field>
+            </div>
+          </details>
+          {/* round 13 (brief 3.2, 4.2): what this face is made of, where a blank reads the project's default, and where it sits for the site plan */}
+          <details className="more" data-testid={`face-${f.id}-survey`}>
+            <summary>Roof construction and position (for the plans)</summary>
+            <div className="muted" style={{ margin: '4px 0 6px' }}>Blank fields read the project's roof construction under this card. Nothing is assumed: a blank prints "not surveyed" on the mounting detail.</div>
+            <RoofConstructionFields value={f.construction ?? emptyRoofConstruction()} onChange={(construction) => update(i, { construction })} perFace idPrefix={`face-${f.id}`} />
+            <div className="form-grid face-grid" style={{ marginTop: 6 }}>
+              <Field label="Eave midpoint east of the pin" unit="m" help="For the site plan; west is negative">
+                {(id) => (
+                  <NumberInput id={id} value={f.plan_offset_m?.[0] ?? null} onChange={(v) => update(i, { plan_offset_m: v == null && (f.plan_offset_m?.[1] ?? null) == null ? null : [v ?? 0, f.plan_offset_m?.[1] ?? 0] })} allowEmpty step={0.1} placeholder="not surveyed" />
+                )}
+              </Field>
+              <Field label="Eave midpoint north of the pin" unit="m" help="South is negative">
+                {(id) => (
+                  <NumberInput id={id} value={f.plan_offset_m?.[1] ?? null} onChange={(v) => update(i, { plan_offset_m: v == null && (f.plan_offset_m?.[0] ?? null) == null ? null : [f.plan_offset_m?.[0] ?? 0, v ?? 0] })} allowEmpty step={0.1} placeholder="not surveyed" />
+                )}
               </Field>
             </div>
           </details>

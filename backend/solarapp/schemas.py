@@ -25,6 +25,98 @@ class ShadeObstacle(BaseModel):
     share: float = Field(default=1.0, ge=0, le=1.0)      # share of the face it shades when the sun is behind it
 
 
+# ---- round 13 (docs/audits/round-13/engineer-brief.md, 1.3, 3.2, 4.2): the survey record the plan set reads. Every field
+# is optional and blank until surveyed; nothing is defaulted, so a sheet prints a blank line with its reason where a field
+# is blank, never a guess. The words are enumerations (a 422 otherwise); a point is [latitude, longitude] in degrees, typed
+# for now (the map's draw tools are a later step).
+
+RoofType = Literal["", "rib_metal", "corrugated_metal", "tile_clay", "tile_concrete", "concrete_deck", "other"]
+PurlinMaterial = Literal["", "steel_c", "steel_tubular", "wood", "none"]
+ConditionFlag = Literal["", "sound", "rusted", "thin", "old"]
+Interconnection = Literal["", "load_side_breaker", "supply_side_tap", "line_side_of_main"]
+GeoPoint = tuple[float, float]
+
+
+def _check_point(p) -> tuple[float, float]:  # noqa: ANN001
+    lat, lon = float(p[0]), float(p[1])
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise ValueError("a point is [latitude, longitude] in degrees")
+    return lat, lon
+
+
+class RoofConstruction(BaseModel):
+    """What the roof is made of (3.2), per face or as the project's default a face inherits (a blank field on a face
+    reads the project's): the type decides which mounting detail is drawn, the purlins carry the feet, the condition
+    flag warns. No field has a default."""
+    roof_type: RoofType = ""
+    sheet_profile: str = Field(default="", max_length=200)          # e.g. the rib height and pitch
+    purlin_material: PurlinMaterial = ""
+    purlin_section: str = Field(default="", max_length=200)         # as the surveyor reads it
+    purlin_thickness_mm: Optional[float] = Field(default=None, gt=0)   # drives the pull-out figure
+    purlin_spacing_m: Optional[float] = Field(default=None, gt=0)
+    rafter_spacing_m: Optional[float] = Field(default=None, gt=0)      # tile roofs
+    mean_roof_height_m: Optional[float] = Field(default=None, gt=0)    # the wind check's h
+    condition: str = Field(default="", max_length=400)
+    condition_flag: ConditionFlag = ""                                 # other than sound: the sheet says to verify
+
+
+class PanelboardCircuit(BaseModel):
+    """One existing circuit of the panelboard, typed by the office (5.3); the schedule of loads prints it verbatim."""
+    no: str = Field(default="", max_length=20)
+    description: str = Field(default="", max_length=200)
+    breaker_a: Optional[float] = Field(default=None, gt=0)
+    poles: Optional[int] = Field(default=None, ge=1, le=4)
+    wire_mm2: Optional[float] = Field(default=None, gt=0)
+    conduit_mm: Optional[float] = Field(default=None, gt=0)
+
+
+class ServiceEntrance(BaseModel):
+    """The service entrance as surveyed (1.3): the DU, the account and meter, the existing panelboard with its main
+    breaker and busbar, the service voltage and phase, the point of interconnection with its note, the DU's available
+    fault current (2.3) and the existing circuits (5.3). Blank until surveyed: the sheets print "not surveyed" and the
+    120 % rule is not checked."""
+    du_name: str = Field(default="", max_length=120)
+    account_no: str = Field(default="", max_length=60)        # customer data: shown only on the plans and the DU pack
+    meter_no: str = Field(default="", max_length=60)
+    panelboard: str = Field(default="", max_length=200)       # the existing panelboard in words: where it is, how many ways
+    phase: Optional[Literal[1, 3]] = None
+    voltage_v: Optional[float] = Field(default=None, gt=0)    # blank: the wiring rules' 230 V prints as the assumption
+    main_breaker_a: Optional[float] = Field(default=None, gt=0)
+    busbar_a: Optional[float] = Field(default=None, gt=0)
+    interconnection: Interconnection = ""
+    interconnection_note: str = Field(default="", max_length=400)   # where the breaker sits, the distance to the meter
+    fault_level_ka: Optional[float] = Field(default=None, ge=0)     # the DU's available fault current at the service (verify)
+    circuits: list[PanelboardCircuit] = Field(default_factory=list)
+
+
+class SitePlan(BaseModel):
+    """The site plan's survey (4.2): the lot and house outlines and the inverter, battery, point-of-interconnection and
+    meter points as typed coordinates, each with its location in words; an outline has three corners or more, or none."""
+    lot_polygon: list[GeoPoint] = Field(default_factory=list)
+    house_polygon: list[GeoPoint] = Field(default_factory=list)
+    inverter_location: str = Field(default="", max_length=200)
+    inverter_point: Optional[GeoPoint] = None
+    battery_location: str = Field(default="", max_length=200)
+    battery_point: Optional[GeoPoint] = None
+    poi_location: str = Field(default="", max_length=200)
+    poi_point: Optional[GeoPoint] = None
+    meter_location: str = Field(default="", max_length=200)
+    meter_point: Optional[GeoPoint] = None
+
+    @field_validator("lot_polygon", "house_polygon")
+    @classmethod
+    def _outline(cls, v):  # noqa: ANN001
+        pts = [_check_point(p) for p in v]
+        if 0 < len(pts) < 3:
+            raise ValueError("an outline needs at least three corners, or none")
+        return pts
+
+    @field_validator("inverter_point", "battery_point", "poi_point", "meter_point")
+    @classmethod
+    def _point(cls, v):  # noqa: ANN001
+        return None if v is None else _check_point(v)
+
+
 class RoofFace(BaseModel):
     id: str
     name: str = "Roof"
@@ -38,6 +130,10 @@ class RoofFace(BaseModel):
     panel_count_override: Optional[int] = Field(default=None, ge=0)
     walls: list[WallObstacle] = Field(default_factory=list)
     obstacles: list[ShadeObstacle] = Field(default_factory=list)
+    # round 13: the construction (3.2; a blank field reads the project's default, doc.roof_default) and, for the site plan
+    # (4.2), the eave midpoint's offset from the pin in metres [east, north]; None = not surveyed
+    construction: RoofConstruction = Field(default_factory=RoofConstruction)
+    plan_offset_m: Optional[tuple[float, float]] = None
 
 
 class CandidatePanel(BaseModel):
@@ -299,6 +395,10 @@ class AssessmentDoc(BaseModel):
     lead: Optional[LeadInfo] = None   # old records that started as a website lead; converted leads carry only the estimate the visitor saw
     lead_id: Optional[int] = None     # the leads-inbox row this project was started from
     card_next_step: str = ""  # the card's next-step line, saved with the record
+    # round 13: the survey record the plan set reads (1.3, 3.2, 4.2); every field optional and blank until surveyed
+    service: ServiceEntrance = Field(default_factory=ServiceEntrance)
+    roof_default: RoofConstruction = Field(default_factory=RoofConstruction)
+    site: SitePlan = Field(default_factory=SitePlan)
 
     @model_validator(mode="before")
     @classmethod

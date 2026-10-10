@@ -395,6 +395,10 @@ table.bom td.cell-qty input { width: 90px; }
 .doc-action button { min-width: 110px; }
 .doc-field { margin-top: 8px; max-width: 520px; }
 .doc-revision { margin-top: 6px; font-size: var(--fs-sm); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+/* the panelboard's existing circuits (round 13): a plain table of inputs, scrolled sideways on the phone */
+.circuits-table { border-collapse: collapse; margin: 4px 0 8px; }
+.circuits-table th { text-align: left; font-size: var(--fs-sm); color: var(--muted); font-weight: 600; padding: 2px 6px 2px 0; white-space: nowrap; }
+.circuits-table td { padding: 2px 6px 2px 0; vertical-align: middle; }
 .doc-row .doc-reason { color: var(--warn); }
 
 /* ---------- settings: a menu of pages (a left menu on the desk, a list of cards on the phone), one page beside it ---------- */

@@ -16,7 +16,8 @@ import Field from '../components/Field'
 import { PricingInputs, PricingResults } from '../components/PricingSection'
 import { ProgramInputs, ProgramResults } from '../components/ProgramSection'
 import { EconomicsInputs, EconomicsResults } from '../components/EconomicsSection'
-import { emptyDoc, emptyEconomicsJob, emptyPricingJob, emptyProgramJob, ENGINEERING_STATUSES, NEW_DRAFT_ID, statusLabel } from '../types'
+import { emptyDoc, emptyEconomicsJob, emptyPricingJob, emptyProgramJob, emptyRoofConstruction, emptyService, emptySite, ENGINEERING_STATUSES, NEW_DRAFT_ID, statusLabel } from '../types'
+import { RoofConstructionFields, ServiceEntranceCard, SitePlanCard } from '../components/SurveyCards'
 import { clearDraft, readDraft, writeDraft, type Draft } from '../draft'
 import { fmtDateShort, fmtDateTime, php0 } from '../fmt'
 import { useNarrow } from '../components/responsive'
@@ -28,7 +29,7 @@ const STEPS: { id: Step; label: string; short: string }[] = [
   { id: 'pricing', label: 'Pricing and program', short: 'Pricing' },
   { id: 'results', label: 'Design and outputs', short: 'Outputs' },
 ]
-const CARD_STEP: Record<string, Step> = { 'card-site': 'site', 'card-faces': 'site', 'card-readings': 'site', 'card-audit': 'audit' }
+const CARD_STEP: Record<string, Step> = { 'card-site': 'site', 'card-service': 'site', 'card-siteplan': 'site', 'card-faces': 'site', 'card-readings': 'site', 'card-audit': 'audit' }
 
 /** The seven cards of Design and outputs, in order; the in-step index jumps to them. */
 type DesignCardId = 'design-roof' | 'design-system' | 'design-quantities' | 'design-program' | 'design-savings' | 'design-documents'
@@ -540,6 +541,10 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
             )}
           </div>
 
+          {/* round 13: the survey record the plan set reads; a draft saved before the fields existed reads them blank */}
+          <ServiceEntranceCard value={doc.service ?? emptyService()} onChange={(service) => patch({ service })} />
+          <SitePlanCard value={doc.site ?? emptySite()} onChange={(site) => patch({ site })} />
+
           <div className="card" id="card-faces">
             <h2>Roof faces</h2>
             <FacesEditor faces={doc.faces} warnings={dirty ? null : results?.warnings} onChange={(faces) => patch({ faces })} />
@@ -551,6 +556,11 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 {(fid) => <NumberInput id={fid} value={doc.gap_m} onChange={(v) => patch({ gap_m: v ?? 0 })} min={0} step={0.01} />}
               </Field>
             </div>
+            <details className="more" data-testid="roof-default">
+              <summary>Roof construction for the whole project (a face may differ above)</summary>
+              <div className="muted" style={{ margin: '4px 0 6px' }}>What the roof is made of, for the mounting detail and the uplift check (later sheets). Every field is optional; a blank prints "not surveyed", never a guess.</div>
+              <RoofConstructionFields value={doc.roof_default ?? emptyRoofConstruction()} onChange={(roof_default) => patch({ roof_default })} idPrefix="roof-default" />
+            </details>
           </div>
 
           <div className="card" id="card-readings">
