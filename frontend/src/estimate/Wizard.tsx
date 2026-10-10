@@ -3,20 +3,20 @@
 // to the answer): the meter dial that fills with the monthly kWh, and the house in section with the
 // people in it, more of them in the morning or in the evening as the slider moves. The state lives in
 // Estimate.tsx and comes in as props; this file holds the order of the cards, the slide and the cues.
-// The words of the questions and the choices are the ones the form carried before.
+// The questions stay the engine's four; each choice sells the want, and the kind's name opens its small text.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { EstimateStatus, Goal, Pattern, Town } from './types'
 
 const GOALS: { id: Goal; title: string; text: string }[] = [
-  { id: 'net_metering', title: 'A lower bill', text: 'Solar runs the house by day. Extra power goes to your electric company as credit on your bill (net metering). A battery can be added later for brownouts.' },
-  { id: 'combination', title: 'A lower bill, and lights in a brownout', text: 'Solar by day, battery at night and during brownouts. Extra power still earns credit on your bill.' },
-  { id: 'off_grid', title: 'Battery first, nothing sold back', text: 'More panels and a battery carry the house day and night; the grid steps in only when both fall short, and nothing is sold back. For homes that would rather keep their own power than sell it, and for places where net metering is out of reach.' },
+  { id: 'net_metering', title: 'I just want a lower bill.', text: 'Solar with net metering. The panels run the house by day, and the extra comes back as credit on your bill. A battery can come later, whenever you want lights in a brownout too.' },
+  { id: 'combination', title: 'I want the lights on when the street goes dark.', text: 'Solar with a battery. The panels run the house by day and bring the bill down; the battery carries the evening and the brownouts. The extra still earns credit on your bill.' },
+  { id: 'off_grid', title: 'I want my roof to run my house.', text: 'Battery first, nothing sold back. More panels and a battery carry the house day and night, and the grid steps in only when both fall short. For homes that would rather keep their own power than sell it, and for places where net metering is out of reach.' },
 ]
 /** The three stops of the slider on the last card, left to right. */
 const PATTERNS: { id: Pattern; title: string; text: string }[] = [
-  { id: 'morning', title: 'Mostly morning', text: 'Cooking, laundry, the pump and aircon early in the day.' },
-  { id: 'balanced', title: 'All day', text: 'Someone is home most of the day.' },
-  { id: 'evening', title: 'Mostly evening', text: 'The house is busiest after dark: aircon, TV, cooking.' },
+  { id: 'morning', title: 'Mostly morning', text: 'Cooking, laundry, the pump and aircon early in the day, when the panels are already at work.' },
+  { id: 'balanced', title: 'All day', text: 'Someone is home most of the day, so the house uses the sun as the panels make it.' },
+  { id: 'evening', title: 'Mostly evening', text: 'The house is busiest after dark: aircon, TV, cooking. This is the evening a battery would carry.' },
 ]
 const QUESTIONS = ['What do you want from solar?', 'Where is your house?', 'How much electricity do you use in a month?', 'When does your house use the most power?']
 const LAST = QUESTIONS.length - 1
@@ -219,11 +219,11 @@ export default function Wizard(p: WizardProps) {
             <div className="pld-hint">Location set from your phone. Pick a town instead if that's not where the house is.</div>
           ) : (
             <div className="pld-hint">
-              At the house?{' '}
+              Your town picks the sun records your estimate is built on. At the house?{' '}
               <button type="button" className="pld-link" onClick={p.useGps} disabled={p.geoBusy}>
                 {p.geoBusy ? 'Finding your town…' : 'Use my location'}
               </button>{' '}
-              and the town fills in. Not in the list? Message us.
+              and the town fills in. Not in the list? Message us; we come to wherever the house is.
             </div>
           )}
         </>
@@ -238,7 +238,7 @@ export default function Wizard(p: WizardProps) {
               <input inputMode="decimal" value={p.kwh} onChange={(ev) => p.setKwh(ev.target.value)} onKeyDown={enterGoesNext} placeholder="e.g. 338" />
             </label>
           </div>
-          <div className="pld-hint">The kWh is printed on the bill, usually near "consumption".</div>
+          <div className="pld-hint">The kWh is printed on the bill, usually next to "consumption". It sets how many panels your house needs, so you buy only what the house uses.</div>
         </>
       )
     } else {
@@ -326,7 +326,7 @@ export default function Wizard(p: WizardProps) {
           </button>
         )}
       </div>
-      {last && !p.ready && <div className="pld-hint pld-center">{!hasPlace ? 'Pick your town and enter your monthly use first.' : 'Enter your monthly use first.'}</div>}
+      {last && !p.ready && <div className="pld-hint pld-center">{!hasPlace ? 'Pick your town and type the kWh from your bill first.' : 'Type the kWh from your bill first.'}</div>}
     </div>
   )
 }

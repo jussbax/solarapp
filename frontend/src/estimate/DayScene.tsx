@@ -161,7 +161,7 @@ function readout(r: TypicalHour): Part[] {
   }
   return parts.flatMap((p, i) => (i ? [{ t: ' · ' }, ...p] : p))
 }
-/** One line per phase, read off the row: what the sun, the battery and the grid are doing in that hour. */
+/** One line per phase, read off the row: the family's day, with what the sun, the battery and the grid are doing in that hour. */
 function caption(day: TypicalHour[], h: number, hasBattery: boolean): string {
   const r = day[h], next = day[(h + 1) % 24]
   const loads = day.map((x) => x.load_kw)
@@ -170,21 +170,24 @@ function caption(day: TypicalHour[], h: number, hasBattery: boolean): string {
   const sunUp = r.production_kw >= MIN_KW
   if (sunUp && r.direct_kw >= r.load_kw - MIN_KW) {
     const charging = r.charge_kw >= MIN_KW, exporting = r.export_kw >= MIN_KW
-    if (charging && exporting) return 'The house runs on the sun; the extra fills the battery and goes out as credit.'
-    if (charging) return 'The house runs on the sun; the extra fills the battery.'
-    if (exporting) return 'The house runs on the sun; the extra goes out as credit.'
-    if (hasBattery && maxSoc > 0 && r.soc_kwh >= 0.97 * maxSoc && r.production_kw > r.load_kw + MIN_KW) return 'The house runs on the sun; the battery is full.'
+    if (charging && exporting) return "The house runs on the sun; the extra fills tonight's battery, and the rest goes back through the meter as credit."
+    if (charging) return "The house runs on the sun; the extra fills tonight's battery."
+    if (exporting) return 'The house runs on the sun; the extra goes back through the meter as credit.'
+    if (hasBattery && maxSoc > 0 && r.soc_kwh >= 0.97 * maxSoc && r.production_kw > r.load_kw + MIN_KW) return 'The house runs on the sun; the battery is full for tonight.'
     return 'The house runs on the sun.'
   }
   if (sunUp) {
-    if (next.production_kw > r.production_kw) return 'The panels wake up.'
-    return r.discharge_kw >= MIN_KW ? 'The sun goes down; the battery picks up the rest.' : 'The sun goes down; the grid picks up the rest.'
+    if (next.production_kw > r.production_kw) return 'The sun is up and the panels are taking over.'
+    return r.discharge_kw >= MIN_KW ? 'The sun goes down and the battery takes over.' : 'The sun goes down and the grid takes over, as it does today.'
   }
   const flat = maxLoad < 1.2 * minLoad
   const night = flat ? h >= 22 || h < 6 : r.load_kw <= minLoad * 1.35
   const onBattery = r.discharge_kw >= MIN_KW
   if (night) return onBattery ? 'Everyone asleep, the fridge on the battery.' : 'Everyone asleep, the fridge on the grid.'
-  return onBattery ? 'The battery carries the evening.' : 'The grid steps in for the evening.'
+  if (onBattery) return 'The battery carries the evening on your own power: the lights, the fan, the TV, the Wi-Fi.'
+  // a house without a battery spends its evening on the grid as it does now; where the day sent power back, the evening was paid for in credit
+  const exported = day.some((x) => x.export_kw >= MIN_KW)
+  return exported ? "The evening runs on the grid, as it does today; the day's extra came back as credit." : 'The evening runs on the grid, as it does today.'
 }
 
 function prefersReduced(): boolean {
@@ -471,7 +474,7 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
   const ariaLabel =
     `${sys.panels} panels (${trim(sys.kwp)} kWp) on the roof, a ${trim(sys.inverter_kw)} kW inverter` +
     (hasBattery ? `, a ${trim(sys.battery_kwh)} kWh battery` : '') +
-    ` and the meter with ${gridLabel}: a typical day, the sun up from ${clock(sun.rise)} to ${clock(sun.set % 24)}, the power flowing between the panels, the house${hasBattery ? ', the battery' : ''} and the grid.`
+    ` and the meter with ${gridLabel}: an ordinary day, the sun up from ${clock(sun.rise)} to ${clock(sun.set % 24)}, the power flowing between the panels, the house${hasBattery ? ', the battery' : ''} and the grid.`
   const live = (f: Flow) => !building && flowOf(row, f) >= MIN_KW
   const dashOpacity = (f: Flow) => {
     const v = flowOf(row, f)
@@ -651,8 +654,8 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
       <div className="pld-scene-strip">
         {building ? (
           <>
-            <div className="pld-scene-read"><b className="pld-scene-hour">Dawn</b> · your system, piece by piece</div>
-            <p className="pld-scene-cap">Then a typical day, hour by hour.</p>
+            <div className="pld-scene-read"><b className="pld-scene-hour">Dawn</b> · your house, fitted out piece by piece</div>
+            <p className="pld-scene-cap">Then an ordinary day, hour by hour.</p>
           </>
         ) : (
           <>

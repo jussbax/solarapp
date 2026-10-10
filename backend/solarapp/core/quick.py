@@ -35,7 +35,7 @@ NIGHT_HOURS = list(range(18, 24)) + list(range(0, 6))   # 6 pm to 6 am, the nigh
 OUT_OF_AREA_KM = 60.0   # farther than this from every town centre is off the map (the sea, or abroad)
 # Under this a system is one panel and a ₱180,000 inverter: refused with a plain message instead of a silly figure.
 MIN_MONTHLY_KWH = 60.0
-TOO_LITTLE = "That's very little usage; a solar system would not pay for itself. If the kWh on your bill is higher, enter that figure."
+TOO_LITTLE = "That is a very small bill; solar would not pay for itself at that use. If the kWh on your bill is higher, type that figure."
 _per_kwp_cache: dict[tuple, list] = {}
 
 
@@ -238,9 +238,9 @@ def quick_estimate(req: QuickRequest, pvgis: PvgisDataset, ctx: PricingContext) 
         except (ValueError, LookupError):
             alternative = None
     if main["system"]["roof_limited"]:
-        warnings.append(f"Your house needs more than {q.max_panels} panels; we capped the estimate there, and on the on-site assessment we see how many your roof really takes.")
+        warnings.append(f"Your house would take more than {q.max_panels} panels, so this estimate stops at {q.max_panels}; on the free on-site assessment we see how many your roof can hold.")
     if not where["in_area"]:
-        warnings.append("This location is off the map of the Philippines, where we install. Check the pin, or pick your town instead.")
+        warnings.append("That spot is outside the Philippines, where we install. Check the pin, or pick your town instead.")
     facing = "south" if q.azimuth_deg == 180 else f"{q.azimuth_deg:g}°"
     road = main["location"]["road_km"]
     if road is None:
