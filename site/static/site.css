@@ -94,7 +94,6 @@ body.nav-open .nav { display: flex; flex-direction: column; gap: 4px; position: 
 .steps li { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 16px 16px 64px; position: relative; counter-increment: step; }
 .steps li::before { content: counter(step); position: absolute; left: 16px; top: 16px; width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--gold); font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .steps b { display: block; color: var(--ink); margin-bottom: 2px; }
-.steps .when { font-size: 13px; color: var(--muted); }
 @media (min-width: 760px) { .steps { grid-template-columns: repeat(5, 1fr); } .steps li { padding: 58px 14px 14px; } .steps li::before { left: 14px; top: 14px; } }
 
 /* numbers */
@@ -163,5 +162,5 @@ body:has(main > .cta-band:last-child) .site-foot { margin-top: 0; }
   .small { font-size: 14.5px; }
   .hero-points { font-size: 15.5px; }
   .eyebrow, .card .tag { font-size: 13px; }
-  .steps .when, .figure .lab { font-size: 14px; }
+  .figure .lab { font-size: 14px; }
 }

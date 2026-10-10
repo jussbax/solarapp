@@ -495,7 +495,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                   Thank you, {firstName(lead.name)}. {profile?.owner_name || 'We'} will message or call you {profile?.callback_promise || 'within one working day'} to pick a day; visits are usually within the week. Nothing more to do for now; keep a recent bill where you can find it.
                 </p>
                 <p>
-                  What happens next: the roof visit, about an hour and free; your roof check card the same evening; the energy audit over your bill and appliances; your proposal within two working days, valid {validDays} days.
+                  What happens next: one free visit, with the test panel on the roof and your bill and appliances at the table; your roof check card the same evening; your proposal within two working days, valid {validDays} days.
                 </p>
                 <div className="pld-row">
                   {messengerHref && (

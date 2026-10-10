@@ -1664,3 +1664,19 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   are in Pila, Laguna and the hip roof in Fairview, Quezon City, printed on the cards and the About caption with
   the lead now "The town, never the address or the name." Still open: the installation-day outage length, one
   agreed sentence from a photographed family, and the before-and-after bills of the two early-2026 homes.
+
+## One visit: the roof and the energy audit together
+
+- The owner (10 October): "The site assessment will be roof plus energy audit, no 2 visits." The home page's
+  steps and the estimate's thank-you now describe one free visit (the test panel and meters on the roof, the bill
+  and appliances at the table), the roof check card the same evening and the proposal within two working days.
+  The steps say their times in the sentence; the small footnotes are gone ("What's with the small foot notes? Why
+  not just say it directly?"). The customer still books a "roof visit" (the word that sells the measuring); the
+  engineering app's On site step already holds both the readings and the audit.
+
+## Brands as logos, not a sentence
+
+- The owner (10 October), on the "Brands we install" card: "it's like an after thought that shouldn't be there, we
+  can just add logos of the brand we install rather than this." The card is gone from "Why people choose us"; a
+  logo strip waits as a placeholder (dropped from the public build) until the owner sends the makers' logo files
+  and the names; the profile's `brands` line stays for the proposal. No brand is named or drawn until then.
