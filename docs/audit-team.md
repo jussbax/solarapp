@@ -1,8 +1,9 @@
 # The audit team
 
-Five standing reviewers, each a Claude Code agent definition under `.claude/agents/`.
-They audit the solar engineering app, its documents and the public website from one
-discipline each, and every round ends in a ranked list the owner decides on.
+Five standing reviewers and one writer, each a Claude Code agent definition under
+`.claude/agents/`. The reviewers audit the solar engineering app, its documents and the
+public website from one discipline each, and every round ends in a ranked list the owner
+decides on; the writer turns the marketing specialist's brief into the customer's words.
 
 | Role | File | What it judges |
 |---|---|---|
@@ -11,6 +12,7 @@ discipline each, and every round ends in a ranked list the owner decides on.
 | Financial analyst | `financial-analyst-auditor.md` | the pricing engine against the owner's Excel workbook cell by cell: landed cost, markup tiers, the OCM share and owner's-profit balance, commission, VAT, rounding, cashflow, customer economics |
 | UI/UX specialist | `ux-auditor.md` | every screen at desktop and phone width in Chromium, every document, every website page: stray elements, overflow, tap targets, wording, feedback |
 | Marketing and sales | `marketing-sales-auditor.md` | the customer path from the website to the proposal: is the engineering translated into the customer's problem and its solution, honestly |
+| Copywriter | `copywriter.md` | not an auditor: the team's writer. Turns the marketing specialist's angle brief into the words the customer reads (website, estimate, booking, the proposal's customer lines), selling the feeling behind the equipment inside the same honesty rails; every draft goes back to marketing for review |
 
 ## How a round runs
 
@@ -50,3 +52,7 @@ that pipeline, and it is a separate build).
 - Round 3 (all five roles, finance new): `docs/audits/round-3/`.
 - Round 4 (UX only, from the owner's screenshots: the pattern on every form,
   Settings as a menu, people and account as dialogs): `docs/audits/round-4/`.
+- Round 5 (the owner's first photos on the website: marketing, UX, engineering):
+  `docs/audits/round-5/`.
+- Round 6 (the website's words sell the feeling: marketing's angle brief, the
+  copywriter's rewrite, marketing's review): `docs/audits/round-6/`.

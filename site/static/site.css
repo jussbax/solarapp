@@ -114,6 +114,8 @@ body.nav-open .nav { display: flex; flex-direction: column; gap: 4px; position: 
 .photo-card { margin: 0; padding: 12px 12px 18px; }
 .photo-card figcaption { padding: 0 8px; }
 .photo-card h3 { margin: 14px 0 6px; font-size: 18px; }
+.photo-card.wide { margin: 18px 0 22px; max-width: 784px; }
+.photo-card.wide figcaption { padding: 10px 8px 0; }
 .photo-card p { margin: 0; font-size: 14.5px; }
 
 /* faq */

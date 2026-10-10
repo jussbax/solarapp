@@ -1558,17 +1558,34 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   (`docs/audits/round-5/marketing.md`) found the first captions claimed a fixing method and a fourth face the frames
   did not show, and a lead ("measured on the roof first … after switch-on") no one had confirmed for those jobs;
   all three were reworded to what is certain.
-- Which frames are published, after the engineer's review (`docs/audits/round-5/engineering.md`): 25 (hero and
-  share image, cropped so the customer's aircon unit and its brand are out of the frame), 27 (card) and the clean
-  small roof of the three-roof property cut from 37 (card). Withheld until the owner answers: 36 and 33–34 (the
-  hip roof's DC runs lie loose on the sheet in every frame, gear still on the lower roof: a job before its cable
-  work, and no crop removes the runs) and 35 with 37 as a whole (the palms shade part of the main array and the
-  main house's eave throws a band across the whole annex row: the frame invites "why under a tree, why under the
-  eave?"). Never: 29–32 (installation-day clutter, a legible sign, four people at the gate without consent).
-  Counts by the engineer, from the frame lines (the half-cut split is not a panel edge): A 8, B 16 on three faces
-  (6, 6 + 2, 2; the fourth face empty), C 37 (18 + 9 + 10). Every page shares the home roof until a page has a
-  photo of its own (`<!-- og_image -->`).
+- Which frames are published: 25 (hero and share image, cropped so the customer's aircon unit and its brand are out of
+  the frame), 27, 36 (cropped to lose the yard and most of the neighbour's house) and 35 as the three cards, 37 on
+  About. Never: 29–32 (installation-day clutter, a legible sign, four people at the gate without consent) and 33–34
+  (the neighbour's house and washing fill the top third). The engineer's review (`docs/audits/round-5/engineering.md`)
+  had held 36 and 35 back; the owner's answers (10 October) cleared them: the black runs on the hip roof are HDPE
+  conduit and the final state; the orange run on the rib roof is the PV-wire conduit on rails fixed with L-feet
+  through the sheet; the three-roof property was photographed between nine and ten in the morning and "the design
+  provided extra panels so that shadings will not bring the production down too much". The captions say so.
+- The owner's facts, printed on the cards: the rib roof is 8 panels, 4.56 kWp, a 6 kW grid-tie inverter, no
+  battery, not on net metering, installed early 2026; the hip roof is 16 panels, 9.12 kWp, a 12 kW hybrid inverter
+  with no battery attached and no net metering, early 2026; the three-roof property is 13.75 kWp with a 30 kWh
+  battery, a 12 kW hybrid inverter and a 6 kW grid-tie inverter carrying a 5.5 kWp part of the array, net metered
+  since 2023, with ₱33,568.72 of credit accumulated (printed as "more than ₱33,000"). The owner flew the drone;
+  these are family homes; the test-panel roof visit did not yet exist when they were designed, so the lead says
+  "Our own installations, photographed by us from the air. No addresses, no names." and nothing about measuring.
+  Towns were not given; the cards carry none. Counts by the engineer, from the frame lines (the half-cut split is
+  not a panel edge): A 8, B 16 on three faces (6, 6 + 2, 2; the fourth face empty), C 37 (18 + 9 + 10).
+  Every page shares the home roof until a page has a photo of its own (`<!-- og_image -->`).
 - No "Our work" page until there are six or more sites each with a town, a size, a month and the customer's yes.
+- The UX audit of the pages with photos (`docs/audits/round-5/ux.md`) found nothing that blocks a visitor and
+  nineteen things to tidy; all the one-hour ones are done: the header's gold button and the hero's eyebrow now pass
+  contrast; the full navigation waits until 860 px (the menu button serves tablets in portrait); anchors scroll
+  clear of the sticky header; every profile-dependent fragment starts hidden (the build adds `is-empty`), so no
+  page shows "PRC No. ." while the profile loads or when it fails; the fonts ship as WOFF2 (54 KB instead of
+  146) and are preloaded; the hero photo is capped at 560 px on tablets; captions, tap targets, the phone's small
+  text, the share card for X and Telegram, the About title, the estimate page's loading line, the menu's Escape
+  key and the focus ring follow the report. Left for later: a 720 px photo variant and a metric-matched fallback
+  font (both half a day for a small gain).
 - The UX audit of the pages with photos (`docs/audits/round-5/ux.md`) found nothing that blocks a visitor and
   nineteen things to tidy; all the one-hour ones are done: the header's gold button and the hero's eyebrow now pass
   contrast; the full navigation waits until 860 px (the menu button serves tablets in portrait); anchors scroll
