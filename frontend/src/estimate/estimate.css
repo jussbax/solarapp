@@ -143,3 +143,5 @@
 @keyframes pld-scene-draw { 0% { opacity: 1; stroke-dashoffset: 1; } 70% { opacity: 1; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
 @keyframes pld-scene-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .pld-scene, .pld-scene * { animation: none !important; transition: none !important; } }
+/* on a phone the scene takes the result card's full width */
+@media (max-width: 560px) { .pld-card .pld-scene { margin-left: -20px; margin-right: -20px; border-radius: 0; } }

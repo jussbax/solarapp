@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { emit, isUnavailable, makeApi, readSource } from './api'
+import DayScene from './DayScene'
 import type { EstimateResult, EstimateStatus, Goal, Pattern, Town, Variant } from './types'
 
 const php0 = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '-' : `${v < 0 ? '-' : ''}₱${Math.abs(Math.round(v)).toLocaleString()}`)
@@ -445,6 +446,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
               {w}
             </div>
           ))}
+          <DayScene variant={shown} />
           <div className="pld-hero">
             {e ? (
               <>
