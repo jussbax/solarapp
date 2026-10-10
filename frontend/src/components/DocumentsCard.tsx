@@ -57,8 +57,8 @@ export default function DocumentsCard({
 }) {
   const plansUrl = urls.plans ?? urls.program.replace(/\/program\.pdf(\?.*)?$/, '/plans.pdf')
   const rows: DocRow[] = [
-    { key: 'report', name: 'Roof check PDF', what: 'For the customer: what the roof can hold and what it would make, with the plan of each face.', customer: true, needs: 'results', url: urls.report, action: 'Download' },
-    { key: 'card', name: 'Roof check card', what: 'Phone-sized image to send to the customer after the visit.', customer: true, needs: 'results', url: urls.card, inline: true, action: 'Open' },
+    { key: 'report', name: 'Roof check PDF', what: 'Internal: what the roof can hold and what it would make, with the plan of each face. The customer receives the proposal, never the readings.', customer: false, needs: 'results', url: urls.report, action: 'Download' },
+    { key: 'card', name: 'Roof check card', what: 'Internal: the visit on one phone-sized image for the office chat. Not for the customer.', customer: false, needs: 'results', url: urls.card, inline: true, action: 'Open' },
     { key: 'proposal', name: 'Proposal PDF', what: 'For the customer: the system, the price, savings, payment terms and the milestone schedule.', customer: true, needs: 'pricing', url: urls.proposal, action: 'Download' },
     { key: 'plans', name: 'Plans for the PEE, PDF', what: 'Internal: the A3 drawing set for the Professional Electrical Engineer to sign and seal: cover and general notes, the array layout of each face at scale, the equipment and circuit schedule, and what still waits on the datasheets.', customer: false, needs: 'pricing', url: plansUrl, action: 'Download' },
     { key: 'program', name: 'Program of works PDF', what: 'Internal: the Gantt chart, the hour-by-hour plan and the pickup list.', customer: false, needs: 'program', url: urls.program, action: 'Download' },

@@ -1863,3 +1863,16 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
 - Two defects fixed on the way: the first question card no longer slides in on load (the slide ran under the stage's
   clip and read as a clipped border in screenshots); the scene counts the hour before 6 AM as night, so a morning
   house never shows the evening caption at 5 AM.
+
+## The visit yields the proposal, never the readings
+
+- The owner (10 October), on the home page's "Your roof check: the same evening you get a card with what your roof
+  can hold and what it can make": "For the on-site assessment, what we will provide is the proposal, not the
+  assessment results because they might fish and give our assessment to other installers."
+- Customer documents are now the proposal alone. The roof check PDF and the roof check card stay in the app as
+  office documents (the documents card calls them internal; they no longer count as customer documents, so the
+  test-weather lock no longer applies to them). The home page's steps go estimate → visit → proposal → installation,
+  the "What you get on paper" list no longer carries the roof check, About's "one calculation" tick names the
+  estimate and the proposal, the widget's thank-you goes from the visit to the proposal, and the result's closing
+  block sells the proposal as what the visit leads to. The marketing kit's follow-up template for "the evening after
+  the roof visit" is gone; the privacy page still lists the roof check among the records the company keeps.

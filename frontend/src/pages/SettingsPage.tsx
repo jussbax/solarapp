@@ -338,7 +338,7 @@ function ProfilePage({
         {saveBar}
       </form>,
       <>
-        Who you are on the public estimate page, the proposal, the roof check and the card. Blank fields are left off the documents.
+        Who you are on the public estimate page, the proposal and the office documents. Blank fields are left off the documents.
         {!owner && ' Only the owner changes these.'}
       </>,
     )

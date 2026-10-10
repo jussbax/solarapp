@@ -2,14 +2,17 @@
 
 Working text for PL Development Inc. Everything here is a draft to edit in
 your own voice. Names, prices and dates in the examples are placeholders.
-The app's own copy (estimate page, proposal, roof check, card) already uses
-these words; keep the same names everywhere:
+The app's own copy (estimate page, proposal) already uses these words;
+keep the same names everywhere. The owner's rule (10 October 2026): after
+the visit the customer receives the proposal only, never the measurements
+(the roof check PDF and the card are office documents), so no message or
+page promises the roof check or what the roof holds before the proposal:
 
 | What the customer meets | Call it |
 |---|---|
 | The free result on the website | the estimate ("an estimate, not a quotation") |
-| The appointment at the house | the roof visit |
-| What they get after the visit (card and PDF) | your roof check |
+| The appointment at the house | the free on-site assessment (the roof and the energy audit in one visit) |
+| What they get after the visit | your proposal |
 | The sit-down over the bill and appliances | the energy audit |
 | The priced document | your proposal |
 | The company's net metering credit | credit on your bill |
@@ -19,15 +22,15 @@ these words; keep the same names everywhere:
 1. **Estimate** on pldevinc.com (four questions, one minute). Link every
    ad, post and reply to it with a tag: `pldevinc.com/estimate?utm_source=fb&utm_medium=ad&utm_campaign=<name>`.
 2. **Booking** on the same page. The thank-you says who will message and
-   when, and what follows (visit, card, audit, proposal). The booking lands
+   when, and what follows (the visit, then the proposal). The booking lands
    in the website's inbox (the CRM's data, owner-only on the server) and
    shows under Projects › "From a website booking" in the engineering app
    with the figures the visitor saw; "Start project" makes the project.
-3. **Roof visit** within the week, about an hour, free. Bring the test
-   panel and meters; send the roof check card the same evening.
-4. **Energy audit**: on the same visit when the house is small (ask for the
-   bill photo and the appliance list when booking), or a second visit.
-5. **Proposal** within two working days of the audit, valid 15 days.
+3. **On-site assessment** within the week, free: the test panel and meters
+   on the roof, and the bill and appliances at the table, in one visit (ask
+   for the bill photo and the appliance list when booking). The readings
+   stay in the office.
+4. **Proposal** within two working days of the visit, valid 15 days.
 6. **Signing** on Messenger (signed photo plus downpayment) or on a visit.
 
 Measure five numbers every week: estimates run, leads, visits booked and
@@ -55,14 +58,6 @@ Replace the parts in brackets. Short messages, one question each.
 > reply with a day and we'll come measure your roof. Your estimate was
 > [N] panels at about ₱[price]; the visit settles the exact figure.
 
-**Evening after the roof visit (with the card):**
-> Here is your roof check, [Name]. Your roof holds [N] panels; your
-> estimate said about [n]. Next step is the energy audit on [date, time];
-> please have your latest bill ready.
-
-([N] is the card's "panels fit"; [n] is the card's own line "Your estimate
-said about [n] panels and ₱[price]", printed when the record started as a
-website booking.)
 
 **Sending the proposal (the same five sentences as the proposal's "In
 short" block, so your message and the paper agree):**
