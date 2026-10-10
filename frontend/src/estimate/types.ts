@@ -26,6 +26,7 @@ export interface PublicProfile {
   warranty_inverter_years: string
   warranty_battery_years: string
   callback_promise: string
+  after_sales?: string
   privacy_note: string
 }
 

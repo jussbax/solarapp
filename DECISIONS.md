@@ -1651,7 +1651,15 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   (the page's own example says about two thirds), "lowest price per kWp", "keeps producing for twenty more"
   (no performance-warranty years entered), "the moment the grid drops" (no transfer time on file; now "by
   itself").
-- Still waiting on the owner before the next tier of copy: the inverter's switch-over time; who answers after
-  switch-on and how fast; the mounting system's wind rating and the PEE's design zone; the installation-day
-  outage length; the panel performance warranty years; one agreed sentence from a photographed family; the
-  towns; the before-and-after bills of the two early-2026 homes.
+- The owner's answers of 10 October, and what the pages do with them: the switch-over is "just milliseconds,
+  seamlessly instant" as far as the owner knows, so the pages keep "by itself" until the inverter's datasheet
+  gives the figure; after switch-on "Kevin answers during office hours; on Messenger we reply within the hour at
+  reasonable times" is a new profile field (`after_sales`, Settings › Website, the owner's sentence as the
+  default) printed on About and as a home-page question; for typhoons there is no rating on file, and the
+  installations "have withstood heavy wind loads", so the question answers with the fixing and the fact that
+  the oldest installation, from 2023, has stood through every typhoon season since; the panel performance
+  warranty is "standard 25 years" (the profile default is now 25; verify on the panel datasheet, and a
+  deployment that saved Settings before this keeps its own value until the owner enters 25); the two brown roofs
+  are in Pila, Laguna and the hip roof in Fairview, Quezon City, printed on the cards and the About caption with
+  the lead now "The town, never the address or the name." Still open: the installation-day outage length, one
+  agreed sentence from a photographed family, and the before-and-after bills of the two early-2026 homes.

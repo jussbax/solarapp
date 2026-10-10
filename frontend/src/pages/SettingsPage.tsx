@@ -13,8 +13,8 @@ import { useNarrow } from '../components/responsive'
 
 // the profile fields, grouped the way the owner reads them: profile, the contact line, the warranties, where to pay, then the website
 const WARRANTY_KEYS = ['warranty_workmanship_years', 'warranty_panels_product_years', 'warranty_panels_performance_years', 'warranty_inverter_years', 'warranty_battery_years']
-// website only (mirrors backend profile.WEBSITE_KEYS): messenger, facebook, brands, callback_promise, privacy_note
-const WEBSITE_KEYS = new Set(['messenger', 'facebook', 'brands', 'callback_promise', 'privacy_note'])
+// website only (mirrors backend profile.WEBSITE_KEYS): messenger, facebook, brands, callback_promise, after_sales, privacy_note
+const WEBSITE_KEYS = new Set(['messenger', 'facebook', 'brands', 'callback_promise', 'after_sales', 'privacy_note'])
 /** A hint that is an example goes in the field as its placeholder; a hint that is an instruction goes under it. Never both. */
 const isExample = (hint: string) => /^(e\.g\.|https?:)/i.test(hint)
 /** Links from before Settings was a menu (/settings#account, #pricing-labor) land on the page they meant. */
@@ -352,6 +352,7 @@ function ProfilePage({
         {field('facebook')}
         {field('callback_promise')}
         {field('brands', { className: 'full' })}
+        {field('after_sales', { className: 'full' })}
       </div>
       <h3>Privacy line</h3>
       <div className="form-grid">{field('privacy_note', { long: true, className: 'full', label: 'Under the booking form' })}</div>

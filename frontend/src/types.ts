@@ -832,6 +832,7 @@ export const PROFILE_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: 'warranty_battery_years', label: 'Battery warranty (years)' },
   { key: 'payment_details', label: 'Where to pay', hint: 'Bank or GCash details printed in the proposal acceptance block.' },
   { key: 'callback_promise', label: 'After a booking, you reach out', hint: 'e.g. within one working day' },
+  { key: 'after_sales', label: 'After switch-on: who answers, and how fast', hint: 'One sentence, printed on About and in the home page questions.' },
   { key: 'privacy_note', label: 'Privacy line under the booking form' },
 ]
 
