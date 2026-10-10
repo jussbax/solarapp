@@ -455,7 +455,7 @@ backend/solarapp/pricing/job.py       prices an assessment: BOM, manual edits, e
 backend/solarapp/pricing/store.py     materials tables and pricing settings in SQLite, workbook import
 backend/solarapp/pricing/datasheets.py  the maker's datasheet workbooks: the specs table, the three-tier match, the precedence, the report
 backend/solarapp/pricing/design_checks.py  the string design and the battery checks the datasheet figures unlock (round 12)
-backend/datasheets/                   the owner's three datasheet workbooks (the importer's default inputs)
+backend/datasheets/                   the owner's three datasheet workbooks as received, for the importer and the fixture
 backend/solarapp/pricing/program.py   program of works: schedule, hourly installation plan; the cashflow engine the finance module will read
 backend/solarapp/pricing/economics.py customer economics: bill before and after, payback, NPV, IRR
 backend/data_seed/                    bundled materials workbook, loaded on first start

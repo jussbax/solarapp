@@ -82,9 +82,9 @@ to today's behaviour when a figure is absent and saying so; hand-worked tests in
   `battery_ah_kwh`; the BOM notes say "datasheet" or "the rule's". The 10 × 630 W job on a 500 V inverter goes
   from one string to two (+1 DC breaker, +2 MC4 pairs, +25 m red and black).
 - 4.5: the quick estimate is untouched; `test_the_quick_estimate_price_with_and_without_the_datasheets` pins
-  ₱314,000 with the seed alone and states ₱287,000 with the fixture loaded (the battery choice moves to the 10 kWh
-  unit whose sheet figure covers the 139 A; the string count does not move, the default inverter having no maximum
-  PV voltage).
+  ₱314,000 with the seed alone and states ₱326,000 with the fixture loaded (after the review's battery ranking the
+  choice moves to the 15 kWh unit whose recommended rate covers the 139 A; as first built it was ₱287,000 on the JK
+  pack's maximum alone; the string count does not move, the default inverter having no maximum PV voltage).
 
 ## Step 4: the plan set, the Materials page, the Settings section
 
@@ -161,7 +161,7 @@ workbook: **rows read 210, matched 113 (6 of them held), specs-only 90, skipped 
   held with the three figures.
 - `--apply-held` applies both held kinds (the Solis grid-tie figures and a battery maximum above 1 C): the brief
   ties the second to "the owner's confirmation" without naming a switch, and one switch on the owner's word is
-  simpler than two.
+  simpler than two. The review added the per-row apply beside it (finding 5; Review fixes below).
 - The DC breaker: when the panel's Isc is on file and the role item's rating is below 1.5625 × Isc, the smallest
   "DC BREAKER" item that covers it is used and the warning says so (the brief's "pick `_by_amps` … and warn" read
   as substitute and warn); the pattern is a new setting, `roles.dc_breaker_pattern`, as the battery breaker's is.
@@ -175,9 +175,9 @@ workbook: **rows read 210, matched 113 (6 of them held), specs-only 90, skipped 
   (continued)", named on the cover); the set without the figures keeps its five sheets. The two Isc lines share one
   row (two lines in one cell) and the equipment rows print the figures without the file and date, which the cover
   carries.
-- Observed, not changed (outside the brief): the AC side's BOM note formats the breaker size without a guard, so a
-  unit whose output current exceeds the largest standard AC size (an 80 kW 3P unit picked per job) raises a
-  TypeError after its hard warning; the residential units never reach it.
+- Observed in step 4 (outside the brief) and fixed in the review round: the AC side's BOM note formatted the breaker
+  size without a guard, so a unit whose output current exceeds the largest standard AC size (an 80 kW 3P unit picked
+  per job) raised a TypeError after its hard warning; it now prints "above the largest standard size".
 
 ## What is left for step 5
 
@@ -190,3 +190,60 @@ Felicity 3P rows' kW figures; the cells that do not add up (6.8); and the two de
 units in the off-grid pool; a grid-tie unit on a net-metering job). Once the default inverter carries a maximum PV
 voltage the string check runs on every residential job and the plans print the string table on the owner's own
 figures.
+
+## Review fixes
+
+The engineer's review (`engineer-review.md`, 10 October 2026): verdict "merge with the fixes listed", every
+hand-worked figure confirmed, every departure accepted but the AC-note TypeError. Fixed on the branch in two commits
+(the code and its tests; the documents), the full suite (248 tests), `npm run build` and `npm run lint` (the seven
+baseline warnings) run before them.
+
+- Finding 1 (must fix): `apply_spec` leaves the grid flag unknown when the item's remark carries the
+  check-certification pattern `catalog.infer_grid_interactive` answers None for, with the note "grid flag left
+  unknown: the item's remark says to check the certification" on the report line and the row. FS-INV-002 stays
+  unknown; IAN-INV-022 (no such remark) takes the sheet's yes. Test in
+  `test_the_figures_on_the_items_and_the_precedence`.
+- Finding 2 (must fix): `DatasheetSpec.held_applied_at` (added to an older database at start-up by
+  `ensure_columns`). Set by `--apply-held` and the upload's tick on every held row, by the per-row apply on one; kept
+  through the upsert (a re-run never clears it; a row that stops holding figures does); honoured by `apply_spec`
+  (`apply_held = apply_held or bool(spec.held_applied_at)`), so the re-apply after a materials import and a plain
+  re-run keep the figure. The report line reads `matched CODE <- … (exact; held figures applied on <date>)` and the
+  summary's held count leaves out the applied rows; the page says "held figures applied on <date> on the owner's
+  word" and the editor's "held: X (not applied)" hint goes; a held figure the owner applied reads "datasheet" in the
+  provenance. "Withdraw" (`POST /api/pricing/datasheets/{id}/withdraw-held`) clears it and returns each held figure
+  still on the item to the remark's figure or blank. Test: `--apply-held`, then `import_workbook`, then a plain
+  re-run: FS-BAT-001 keeps 150 A and reports `matched`; withdrawn, it is 100 A and `held` again; one Solis row
+  applied alone keeps its 208 A through a materials import.
+- Finding 3 (the coordinator's call): `select_battery` ranks `(hard rank, recommended rank, cost, units)`, the
+  recommended rank 0 when units × `discharge_a_recommended` cover the current, 1 when the figure is unknown, 2 when
+  it falls short; the maximum alone never promotes a pack. The figures: the sample job (BC-PNL-004 × 8, 6 kW,
+  11.7 kWh) is FS-BAT-006 × 1 with the seed alone (unchanged) and FS-BAT-003 × 1 with the datasheets (150 A
+  recommended ≥ 139 A, `recommended_ok` true, no `battery_discharge_recommended` warning), not the JK OP-BAT-007 the
+  review saw; the website estimate is ₱314,000 with the seed (unchanged) and ₱326,000 with the datasheets (the review
+  saw ₱287,000 on the JK pack's maximum alone; the battery goes from 10.24 to 15 kWh). `QUICK_PRICE_WITH_DATASHEETS`
+  is 326000; the options list carries `recommended_ok`. Test
+  `test_the_automatic_battery_choice_ranks_the_recommended_rate_before_cost`.
+- Finding 4: `battery_class_mismatch(battery, inverter)` in `boq.py`; `select_battery` takes the inverter and skips a
+  candidate whose class is known and differs from the port's (the fine 12/24/48/HV class from the voltages when both
+  are on file, else the coarse LV/HV from the typed class). On the 80 kW HV unit the LV packs are gone and the Deye
+  HV packs offered; on the eco-hybrid no HV pack. A per-job pick keeps the hard warning. Test
+  `test_a_pack_of_another_class_than_the_port_is_never_offered`.
+- Finding 5: `POST /api/pricing/datasheets/{id}/apply-held` and `…/withdraw-held` (owner only); the Materials page
+  lists the held rows per category with the held figures, the state (held, or applied on a date) and the two buttons.
+- Finding 6 (must fix): `_size_txt` in `boq.py` prints "above the largest standard size" where no standard breaker
+  covers the current; the 80 kW unit picked per job gives the hard `ac_circuit` warning and a priced BOM.
+- Finding 7: `battery_inputs_verify` prints "(X A each)" only when the figure is on file.
+- Finding 8: the last sheet's labels lose their article ("the panel's temperature coefficient of Voc; the
+  inverter's MPPT window (low), MPPT window (high)").
+- Finding 9: `inverter_type` and `battery_class` are `Literal` enumerations on `MaterialItemIn` and
+  `MaterialItemPatch` (the values of the page's selects); another word is a 422.
+- Finding 10: the page's provenance compares the grid flag and the certificate against `infer_grid_interactive` and
+  `certifications_in_remarks`, so a flag read from the name says "remarks".
+- Finding 11: `add_item_from_spec` takes the maker as the supplier only when a `MaterialSupplier` of that name
+  exists (case-insensitive: "BLUE CARBON" is Blue Carbon), else blank; the page's "Add as item" gained a supplier
+  select and its message says when the supplier is still to be typed.
+- Finding 12: the dead `taken` comprehension is a `taken.pop(...)` before the code is cleared; the README's layout
+  line reads "the owner's three datasheet workbooks as received, for the importer and the fixture".
+- The importer on the owner's three workbooks on a fresh scratch database after the fixes: the same counts (210 rows,
+  113 matched including 6 held, 90 specs-only, 7 skipped), FS-INV-002's line carrying the new note; after
+  `--apply-held` a plain re-run reports the six as matched with "held figures applied on 2026-10-10" and no change.

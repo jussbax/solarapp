@@ -1943,7 +1943,10 @@ owner's answers to its section 6 (`docs/audits/round-12/implementation.md` has w
   carries a notice the Materials page shows.
 - Held. The Solis grid-tie 1P rows carry battery figures a grid-tie unit cannot have (brief 6.4); a battery maximum
   above 1 C would lift a hard block if it were a peak figure (6.8; the Felicity 100 Ah base row's 150 A against the
-  item's 100 A). Both stay on the specs row and go on the item only with `--apply-held`, on the owner's word.
+  item's 100 A). Both stay on the specs row and go on the item only on the owner's word: `--apply-held` (or the
+  upload's tick) for every held row at once, or "Apply held figures" per row on the Materials page, since the answers
+  to 6.4 and 6.8 may differ. The word is kept on the row (`held_applied_at`): a plain re-run, a materials re-import and
+  the page all keep the figure, and "Withdraw" takes it back (the item returns to its remark's figure, or to blank).
 - The checks, in the brief's order, each falling back to the rule that stood when a figure is absent and saying so:
   the battery circuit runs on the larger of the inverter's discharge and charge currents (the eco-hybrid 139 A, its
   breaker minimum 173.75 A, the same 250 A breaker and 70 mm² pair; the kW fallback over the battery's own nominal
@@ -1981,8 +1984,8 @@ owner's answers to its section 6 (`docs/audits/round-12/implementation.md` has w
   rows without a priced item (with "Link to item…" and "Add as item": an inactive item at list price 0, never priced
   at zero) and the items without a datasheet. The website estimate is untouched: the same generator and the same
   catalogue; its rounded price with the seed alone is pinned (₱314,000 on the sample request) and the test states
-  the figure with the datasheets loaded (₱287,000: the battery choice moves to the unit whose sheet figure covers the
-  eco-hybrid's 139 A).
+  the figure with the datasheets loaded (₱326,000: the battery choice moves to the 15 kWh unit whose recommended rate
+  covers the eco-hybrid's 139 A; the ranking is the review's, below).
 - What waits on the owner (section 6 of the brief): the six panel rows whose brand column and model text disagree
   (matched on the maker in the text, both stored); the cells marked Verify or with an asterisk; the kW figures in the
   Felicity 3P rows' charge-current column; the Solis grid-tie rows' battery figures; the missing temperature
@@ -1992,3 +1995,29 @@ owner's answers to its section 6 (`docs/audits/round-12/implementation.md` has w
   base row, the HV-typed 51.2 V row, the 102.4 V pack with a 230 V ceiling); and the two decisions the type column
   raises (the One Solar wall-type units now in the off-grid pool; whether a pure grid-tie unit may serve a
   net-metering job without a battery).
+- After the engineer's review (`docs/audits/round-12/engineer-review.md`, 10 October 2026; verdict "merge with the
+  fixes listed"; what changed is in `implementation.md` under "Review fixes"):
+  - The automatic battery choice ranks the recommended rate before cost. Within the hard rank that stood (the BMS
+    maximum covers the inverter's current; unknown; falls short) a pack whose recommended continuous rate covers the
+    current ranks above one whose recommended figure is unknown, and that above one that passes only on its maximum;
+    the maximum alone never promotes a pack. Otherwise the import rewards the sheet with the widest spread between
+    its two columns (the JK rows: 200 A maximum against 80 A recommended) and the bank runs at 174 % of the
+    recommended rate with a warning on every such job. The sample job's battery is FS-BAT-006 with the seed alone
+    (150 A maximum from its remark, no recommended figure; nothing moves there) and FS-BAT-003 with the datasheets
+    (150 A recommended ≥ 139 A), not the JK pack the review saw; the website estimate with the datasheets is
+    ₱326,000 against ₱314,000 with the seed (the review saw ₱287,000 on the JK pack's maximum alone). A pack with no
+    datasheet row (FS-BAT-006, the packages' 11.7 kWh unit) sits in the unknown tier until its row is linked or its
+    recommended rate typed; the BOQ's battery options carry `recommended_ok` beside `current_ok`.
+  - A pack of another class than the inverter's port is never offered by the automatic choice: the pack's class from
+    `battery_class`, else from its nominal voltage; the port's from `battery_class`, else from its maximum charge
+    voltage; judged only when both are known (a 24 V pack on a 48 V port, an LV pack on an HV port and the reverse).
+    A per-job pick keeps the hard warning.
+  - The sheet's generic type never fills the grid flag on an item whose remark says to check the certification: the
+    remark is the owner's note about this unit and the catalogue answers "unknown" for it on purpose, so FS-INV-002
+    stays unknown and is offered last on a net-metering job; the report says why.
+  - "Add as item" takes the maker as the supplier only when a supplier of that name is on the SUPPLIERS sheet (Blue
+    Carbon); else the owner picks one on the page or leaves it blank. The type words (`inverter_type`,
+    `battery_class`) are enumerations on the API. A grid flag read from the item's name says "remarks" on the page,
+    not "typed".
+  - The AC note for a unit whose output exceeds the largest standard breaker size prints "above the largest
+    standard size" beside the hard warning instead of failing the pricing (observed in step 4, fixed here).
