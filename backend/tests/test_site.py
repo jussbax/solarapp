@@ -223,8 +223,8 @@ def test_net_metering_page_names_its_example_and_four_tiles():
     assert "three quarters" not in page and "about 3 years" not in page
 
 
-def test_net_metering_page_figures_match_the_engine():
-    """Runs the page's own example through the engine on the real weather (SOLARAPP_DATA_DIR, or <repo>/data); skipped on test weather."""
+def _engine_example() -> dict:
+    """The page's own example through the engine on the real weather (SOLARAPP_DATA_DIR, or <repo>/data); skips on test weather."""
     import os
 
     from solarapp.core import quick
@@ -240,7 +240,11 @@ def test_net_metering_page_figures_match_the_engine():
         pytest.skip("the page's figures are checked against the real PVGIS weather only")
     quick._per_kwp_cache.clear()   # keyed by cell id: the synthetic datasets of the other tests share ids with the real one
     imp = read_workbook(ROOT / "backend" / "data_seed" / "PLD_Materials_DB.xlsx")
-    q = quick_estimate(QuickRequest(**NET_METERING_EXAMPLE), pvgis, PricingContext(imp.catalog, imp.config))
+    return quick_estimate(QuickRequest(**NET_METERING_EXAMPLE), pvgis, PricingContext(imp.catalog, imp.config))
+
+
+def test_net_metering_page_figures_match_the_engine():
+    q = _engine_example()
     big = {lab: val for val, lab in _tiles()}
     assert big["7 panels"] == f"{q['system']['kwp']:.1f} kWp" and q["system"]["panels"] == 7
     assert big["installed, VAT included"] == f"about ₱{q['price']['total']:,.0f}"
@@ -248,3 +252,29 @@ def test_net_metering_page_figures_match_the_engine():
     assert big["pays for itself"] == "under 4 years" and e["payback_years"] < 4
     cut = (1 - e["bill_after_monthly"] / e["bill_before_monthly"]) * 100
     assert big["off the bill"] == "about two thirds" and 60 <= cut <= 72
+
+
+YEAR_WORDS = {2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
+
+
+def test_home_hero_figures_match_the_engine():
+    """The home page's hook is the same example: the bill before and after to the hundred peso, the payback to the year, with the
+    house, the kWh and "panels only" beside them; the net-metering lead and the ad line in docs/marketing.md carry the same figures,
+    so a price or tariff change fails here instead of leaving a stale hook on the hero."""
+    e = _engine_example()["economics"]
+    before = f"₱{round(e['bill_before_monthly'] / 100) * 100:,}"
+    after = f"₱{round(e['bill_after_monthly'] / 100) * 100:,}"
+    years = round(e["payback_years"])
+    assert abs(e["payback_years"] - years) <= 0.5
+    hook = f"A {before} bill, down to about {after}"
+    home = (SITE / "pages" / "index.html").read_text(encoding="utf-8")
+    assert re.search(r"<h1>(.*?)</h1>", home).group(1) == f"{hook}."
+    assert f"<!-- title: {hook} · " in home and f"<!-- description: {hook}: our estimate for a house in Tanauan using about 500 kWh a month, panels only, paid back in about {YEAR_WORDS[years]} years." in home
+    lead = re.search(r'<p class="lead">(.*?)</p>', home).group(1)
+    assert lead.startswith("Our estimate for a house in Tanauan using about 500 kWh a month, panels only.")
+    assert f"Pays for itself in about {YEAR_WORDS[years]} years." in lead
+    assert "your bill will" not in home.lower() and "!" not in re.search(r"<h1>.*?</h1>\s*<p class=\"lead\">.*?</p>", home, re.S).group(0)
+    net_metering = (SITE / "pages" / "net-metering.html").read_text(encoding="utf-8")
+    assert f"In our example below, a {before} bill comes down to about {after}, about two thirds off." in net_metering
+    marketing = (ROOT / "docs" / "marketing.md").read_text(encoding="utf-8")
+    assert f"{hook}: our estimate for a house in" in marketing and f"{hook}. Yours takes a minute." in marketing

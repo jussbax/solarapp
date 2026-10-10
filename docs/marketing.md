@@ -105,13 +105,19 @@ the town name; no stock images.
 
 2. **Bill swap (net metering, strongest numbers).** ₱5,000 to ₱10,000
    bills, no battery.
-   > A ₱5,000 bill becomes about ₱1,500, and the system pays for itself in
-   > about 4 years, then runs for 20 more. See your own number in one
-   > minute, free.
+   > A ₱6,000 bill, down to about ₱1,900: our estimate for a house in
+   > Tanauan using about 500 kWh a month, panels only, paid back in about
+   > four years. See your own number in a minute, free.
    Image: a bill with the before and after circled.
-   The figures are the engine's for a ₱5,000 bill in Tanauan, mostly
-   evening, net metering (9 Oct 2026: ₱5,003 → about ₱1,460, 4.0 years);
-   run the estimate again on the day you post the ad and keep "about".
+   The figures are the engine's for a house in Tanauan using 500 kWh a
+   month, mostly evening, net metering without a battery (10 Oct 2026:
+   ₱6,003 → about ₱1,893 a month, 3.8 years, 7 panels, ₱193,000): the same
+   run as the net-metering page's tiles and the home page's h1, and
+   `backend/tests/test_site.py` pins the hero, the net-metering lead and
+   this line to it. When the price list or the tariff moves, re-run it and
+   update the hero, the home title and description, the net-metering lead
+   and tiles and this line together; run it again on the day you post the
+   ad and keep "about".
 
 3. **Measured roof (why us).** Word-of-mouth lookalikes.
    > Other installers quote from a satellite photo. We put a test panel
@@ -119,11 +125,11 @@ the town name; no stock images.
    > quote exactly. Start with the one-minute estimate.
    Image: the installer on a roof with the meter in hand.
 
-Landing-page headline options for the estimate page (the page's own
-heading is "What would your bill be with solar?"):
+Landing-page headline options for the estimate page (the estimate page's
+own heading is "Your new bill is a minute away."):
 
-- "See what solar would do to your bill. Four questions, one minute, free."
-- "Your ₱4,000 bill, down to a few hundred. Find out in a minute."
+- "A ₱6,000 bill, down to about ₱1,900. Yours takes a minute."
+- "Your new bill is a minute away."
 
 ## Offer notes
 
