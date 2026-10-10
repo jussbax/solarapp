@@ -133,8 +133,7 @@ export default function Wizard(p: WizardProps) {
     p.setPattern(pt)
     setPatternDone(true)
     window.clearTimeout(pending.current)
-    // the last answer: the choice lands, then the estimate runs (the button under it does the same)
-    if (p.ready && p.enabled) pending.current = window.setTimeout(() => latest.current.run(), LAND_MS)
+    // the last answer lands; the visitor presses "Show my estimate" when ready
   }
   const enterGoesNext = (ev: KeyboardEvent<HTMLInputElement>) => {
     if (ev.key !== 'Enter') return
