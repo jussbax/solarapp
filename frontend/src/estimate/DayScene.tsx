@@ -141,26 +141,6 @@ const flowOf = (r: TypicalHour, f: Flow): number =>
 const rateOf = (kw: number) => (kw < MIN_KW ? 0 : Math.min(MAX_RATE, kw / KW_PER_DOT))
 
 const clock = (h: number) => (h === 0 ? '12 MN' : h === 12 ? '12 NN' : h < 12 ? `${h} AM` : `${h - 12} PM`)
-const kw = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(1))
-
-type Part = { t: string; b?: boolean }
-/** The hour's figures in the customer's words: "Sun 2.8 kW → house 1.1 kW · battery +1.2 kW · to the grid 0.5 kW". */
-function readout(r: TypicalHour): Part[] {
-  const parts: Part[][] = []
-  if (r.production_kw >= MIN_KW) {
-    parts.push([{ t: 'Sun ' }, { t: `${kw(r.production_kw)} kW`, b: true }, { t: ' → house ' }, { t: `${kw(r.direct_kw)} kW`, b: true }])
-    if (r.charge_kw >= MIN_KW) parts.push([{ t: 'battery ' }, { t: `+${kw(r.charge_kw)} kW`, b: true }])
-    if (r.export_kw >= MIN_KW) parts.push([{ t: 'to the grid ' }, { t: `${kw(r.export_kw)} kW`, b: true }])
-    if (r.discharge_kw >= MIN_KW) parts.push([{ t: 'battery ' }, { t: `${kw(r.discharge_kw)} kW`, b: true }, { t: ' → house' }])
-    if (r.import_kw >= MIN_KW) parts.push([{ t: 'grid ' }, { t: `${kw(r.import_kw)} kW`, b: true }, { t: ' → house' }])
-  } else {
-    if (r.discharge_kw >= MIN_KW) parts.push([{ t: 'Battery ' }, { t: `${kw(r.discharge_kw)} kW`, b: true }, { t: ' → house' }])
-    if (r.import_kw >= MIN_KW) parts.push(parts.length ? [{ t: 'grid ' }, { t: `${kw(r.import_kw)} kW`, b: true }] : [{ t: 'Grid ' }, { t: `${kw(r.import_kw)} kW`, b: true }, { t: ' → house' }])
-    if (!parts.length) parts.push([{ t: 'House ' }, { t: `${kw(r.load_kw)} kW`, b: true }])
-  }
-  return parts.flatMap((p, i) => (i ? [{ t: ' · ' }, ...p] : p))
-}
-/** One line per phase, read off the row: the family's day, with what the sun, the battery and the grid are doing in that hour. */
 function caption(day: TypicalHour[], h: number, hasBattery: boolean): string {
   const r = day[h], next = day[(h + 1) % 24]
   const loads = day.map((x) => x.load_kw)
@@ -463,7 +443,6 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
   }, [running, variant])
 
   const row = day[hour]
-  const parts = readout(row)
   const cap = caption(day, hour, hasBattery)
   const progressAt = (hour - START_HOUR + 24) % 24
   const building = phase === 'build'
@@ -621,7 +600,7 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
             ))}
           </g>
 
-          {/* the flow's words at the path ends, fading with the flow (the readout carries them on a phone) */}
+          {/* the flow's words at the path ends, fading with the flow (hidden on a phone; the caption tells the hour's story) */}
           <text className={'pld-scene-flow' + on(sunOn)} x={SOURCE.x} y="237" textAnchor="middle" fill="#3a3028">from the panels</text>
           <text className={'pld-scene-flow' + on(live('house') || live('import'))} x="238" y="318" textAnchor="end" fill="#3a3028">to the house</text>
           <text className={'pld-scene-flow' + on(live('export') || live('import'))} x="650" y="374" textAnchor="middle" fill="#d8d8d2">{live('import') && !live('export') ? 'from the grid' : 'to the grid'}</text>
@@ -650,17 +629,9 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
 
       <div className="pld-scene-strip">
         {building ? (
-          <>
-            <div className="pld-scene-read"><b className="pld-scene-hour">Dawn</b> · your house, fitted out piece by piece</div>
-            <p className="pld-scene-cap">Then an ordinary day, hour by hour.</p>
-          </>
+          <p className="pld-scene-cap"><b className="pld-scene-hour">Dawn</b> · Your house, fitted out piece by piece. Then an ordinary day, hour by hour.</p>
         ) : (
-          <>
-            <div className="pld-scene-read">
-              <b className="pld-scene-hour">{clock(hour)}</b> · {parts.map((p, i) => (p.b ? <b key={i}>{p.t}</b> : <span key={i}>{p.t}</span>))}
-            </div>
-            <p className="pld-scene-cap">{cap}</p>
-          </>
+          <p className="pld-scene-cap"><b className="pld-scene-hour">{clock(hour)}</b> · {cap}</p>
         )}
       </div>
       <div className="pld-scene-chips">
