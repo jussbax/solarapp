@@ -59,17 +59,19 @@ def test_plans_build_for_the_reference_record_on_a3(client):
     pages = _pages(_pdf_text(r.content))
     faces_with_panels = [g for g in res["geometry"] if g["panels"]]
     assert len(faces_with_panels) == 2
-    # cover, one layout per face with panels, the schedule, the last sheet
-    assert len(pages) == 1 + len(faces_with_panels) + 2 == 5
+    # cover, one layout per face with panels, the mounting detail (round 13, item 3), the schedule, the last sheet
+    assert len(pages) == 1 + len(faces_with_panels) + 3 == 6
     # the title block on every sheet: company, project, sheet n of N, the sheet size and the signature block from the profile
     for i, page in enumerate(pages, start=1):
         assert "Test Solar" in page and "PV system plans: Maria Santos" in page and f"Project P-" in page
-        assert f"Sheet {i} of 5" in page and "A3 landscape, 420 × 297 mm" in page
+        assert f"Sheet {i} of 6" in page and "A3 landscape, 420 × 297 mm" in page
         # round 13: the signature block's six lines from the profile; a field the profile does not hold is a blank line, never invented
         assert "Signed and sealed by the Professional Electrical Engineer" in page and "Juan dela Cruz, PEE" in page and "PRC No. 0012345" in page
         assert "PTR No. " + BLANK in page and "TIN " + BLANK in page
         assert "Owner: Maria Santos" in page and "Rev. 0: first issue" in page   # the owner and the revision line on every sheet
-    cover, main, kitchen, schedule, last = pages
+    cover, main, kitchen, mounting, schedule, last = pages
+    assert "Mounting detail and uplift check" in mounting and "Detail A: rib-type metal sheet" in mounting and "Detail B: corrugated sheet" in mounting
+    assert "NOT CHECKED" in mounting and "Scale 1:5 on A3" in mounting   # nothing typed: the chain prints its blanks, never a figure
     assert "Cover and general notes" in cover and "General notes" in cover and "Sheets in this set" in cover
     assert "Hybrid: grid-interactive with a battery" in cover and "Main roof (south)" in cover and "Kitchen roof (east)" in cover
     assert "to be completed by the signing engineer" in cover and "PEC" not in cover   # no clause numbers, no standards named by the app
@@ -96,8 +98,9 @@ def test_plans_print_blank_lines_where_the_profile_is_empty():
                "sizing": {"kind": "net_metering", "panels": 0, "kwp": 0}, "audit": {"appliances": []}}
     pdf = build_plans_pdf(doc, results, {"company_name": "", "pee_name": "", "pee_license": ""}, items={}, config={}, project_no="P-2026-0001")
     pages = _pages(_pdf_text(pdf))
-    assert len(pages) == 3   # cover, the schedule, the last sheet
-    assert BLANK + ", PEE" in pages[0] and "PRC No. " + BLANK in pages[0] and "Sheet 1 of 3" in pages[0]
+    assert len(pages) == 4   # cover, the mounting detail (the standard details draw without a check), the schedule, the last sheet
+    assert BLANK + ", PEE" in pages[0] and "PRC No. " + BLANK in pages[0] and "Sheet 1 of 4" in pages[0]
+    assert "The uplift check is not in these results" in pages[1]
     assert "Rev. 0" in pages[0] and "Rev. 0: first issue" not in pages[0]   # no issue date outside the API: the title block reads "Rev. 0" as before the log existed
     assert "The energy audit has no appliances yet" in pages[-1]
 

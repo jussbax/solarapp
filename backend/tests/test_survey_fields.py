@@ -21,7 +21,8 @@ SERVICE = {
                                         {"no": "2", "description": "aircon, master bedroom", "breaker_a": 32, "poles": 2, "wire_mm2": 5.5, "conduit_mm": 25}],
 }
 CONSTRUCTION = {"roof_type": "rib_metal", "sheet_profile": "rib 30 mm, pitch 250 mm", "purlin_material": "steel_c", "purlin_section": "C 100 × 50 × 1.5", "purlin_thickness_mm": 1.5,
-                "purlin_spacing_m": 0.6, "rafter_spacing_m": None, "mean_roof_height_m": 5.0, "condition": "sound, repainted 2024", "condition_flag": "sound"}
+                "purlin_spacing_m": 0.6, "rafter_spacing_m": None, "mean_roof_height_m": 5.0, "condition": "sound, repainted 2024", "condition_flag": "sound",
+                "fastener_pullout_kn": None, "fastener_pullout_source": ""}   # item 3's two fields: the fastener's figure for this roof, blank until typed
 SITE = {
     "lot_polygon": [[14.2334, 121.3644], [14.2334, 121.3646], [14.2336, 121.3646], [14.2336, 121.3644]],
     "house_polygon": [[14.23345, 121.36445], [14.23345, 121.36455], [14.23355, 121.36455], [14.23355, 121.36445]],
@@ -112,8 +113,9 @@ def test_a_face_offset_is_a_pair_of_metres(client):
 
 
 def test_the_plan_set_and_the_quick_estimate_are_unchanged_by_the_fields(client):
-    """Nothing on a sheet reads the fields yet (step 1): the surveyed record builds the same five sheets as the plain one;
-    the website estimate's document carries the blank defaults and no new code path reads them."""
+    """The surveyed record builds the same six sheets as the plain one (the mounting detail of item 3 reads the roof construction
+    and prints "not checked" without the wind figures; the service and site fields reach no sheet yet); the website estimate's
+    document carries the blank defaults and no new code path reads them."""
     import shutil
     import subprocess
 
@@ -126,5 +128,5 @@ def test_the_plan_set_and_the_quick_estimate_are_unchanged_by_the_fields(client)
     if shutil.which("pdftotext"):
         text = subprocess.run(["pdftotext", "-layout", "-", "-"], input=r.content, capture_output=True, check=True).stdout.decode()
         pages = [p for p in text.split("\f") if p.strip()]
-        assert len(pages) == 5 and "FLECO" not in text and "busbar" not in text.lower()
+        assert len(pages) == 6 and "FLECO" not in text and "busbar" not in text.lower()
     assert AssessmentDoc().service == ServiceEntrance() and AssessmentDoc().site == SitePlan()

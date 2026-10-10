@@ -256,3 +256,61 @@ def test_the_pila_record_through_the_api(client):
     import solarapp.core.quick as quick
     assert "uplift" not in Path(quick.__file__).read_text(encoding="utf-8")
 
+def _pdf_pages(pdf: bytes) -> list[str]:
+    import shutil
+    import subprocess
+
+    if not shutil.which("pdftotext"):
+        pytest.skip("pdftotext is not installed")
+    text = subprocess.run(["pdftotext", "-layout", "-", "-"], input=pdf, capture_output=True, check=True).stdout.decode()
+    return [p for p in text.split("\f") if p.strip()]
+
+
+def test_the_sheet_prints_the_chain_with_its_sources_and_the_verdict(client):
+    """The mounting detail sheet (brief 3.3 to 3.6): the two details, the callouts, the chain per face with every typed figure
+    beside its source, the labelled assumptions, PASS; FAIL in the fail case; NOT CHECKED with the blanks when nothing is
+    typed, and the last sheet then lists the inputs; the wind-zone file through the API."""
+    flat = lambda s: " ".join(s.split())  # noqa: E731
+    zones = client.get("/api/pricing/wind-zones").json()
+    assert set(zones["provinces"]) == set(provinces()) and zones["provinces"]["Laguna"] == {"zone": "", "v_kmh": None, "source": ""}
+    assert client.post("/api/pricing/config/reset").status_code == 200
+    aid = client.post("/api/assessments", json=deepcopy(PILA_DOC)).json()["id"]
+    assert client.post(f"/api/assessments/{aid}/compute").status_code == 200
+    pages = _pdf_pages(client.get(f"/api/assessments/{aid}/plans.pdf").content)
+    sheet = next(p for p in pages if "Standard details" in p)
+    assert "Detail A: rib-type metal sheet on steel C-purlins, 1:5" in sheet and "Detail B: corrugated sheet on purlins, 1:5" in sheet
+    assert "NOT CHECKED" in sheet and "not set for Laguna" in flat(sheet) and "not typed on the project" in flat(sheet)
+    assert "Plan key" in sheet and "Rail: 12 pc" in flat(sheet) and "L-foot: 36 pc" in flat(sheet) and "(not checked)" in sheet
+    assert "Uplift check inputs" in flat(pages[-1]) and "Not checked: basic wind speed V" in flat(pages[-1])
+    assert "): feet on every" not in flat(sheet) and "FAIL: even" not in flat(sheet)
+    # the figures typed as test inputs (never the app's): PASS with every source printed, the feet on every 2nd purlin, 24 L-feet
+    cfg = client.get("/api/pricing/config").json()
+    cfg["mounting"].update({"fastener_description": "5.5 × 75 mm screw, EPDM washer (test)", "fastener_pullout_kn": 0.5, "fastener_pullout_source": "test: the screw maker's sheet",
+                            "foot_spacing_max_m": 1.2, "foot_spacing_max_source": "test: the rail manual", "kd": 0.85, "kd_source": "test: Table 207A.6-1",
+                            "exposure_source": "test: Table 207A.9-1", "wind_zones": {"Laguna": {"zone": "II", "v_kmh": 200, "source": "test: Fig. 207A.5-1A"}}})
+    cfg["mounting"]["exposures"]["B"] = {"alpha": 7.0, "zg_m": 365.76}
+    assert client.put("/api/pricing/config", json=cfg).status_code == 200
+    doc = client.get(f"/api/assessments/{aid}").json()["doc"]
+    doc["wind"] = {"gcp_zone3": -1.8, "gcp_source": "test: Fig. 207E.4-2A"}
+    doc["roof_default"] = CONSTRUCTION
+    assert client.post(f"/api/assessments/{aid}/compute", json=doc).status_code == 200
+    pages = _pdf_pages(client.get(f"/api/assessments/{aid}/plans.pdf").content)
+    sheet = flat(next(p for p in pages if "Standard details" in p))
+    # pdftotext's layout mode interleaves the columns' lines, so each fragment is one line's worth
+    for text in ("200 km/h = 55.56 m/s; zone II, Laguna", "source: test: Fig. 207A.5-1A", "B (assumption: exposure B, a town site", "alpha 7, zg 365.76 m", "207A.9-1)",
+                 "0.576", "926 N/m²", "0.85 (source: test: Table 207A.6-1)", "-1.8 (assumption: the worst typed zone's figure (zone 3, -1.8)", "source: test: Fig. 207E.4-2A",
+                 "1.667 kPa", "PASS", "every 2nd purlin (1.2 m)", "24 feet, 48 screws", "the BOQ rule's 36", "S = 1.2 m (every 2nd purlin)", "5.5 × 75 mm screw, EPDM washer (test)",
+                 "C 100 × 50 × 1.5, steel C-purlin", "1 (assumption: 1.0, no hill or ridge"):
+        assert text in sheet, text
+    assert "inputs blank (the blank lines above" not in sheet and "FAIL: even" not in sheet and "Uplift check inputs" not in flat(pages[-1])
+    cover = flat(pages[0])
+    assert "3. Mounting." in cover and "PASS, 24 L-feet on the BOM" in cover
+    # a 0.1 kN figure fails even with a foot on every purlin: FAIL on the sheet, the rule's count on the BOM, nothing blocks
+    cfg["mounting"]["fastener_pullout_kn"] = 0.1
+    assert client.put("/api/pricing/config", json=cfg).status_code == 200
+    res = client.post(f"/api/assessments/{aid}/compute", json=client.get(f"/api/assessments/{aid}").json()["doc"]).json()["results"]
+    assert res["pricing"]["choices"]["uplift"]["status"] == "fail" and res["pricing"]["design_blocked"] == []
+    assert next(l for l in res["pricing"]["lines"] if l["role"] == "l_foot")["qty"] == 36
+    sheet = flat(next(p for p in _pdf_pages(client.get(f"/api/assessments/{aid}/plans.pdf").content) if "Standard details" in p))
+    assert "FAIL: even a foot on every purlin" in sheet and "ratio 3.20" in sheet and "L-feet on the BOM: 36" in sheet
+    client.post("/api/pricing/config/reset")

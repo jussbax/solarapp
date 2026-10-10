@@ -31,6 +31,7 @@ from ..profile import PEE_KEYS, PROFILE_FIELDS
 from ..schemas import AssessmentDoc
 from . import brand
 from .drawings import fit_scale, plan_drawing
+from .plans_mounting import mounting_sheet
 
 PAGE_W, PAGE_H = landscape(A3)              # 1190.55 × 841.89 pt: 420 × 297 mm
 SHEET_SIZE = "A3 landscape, 420 × 297 mm"
@@ -638,9 +639,13 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
             l, r, _ = _balance(part)
             sched_pages.append((l, r))
 
+    # the mounting detail and the uplift check (round 13, item 3): its own module; one sheet after the layouts, before the schedules
+    mounting = mounting_sheet(doc, results, cfg, items, {"h1": h1, "h2": h2, "body": body, "small": small, "cell": cell, "cellb": cellb, "grid": grid,
+                                                          "kv_style": kv_style, "two_col": two_col, "P": P, "kv": kv, "table": table})
+
     # ---------------- sheet 1: cover and general notes
     sched_names = ["Equipment and circuit schedule"] + (["Equipment and circuit schedule (continued)"] if len(sched_pages) > 1 else [])
-    sheet_names = ["Cover and general notes"] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels] + sched_names + ["Not yet in this set; schedule of loads"]
+    sheet_names = ["Cover and general notes"] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels] + [mounting.name] + sched_names + ["Not yet in this set; schedule of loads"]
     story: list = [SheetMarker(sheet_names[0])]
     story.append(Paragraph(f"PV system plans: {escape(doc.customer_name or BLANK)}", h1))
     story.append(Paragraph(f"{escape(doc.address or BLANK)} · pin {doc.lat:.5f}, {doc.lon:.5f} · {escape(KIND_LABEL.get(kind, 'solar PV system'))}", body))
@@ -706,7 +711,9 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     # general notes: facts the app holds, nothing else
     inset = float(doc.setback_m or 0) / 2.0
     rail_l, lfr = roles.get("rail_length_m"), roles.get("l_feet_per_rail")
-    fpf = roles.get("fasteners_per_l_foot")
+    fpf = (cfg.get("mounting") or {}).get("screws_per_foot")
+    uplift = choices.get("uplift") or {}
+    lfoot_l = _line(by_role, "l_foot")
     notes = [
         f"<b>1. Setback and spacing.</b> Panels are kept {inset:g} m from every edge of a face (a setback of {_g(doc.setback_m)} m per dimension on this project) and "
         + (f"{_g(doc.gap_m)} m apart along a row." if float(doc.gap_m or 0) > 0 else "touching along a row, the mid-clamps between them.")
@@ -714,9 +721,11 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         f"<b>2. Panels.</b> {panels_n} panels of {_rating(panel_l, 'W')} are laid as the layout sheets show, numbered from the eave up and left to right on each face; "
         f"solid panels belong to this system, dashed ones are positions the faces could still hold. Panel size {_g(faces_with_panels[0].get('panel_length_m') if faces_with_panels else None)} × "
         f"{_g(faces_with_panels[0].get('panel_width_m') if faces_with_panels else None)} m from the materials list.",
-        f"<b>3. Mounting (the BOM's rule).</b> Each row sits on two rail lines of {_g(rail_l, 'm')} rails, {_g(lfr)} L-feet per rail, {_g(fpf)} fasteners per L-foot into the purlins "
-        f"(verify with the rail maker's manual and the roof sheet); end clamps 4 per row, mid-clamps 2 per panel gap, a splice at every rail joint. "
-        f"The roof's construction, the purlin spacing and the uplift check are not in this set: {TO_COMPLETE}.",
+        f"<b>3. Mounting.</b> Each row sits on two rail lines of {_g(rail_l, 'm')} rails; {_g(lfr)} L-feet per rail by the BOM's rule, {_g(fpf)} screws per L-foot into the purlins "
+        f"(an assumption until the owner confirms the set); end clamps 4 per row, mid-clamps 2 per panel gap, a splice at every rail joint. The standard details, the roof's construction "
+        f"as surveyed and the uplift check per face are on the mounting detail sheet"
+        + (f": {escape(str(uplift.get('status')).upper())}" + (f", {_g((lfoot_l or {}).get('qty'))} L-feet on the BOM ({escape(str((uplift.get('l_foot') or {}).get('note') or ''))})" if lfoot_l else "")
+           if uplift else "") + ".",
         f"<b>4. Strings.</b> {strings} strings of {per_string} panels ("
         + (f"up to {_g(sdn.get('n_max'))} per string from Voc at {_g(sdn.get('t_cold_c'), '°C')} against the {_g(sdn.get('v_limit_v'), 'V')} limit, the owner's cap {_g(max_per_string)}; see the string table on the schedule sheet" if sdn.get("available")
            else f"up to {_g(max_per_string)} per string by the current rule")
@@ -808,6 +817,10 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
                                  ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
         story.append(row)
 
+    # ---------------- the mounting detail and the uplift check
+    story.append(PageBreak())
+    story.append(SheetMarker(mounting.name, 5))
+    story.extend(mounting.flowables)
 
     # ---------------- equipment and circuit schedule
     for n_sched, (left_sched, right_sched) in enumerate(sched_pages):
@@ -846,10 +859,9 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         ("Schedule of loads in the permit's format, with the PV system as a source and the point of interconnection",
          "The energy audit's figures are tabled on this sheet; the format, the circuit grouping and the point of interconnection are the signing engineer's."),
         ("Design analysis: conductor derating, OCPD per circuit beyond the breakers listed, conduit fill, the short-circuit note", TO_COMPLETE + "; the breakers, conductors and drops the BOQ computed are on the circuit schedule sheet."),
-        ("Mounting detail (rail, foot, fastener, penetration seal) and the roof construction", "Not drawn. The mounting items and their counts are on the cover's general notes; the roof construction, purlin spacing and uplift check are not in the app yet."),
-        ("Wind zone for the mounting", "Not in the app; " + TO_COMPLETE + "."),
         ("Vicinity map and site plan", f"Not in the set. The project pin is {doc.lat:.5f}, {doc.lon:.5f} ({escape(doc.address or BLANK)})."),
     ]
+    missing += mounting.missing   # the uplift inputs still blank, the tile detail, a roof type out of scope (none when the check passed on drawn details)
     if pee_blank:
         missing.append(("Signing engineer's details in the title block", "Blank lines until typed under Settings › Company › Signing engineer: " + escape(", ".join(pee_blank)) + "."))
     miss_t = Table([[P("Item", cellb), P("Why it is not here, and where it stands", cellb)]] + [[P(a, cellb), P(b)] for a, b in missing], colWidths=[70 * mm, 120 * mm], hAlign="LEFT")
