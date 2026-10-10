@@ -548,6 +548,7 @@ class AssessmentOut(BaseModel):
     proposal_issued_at: Optional[datetime] = None
     # round 13: the plan set's first issue (revision 0) and its revision log; empty until the plans PDF is first generated
     plans_issued_at: Optional[datetime] = None
+    plans_issued_by: Optional[str] = None       # the signed-in person who first built the plans: revision 0's "By" (review finding 14)
     revisions: list[RevisionEntry] = Field(default_factory=list)
     vicinity_map: Optional[VicinityMap] = None   # round 13, item 4: the map on record (see VicinityMap)
 

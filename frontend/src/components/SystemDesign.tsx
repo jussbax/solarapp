@@ -14,7 +14,7 @@ const DESIGN_CODES = new Set([
   'inverter_not_grid_interactive', 'inverter_certificate_unknown', 'default_inverter_not_grid', 'default_inverter', 'no_inverter', 'no_battery',
   'battery_current_unknown', 'battery_current_units', 'battery_current', 'battery_breaker', 'battery_cable', 'pv_cable', 'ac_cable', 'ac_breaker', 'ats',
   // round 13: the design analysis (the hard ones show on their own; these two are the figures still to type)
-  'conductor_derated', 'terminal_ampacity', 'conduit_fill', 'egc_undersized', 'derating_not_checked', 'fault_level_unknown',
+  'conductor_derated', 'terminal_ampacity', 'aic_below_fault', 'conduit_fill', 'egc_undersized', 'derating_not_checked', 'fault_level_unknown',
 ])
 
 const gridFlag = (v: boolean | null | undefined) => (v === true ? 'grid-interactive (can export)' : v === false ? 'not grid-interactive (cannot export)' : 'grid-interactive status unknown')

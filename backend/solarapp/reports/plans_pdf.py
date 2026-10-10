@@ -13,7 +13,9 @@ line, the TIN, the address and firm, a blank line for each field the profile doe
 sheet index and the revision log (revision 0 is the first issue; "Issue a revision" appends the next number).
 
 Nothing here is invented: every figure comes from the results, the BOM lines, the materials list or the pricing
-settings; a figure the app does not hold prints as a blank line (BLANK). No code clause numbers and no standards
+settings; a figure the app does not hold prints as a blank line (BLANK) with its reason, and every blank line of
+sheets 1 to N−1 is recorded in one collector (plans_blanks.Blanks) that the last sheet lists by sheet, the signing
+engineer's own lines under their heading (round 13 review, finding 5). No code clause numbers and no standards
 are named unless the materials list records them (the inverter's certificate); where the signing engineer adds the
 clause the line reads "per the applicable code, to be completed by the signing engineer"."""
 from __future__ import annotations
@@ -31,10 +33,13 @@ from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import BaseDocTemplate, Flowable, Frame, KeepInFrame, PageBreak, PageTemplate, Paragraph, Spacer, Table, TableStyle
 
+from ..pricing.service_checks import INTERCONNECTION_LABEL
+from ..pricing.service_checks import INTERCONNECTION_LABEL
 from ..profile import PEE_KEYS, PROFILE_FIELDS
 from ..schemas import AssessmentDoc
 from . import brand
 from .drawings import fit_scale, plan_drawing
+from .plans_blanks import BLANK, Blanks
 from .plans_site import site_sheet
 from .plans_analysis import analysis_sheet
 from .plans_mounting import mounting_sheet
@@ -45,7 +50,8 @@ MARGIN = 10 * mm
 TITLE_H = 30 * mm                           # the title block strip along the bottom of every sheet
 FRAME_W = PAGE_W - 2 * MARGIN
 FRAME_H = PAGE_H - 2 * MARGIN - TITLE_H
-BLANK = "__________"                        # a figure the app does not hold: a line for the signing engineer, never a guess
+# BLANK (plans_blanks.py): a figure the app does not hold, a line for the signing engineer, never a guess; every sheet records
+# each one it prints with its reason in a Blanks collector, and the last sheet lists them (round 13 review, finding 5)
 TO_COMPLETE = "per the applicable code, to be completed by the signing engineer"
 KIND_LABEL = {
     "net_metering": "Grid-interactive, no battery (net metering)",
@@ -317,17 +323,25 @@ def _revision_line(plans_issued_at: Optional[str], revisions: list[dict]) -> str
 
 def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Optional[dict[str, dict]] = None,
                     config: Optional[dict] = None, project_no: str = "", today: Optional[date] = None, datasheets: Optional[dict[str, dict]] = None,
-                    plans_issued_at: Optional[str] = None, revisions: Optional[list[dict]] = None,
-                    vicinity: Optional[dict] = None, project_dir: Optional[Path] = None) -> bytes:
+                    plans_issued_at: Optional[str] = None, revisions: Optional[list[dict]] = None, plans_issued_by: Optional[str] = None,
+                    vicinity: Optional[dict] = None, project_dir: Optional[Path] = None, blanks: Optional[Blanks] = None) -> bytes:
     """The A3 drawing set as PDF bytes. `items` is the materials list by code (dicts of the Item fields) for the
     models' specs and electrical data; `config` is the pricing settings as a dict (wiring rules and BOM item roles);
     `datasheets` (round 12) says per code which datasheet file and date an item's figures came from, so each figure
     on the sheets can say so, or stay BLANK: nothing is derived on the sheet. `plans_issued_at` and `revisions`
-    (round 13) are the record's first issue and its revision log; without them the set reads "Rev. 0". `vicinity` is the
+    (round 13) are the record's first issue and its revision log; without them the set reads "Rev. 0"; `plans_issued_by` is the
+    signed-in person who first built the set, revision 0's "By" (a blank line with its reason when none was recorded). `vicinity` is the
     record's vicinity-map block and `project_dir` the folder its files live in (round 13, item 4); without them the
-    site sheet prints the pin and says no map was fetched."""
+    site sheet prints the pin and says no map was fetched. `blanks` is the collector of the set's blank lines (one is made when
+    none is passed); every sheet module records each blank line it prints with its reason and the last sheet lists them."""
     items = items or {}
     revisions = list(revisions or [])
+    blanks = blanks if blanks is not None else Blanks()
+    COVER, SCHED = "Cover and general notes", "Equipment and circuit schedule"
+    ELEC_LABEL = {"voc_v": "Voc", "vmp_v": "Vmp", "isc_a": "Isc", "imp_a": "Imp", "max_system_voltage_v": "maximum system voltage", "temp_coeff_voc_pct": "temperature coefficient of Voc",
+                  "ac_input_a": "AC input rating", "charge_v_max": "charge voltage", "battery_max_a": "maximum discharge", "charge_a_max": "charge current",
+                  "max_pv_voltage_v": "maximum PV voltage", "mppt_min_v": "MPPT window (low)", "mppt_max_v": "MPPT window (high)", "mppt_max_a": "current per MPPT",
+                  "nominal_v": "nominal voltage", "capacity_ah": "capacity (Ah)", "continuous_a": "maximum discharge", "discharge_a_recommended": "recommended discharge"}
     cfg = config or {}
     wiring = cfg.get("wiring") or {}
     roles = cfg.get("roles") or {}
@@ -342,6 +356,10 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         """A figure with its unit, or BLANK; never a guess."""
         return _f(it.get(key), nd, unit) if it.get(key) not in (None, "") else BLANK
     today = today or date.today()
+
+    def blank(sheet: str, item: str, reason: str, **kw) -> str:
+        """A blank line on `sheet`, recorded for the last sheet with its reason (round 13 review, finding 5); returns BLANK."""
+        return blanks.add(sheet, item, reason, **kw)
     pricing = results.get("pricing") or {}
     sizing = results.get("sizing") or {}
     choices = pricing.get("choices") or {}
@@ -406,7 +424,7 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
                           ("RIGHTPADDING", (0, 0), (0, -1), 6 * mm), ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)])
 
     # the styles the sheet modules of round 13 draw with (one hook each: a function returning the sheet's name and flowables)
-    styles = {"h1": h1, "h2": h2, "body": body, "small": small, "cell": cell, "cellb": cellb, "grid": grid, "kv_style": kv_style, "two_col": two_col}
+    styles = {"h1": h1, "h2": h2, "body": body, "small": small, "cell": cell, "cellb": cellb, "grid": grid, "kv_style": kv_style, "two_col": two_col, "blanks": blanks}
 
     def P(t: str, st=cell) -> Paragraph:
         return Paragraph(t, st)
@@ -429,11 +447,31 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     sdc = sdn.get("current") or {}
     # the models' data on file (round 12, 4.2): each block says "datasheet (file, date)" when the import filled it, else the figures stay BLANK
     panel_code, inv_code, bat_code = (panel_l or {}).get("code"), (inv_l or {}).get("code"), (bat_l or {}).get("code")
-    inv_type = {"grid_tie": "grid-tie", "hybrid": "hybrid", "off_grid": "off-grid", "charge_controller": "charge controller", "ess_set": "ESS set"}.get(str(inv_item.get("inverter_type") or ""), BLANK)
-    inv_phase = f"{_g(inv_item.get('phase'))}-phase" if inv_item.get("phase") else BLANK
-    inv_port = escape(str(inv_item.get("battery_class") or BLANK))
-    def elec(it: dict, key: str, unit: str, nd: int = 1) -> str:
-        return _f(it.get(key), nd, unit) if it.get(key) not in (None, "") else BLANK
+    panel_label, inv_label, bat_label = f"Panel {panel_code or ''}".strip(), f"Inverter {inv_code or ''}".strip(), f"Battery {bat_code or ''}".strip()
+    inv_type_word = {"grid_tie": "grid-tie", "hybrid": "hybrid", "off_grid": "off-grid", "charge_controller": "charge controller", "ess_set": "ESS set"}.get(str(inv_item.get("inverter_type") or ""), "")
+    inv_phase_word = f"{_g(inv_item.get('phase'))}-phase" if inv_item.get("phase") else ""
+    inv_port_word = escape(str(inv_item.get("battery_class") or ""))
+    bat_class_word = escape(str(bat_item.get("battery_class") or ""))
+    ITEM_LABEL = {id(panel_item): panel_label, id(inv_item): inv_label, id(bat_item): bat_label}
+    NOT_ON_ITEM = "not on the Materials page (the datasheet or the maker's sheet)"
+
+    def elec(it: dict, key: str, unit: str, nd: int = 1, sheet: str = SCHED) -> str:
+        """An item's electrical figure with its unit, else a blank line recorded for the last sheet with the item and the page to type it on."""
+        if it.get(key) not in (None, ""):
+            return _f(it.get(key), nd, unit)
+        return blank(sheet, f"{ITEM_LABEL.get(id(it), 'Item')}: {ELEC_LABEL.get(key, key)}", NOT_ON_ITEM)
+
+    def inv_words(sheet: str) -> tuple[str, str, str]:
+        """The inverter's type, phase and battery-port class as `sheet` prints them, each a recorded blank line when the item lacks it."""
+        return ((inv_type_word or blank(sheet, f"{inv_label}: type", "not marked on the item (Materials page)")),
+                (inv_phase_word or blank(sheet, f"{inv_label}: phase", "not on the item (Materials page)")),
+                (inv_port_word or blank(sheet, f"{inv_label}: battery port class", "not on the item (Materials page)")))
+
+    def cert_text(sheet: str) -> str:
+        return escape(cert) if cert else blank(sheet, f"{inv_label}: certificate", "none on file: type it on the Materials page (confirm with the maker before the DU application)")
+
+    def mppt_count_text(sheet: str) -> str:
+        return _g(inv_item.get("mppt_count")) if inv_item.get("mppt_count") else blank(sheet, f"{inv_label}: MPPT count", "not on the item (Materials page)")
 
     gnd_rod, bonding, lugs = _line(by_role, "ground_rod"), _line(by_role, "array_bonding"), _line(by_role, "earth_lug")
     thhn_l = _line(by_role, "thhn")
@@ -443,16 +481,17 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     def coeff(key: str, label: str) -> str:
         c = co.get(key) or {}
         if c.get("value") is None:
-            return f"{label} {BLANK}"
+            return f"{label} {blank(SCHED, f'{panel_label}: {label}', NOT_ON_ITEM)}"
         return f"{label} {float(c['value']):g} %/°C" + (" (default, an assumption)" if c.get("default") else " (datasheet)")
 
+    inv_type_s, inv_phase_s, inv_port_s = inv_words(SCHED)
     eq_rows = [
         ["Panels", _item_text(panel_l), _rating(panel_l, "W"), P(f"Voc {elec(panel_item, 'voc_v', 'V')}, Vmp {elec(panel_item, 'vmp_v', 'V')}, Isc {elec(panel_item, 'isc_a', 'A')}, Imp {elec(panel_item, 'imp_a', 'A')}, "
                                                                  f"max system voltage {elec(panel_item, 'max_system_voltage_v', 'V', 0)}; temperature coefficient of Voc {elec(panel_item, 'temp_coeff_voc_pct', '%/°C', 2)}"
                                                                  )],
-        ["Inverter", _item_text(inv_l), _rating(inv_l, "kW"), P(f"{inv_type}, {inv_phase}; grid-interactive: {'yes' if grid_flag else 'no' if grid_flag is False else 'not marked'}; certificate: {escape(cert) if cert else BLANK}; "
-                                                                f"AC input {elec(inv_item, 'ac_input_a', 'A', 0)}; battery port {inv_port}, {elec(inv_item, 'charge_v_max', 'V', 1)} max, {elec(inv_item, 'battery_max_a', 'A', 0)} discharge, "
-                                                                f"{elec(inv_item, 'charge_a_max', 'A', 0)} charge; MPPT inputs {_g(inv_item.get('mppt_count'))}"
+        ["Inverter", _item_text(inv_l), _rating(inv_l, "kW"), P(f"{inv_type_s}, {inv_phase_s}; grid-interactive: {'yes' if grid_flag else 'no' if grid_flag is False else 'not marked'}; certificate: {cert_text(SCHED)}; "
+                                                                f"AC input {elec(inv_item, 'ac_input_a', 'A', 0)}; battery port {inv_port_s}, {elec(inv_item, 'charge_v_max', 'V', 1)} max, {elec(inv_item, 'battery_max_a', 'A', 0)} discharge, "
+                                                                f"{elec(inv_item, 'charge_a_max', 'A', 0)} charge; MPPT inputs {mppt_count_text(SCHED)}"
                                                                 + (f" ({escape(str(inv_item.get('mppt_currents_a')))} A)" if inv_item.get("mppt_currents_a") else "") + "; "
                                                                 f"transfer switch: {'built in' if ats == 'built-in' else 'external (see AC side)' if inv_item.get('has_transfer_switch') is False else 'not on the item; an external ATS is priced'}"
                                                                 )],
@@ -528,24 +567,26 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
             margin = v_limit - voc_cold
             inp = per_mppt[(k - 1) % inputs_n] if inputs_n else None
             srows.append([
-                f"S{k}", str(n), _f(voc_cold, 1, "V"), _f(vmp_hot, 1, "V") if vmp_hot is not None else BLANK, _f(v_limit, 0, "V"),
-                f"{margin:,.1f} V ({margin / v_limit * 100:.0f} %)" if v_limit else BLANK,
-                (f"{_f(mppt_min, 0, 'V')}" if mppt_min else BLANK),
-                (f"MPPT {inp['input']}: {n and _f(inp['strings'] * float(sdc.get('imp_a') or 0), 2, 'A')} at Imp of {_f(inp['limit_a'], 0, 'A')}" + (" (over)" if inp.get("ok") is False else "")) if inp else BLANK,
+                f"S{k}", str(n), _f(voc_cold, 1, "V"), _f(vmp_hot, 1, "V") if vmp_hot is not None else blank(SCHED, f"String table: Vmp of S{k} at T_hot", "not computed (the panel's Vmp or its Pmax coefficient is not on file)"),
+                _f(v_limit, 0, "V"),
+                f"{margin:,.1f} V ({margin / v_limit * 100:.0f} %)" if v_limit else blank(SCHED, f"String table: margin of S{k}", "no voltage limit on file (the inverter's maximum PV voltage or the panel's maximum system voltage)"),
+                (f"{_f(mppt_min, 0, 'V')}" if mppt_min else blank(SCHED, f"String table: MPPT low end for S{k}", f"the MPPT window (low) is not on the item {inv_code or ''} (Materials page)")),
+                (f"MPPT {inp['input']}: {n and _f(inp['strings'] * float(sdc.get('imp_a') or 0), 2, 'A')} at Imp of {_f(inp['limit_a'], 0, 'A')}" + (" (over)" if inp.get("ok") is False else "")) if inp
+                else blank(SCHED, f"String table: input and current of S{k}", f"the MPPT inputs are not on the item {inv_code or ''} (Materials page)"),
             ])
         string_t = table(["String", "Panels", f"Voc at {_g(t_cold, '°C')}", f"Vmp at {_g(t_hot, '°C')}", "Limit", "Margin", "MPPT low end", "Input and current"], srows,
                          [14 * mm, 14 * mm, 24 * mm, 24 * mm, 18 * mm, 30 * mm, 22 * mm, 44 * mm])
 
-    amp = lambda gauge: _f(thhn_amp.get(str(gauge)), 0, "A") if gauge is not None and str(gauge) in thhn_amp else BLANK  # noqa: E731
+    amp = lambda gauge: _f(thhn_amp.get(str(gauge)), 0, "A") if gauge is not None and str(gauge) in thhn_amp else blank(SCHED, f"THHN ampacity of {_g(gauge)} mm²", "no gauge sized, or the gauge is not in the wiring rules' table")  # noqa: E731
     inv_circ, grid_circ = roles.get("ac_breakers_per_inverter"), roles.get("ac_grid_breakers_per_inverter")
     grid_known = choices.get("ac_grid_rating_known")
     ac_rows = [
         ["Inverter output circuit", f"{_g(inv_circ)} per inverter × {units}", P(f"{_f(choices.get('ac_current_a'), 1, 'A')} at {_g(wiring.get('ac_voltage'), 'V')}; breaker {_g(choices.get('ac_breaker_a'), 'A')} "
-                                                                                 f"(1.25 × the current, next standard size); conductor {escape(str(choices.get('ac_gauge') or BLANK))} mm² THHN ({amp(choices.get('ac_gauge'))}), "
+                                                                                 f"(1.25 × the current, next standard size); conductor {escape(str(choices.get('ac_gauge') or blank(SCHED, 'AC conductor gauge', 'no gauge sized (the hard ac_circuit warning)')))} mm² THHN ({amp(choices.get('ac_gauge'))}), "
                                                                                  f"{_g(n_cond)} conductors × {_g(ac_run, 'm')}; drop {_pct(choices.get('ac_drop'))} against {_pct(wiring.get('ac_drop_limit'))}")],
         ["Grid-side circuits", f"{_g(grid_circ)} per inverter × {units}", P(f"the grid feed to the inverter's AC input and the maintenance bypass: {_f(choices.get('ac_grid_current_a'), 1, 'A')} "
                                                                              + ("(the inverter's AC input rating)" if grid_known else "(the inverter's output: its AC input rating is not on the item)")
-                                                                             + f"; breaker {_g(choices.get('ac_grid_breaker_a'), 'A')}; conductor {escape(str(choices.get('ac_grid_gauge') or BLANK))} mm² THHN ({amp(choices.get('ac_grid_gauge'))}); "
+                                                                             + f"; breaker {_g(choices.get('ac_grid_breaker_a'), 'A')}; conductor {escape(str(choices.get('ac_grid_gauge') or blank(SCHED, 'grid-side conductor gauge', 'no gauge sized (the hard ac_circuit warning)')))} mm² THHN ({amp(choices.get('ac_grid_gauge'))}); "
                                                                              f"drop {_pct(choices.get('ac_grid_drop'))}")],
         ["AC breakers", _item_text(_line(by_role, "ac_breaker")), P(escape(str((_line(by_role, "ac_breaker") or {}).get("note") or "")))],
         ["AC conductors", _item_text(thhn_l), P(escape(str((thhn_l or {}).get("note") or "")))],
@@ -567,22 +608,24 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         bat_rows = [
             ["Inverter battery current", _f(bc.get("current_a"), 0, "A"), P(escape(basis) + (f"; {src(inv_code)}" if choices.get("battery_current_source") == "datasheet" and src(inv_code) else ""))],
             ["Battery breaker", _item_text(_line(by_role, "battery_breaker")), P(f"at least {_f(bc.get('breaker_min_a'), 0, 'A')} (1.25 × the current); chosen {_f(bc.get('breaker_a'), 0, 'A')}")],
-            ["Battery cable", _item_text(_line(by_role, "battery_cable")), P(f"{escape(str(bc.get('cable_gauge') or BLANK))} mm² lug pairs, {_f(bc.get('cable_ampacity_a'), 0, 'A')} ampacity at or above the breaker; "
+            ["Battery cable", _item_text(_line(by_role, "battery_cable")), P(f"{escape(str(bc.get('cable_gauge') or blank(SCHED, 'battery cable gauge', 'no cable sized (the hard battery_cable warning)')))} mm² lug pairs, {_f(bc.get('cable_ampacity_a'), 0, 'A')} ampacity at or above the breaker; "
                                                                              f"{'coordinated' if bc.get('ok') else 'NOT coordinated (a hard warning holds the customer documents)'}")],
         ]
         # the charge setting to apply (3.6) and the voltage match (3.7), from the datasheet figures; BLANK lines without them
         chg = choices.get("battery_charge") or {}
         vm = choices.get("battery_voltage_match") or {}
         if not chg and not vm:
-            bat_rows.append(["Charge setting, voltage match", BLANK, P("the inverter's charge current and port voltage, the battery's charge figure, nominal voltage and ceiling are not on file (the datasheets)")])
+            bat_rows.append(["Charge setting, voltage match", blank(SCHED, "Battery circuit: charge setting and voltage match", "the inverter's charge current and port voltage, the battery's charge figure, nominal voltage and ceiling are not on file (the datasheets)"),
+                             P("the inverter's charge current and port voltage, the battery's charge figure, nominal voltage and ceiling are not on file (the datasheets)")])
         if chg or vm:
-          bat_rows.append(["Charge current setting", _f(chg.get("accept_a"), 0, "A") if chg else BLANK,
+          bat_rows.append(["Charge current setting", _f(chg.get("accept_a"), 0, "A") if chg else blank(SCHED, "Battery circuit: charge current setting", "the inverter's charge current or the battery's charge figure is not on file (the datasheets)"),
                          P((f"the bank accepts {_f(chg.get('accept_a'), 0, 'A')} ({_g(chg.get('units'))} × {_f(chg.get('per_unit_a'), 0, 'A')}) and the inverter can charge at {_f(chg.get('inverter_a'), 0, 'A')}: "
                             + ("set the inverter's maximum charge current to the bank's figure" if chg.get("ok") is False else "within the bank's figure")
                             + (f"; units for the full rate: {_g(chg.get('units_for_full_rate'))}" if chg.get("ok") is False else "")) if chg
                            else "the inverter's charge current or the battery's charge figure is not on file")])
-          cls_txt = lambda c: BLANK if c is None else ("high-voltage" if c == "HV" else f"{c:g} V class")  # noqa: E731
-          bat_rows.append(["Voltage match", ("holds" if vm.get("class_ok") else "does NOT hold" if vm.get("class_ok") is False else BLANK) if vm else BLANK,
+          cls_txt = lambda c: blank(SCHED, "Battery circuit: voltage class", "the nominal voltage or the port's charge voltage is not on file (the datasheets)") if c is None else ("high-voltage" if c == "HV" else f"{c:g} V class")  # noqa: E731
+          bat_rows.append(["Voltage match", ("holds" if vm.get("class_ok") else "does NOT hold" if vm.get("class_ok") is False else blank(SCHED, "Battery circuit: voltage match", "the classes are not on file (the datasheets)")) if vm
+                           else blank(SCHED, "Battery circuit: voltage match", "the nominal voltage, the port's charge voltage or the ceiling is not on file (the datasheets)"),
                          P((f"battery {_f(vm.get('battery_nominal_v'), 1, 'V')} nominal ({cls_txt(vm.get('battery_class'))}{', ' + str(vm.get('battery_class_text')) if vm.get('battery_class_text') else ''}) on a port that charges to "
                             f"{_f(vm.get('inverter_charge_v_max'), 1, 'V')} ({cls_txt(vm.get('inverter_class'))}{', ' + str(vm.get('inverter_class_text')) if vm.get('inverter_class_text') else ''}); "
                             f"the battery's ceiling {_f(vm.get('battery_ceiling_v'), 1, 'V')}: "
@@ -594,7 +637,7 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         ["Ground rod", _item_text(gnd_rod), P("electrode; the grounding electrode conductor size: the design analysis sheet")],
         ["Array bonding", _item_text(bonding), P(escape(str((bonding or {}).get("note") or "")))],
         ["Earth lugs", _item_text(lugs), P(escape(str((lugs or {}).get("note") or "")))],
-        ["Grounding run", f"{_g(gnd_run, 'm')} per inverter", P(f"on the {escape(str(choices.get('ac_gauge') or BLANK))} mm² THHN line of the AC circuits (the BOM's conductor); the equipment grounding conductor size per circuit: the design analysis sheet")],
+        ["Grounding run", f"{_g(gnd_run, 'm')} per inverter", P(f"on the {escape(str(choices.get('ac_gauge') or blank(SCHED, 'grounding run gauge', 'no AC conductor sized (the hard ac_circuit warning)')))} mm² THHN line of the AC circuits (the BOM's conductor); the equipment grounding conductor size per circuit: the design analysis sheet")],
     ]
     gnd_t = table(["Grounding", "Item", "Notes"], gnd_rows, [32 * mm, 64 * mm, 94 * mm])
     drop_rows = [
@@ -653,11 +696,11 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
 
     # ---------------- sheet 2 (built first, so the cover's index knows its name): the vicinity map and the site plan (round 13, item 4)
     site_name, site_flow, site_scale = site_sheet(doc, geometry, styles={"h1": h1, "h2": h2, "body": body, "small": small, "P": P, "two_col": two_col},
-                                                  vicinity=vicinity, project_dir=project_dir, blank=BLANK)
+                                                  vicinity=vicinity, project_dir=project_dir, blanks=blanks)
 
     # the mounting detail and the uplift check (round 13, item 3): its own module; one sheet after the layouts, before the schedules
     mounting = mounting_sheet(doc, results, cfg, items, {"h1": h1, "h2": h2, "body": body, "small": small, "cell": cell, "cellb": cellb, "grid": grid,
-                                                          "kv_style": kv_style, "two_col": two_col, "P": P, "kv": kv, "table": table})
+                                                          "kv_style": kv_style, "two_col": two_col, "P": P, "kv": kv, "table": table, "blanks": blanks})
 
     # the single-line diagram (round 13, item 1): its own module, one sheet after the array layouts
     from .plans_sld import sld_sheet
@@ -669,7 +712,7 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     # ---------------- sheet 1: cover and general notes
     sched_names = ["Equipment and circuit schedule"] + (["Equipment and circuit schedule (continued)"] if len(sched_pages) > 1 else [])
     # round 13 (item 2): the design analysis sheet after the schedule sheets and before the schedule of loads (reports/plans_analysis.py)
-    analysis_name, analysis_flows = analysis_sheet(doc, results, items)
+    analysis_name, analysis_flows = analysis_sheet(doc, results, items, blanks=blanks)
     last_name = "Not yet in this set"
     sheet_names = (["Cover and general notes", site_name] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels]
                    + [sld_name, mounting.name] + sched_names + [analysis_name, loads_name, last_name])
@@ -694,7 +737,9 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
                      f"{strings} × {per_string} panels (the current rule: up to {_g(max_per_string)} panels per string")
                     + (f"; set to {doc.pricing.strings_override} strings on this job" if doc.pricing.strings_override else "") + ")"),
         ("Grid connection", f"{_g(wiring.get('ac_voltage'), 'V')} AC at the service, {_g(n_cond)} conductors (line and neutral) per circuit as the wiring rules hold; "
-                            f"net metering: {'yes' if kind != 'off_grid' else 'no (no export)'}; point of interconnection: {BLANK}"),
+                            f"net metering: {'yes' if kind != 'off_grid' else 'no (no export)'}; point of interconnection: "
+                            + (escape(INTERCONNECTION_LABEL.get(str(doc.service.interconnection), str(doc.service.interconnection))) if doc.service.interconnection
+                               else blank(COVER, "point of interconnection", "not chosen (Site step › Service entrance)"))),
         ("Export limit", _item_text(export_line) if export_line else ("none priced (verify the DU's rule)" if kind != "off_grid" else "not applicable")),
         ("Annual production", f"{_f(sizing.get('annual_production_kwh'), 0, 'kWh')} at the meter (the sizing's estimate)"),
     ]
@@ -712,22 +757,23 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         ])
     faces_t = table(["Face", "Shape", "Eave × slope", "Tilt", "Looks toward", "Panels", "Panels laid"], face_rows, [42 * mm, 22 * mm, 38 * mm, 12 * mm, 32 * mm, 20 * mm, 22 * mm])
 
+    inv_type_c, inv_phase_c, inv_port_c = inv_words(COVER)
     model_rows = [
-        ["Panel", escape(str(panel_code or BLANK)), P(escape(str((panel_l or {}).get("name") or BLANK)) + (f"<br/>{escape(str(panel_item.get('spec') or ''))}" if panel_item.get("spec") else "")),
+        ["Panel", escape(str(panel_code or blank(COVER, "panel code", "no panel line on the BOM"))), P(escape(str((panel_l or {}).get("name") or blank(COVER, "panel name", "no panel line on the BOM"))) + (f"<br/>{escape(str(panel_item.get('spec') or ''))}" if panel_item.get("spec") else "")),
          _rating(panel_l, "W"), P(f"{_g(faces_with_panels[0].get('panel_length_m') if faces_with_panels else None)} × {_g(faces_with_panels[0].get('panel_width_m') if faces_with_panels else None)} m<br/>"
-                                  f"Voc {elec(panel_item, 'voc_v', 'V')}, Vmp {elec(panel_item, 'vmp_v', 'V')}, Isc {elec(panel_item, 'isc_a', 'A')}, Imp {elec(panel_item, 'imp_a', 'A')}; "
-                                  f"max system voltage {elec(panel_item, 'max_system_voltage_v', 'V', 0)}" + (f"<br/>{src(panel_code)}" if src(panel_code) else ""))],
-        ["Inverter", escape(str(inv_code or BLANK)), P(escape(str(inv_name)) + (f"<br/>{escape(str(inv_item.get('spec') or ''))}" if inv_item.get("spec") else "")),
-         _rating(inv_l, "kW"), P(f"{inv_type}, {inv_phase}; battery port {inv_port}; max PV {elec(inv_item, 'max_pv_voltage_v', 'V', 0)}, MPPT {elec(inv_item, 'mppt_min_v', 'V', 0)} to {elec(inv_item, 'mppt_max_v', 'V', 0)} × {_g(inv_item.get('mppt_count'))}, "
-                                 f"{elec(inv_item, 'mppt_max_a', 'A', 0)} per MPPT" + (f" ({escape(str(inv_item.get('mppt_currents_a')))} A per input)" if inv_item.get("mppt_currents_a") else "")
-                                 + f"<br/>AC input {elec(inv_item, 'ac_input_a', 'A', 0)}; battery {elec(inv_item, 'charge_v_max', 'V', 1)} max, {elec(inv_item, 'battery_max_a', 'A', 0)} discharge, "
-                                 f"{elec(inv_item, 'charge_a_max', 'A', 0)} charge; certificate: {escape(cert) if cert else BLANK}" + (f"<br/>{src(inv_code)}" if src(inv_code) else ""))],
+                                  f"Voc {elec(panel_item, 'voc_v', 'V', 1, COVER)}, Vmp {elec(panel_item, 'vmp_v', 'V', 1, COVER)}, Isc {elec(panel_item, 'isc_a', 'A', 1, COVER)}, Imp {elec(panel_item, 'imp_a', 'A', 1, COVER)}; "
+                                  f"max system voltage {elec(panel_item, 'max_system_voltage_v', 'V', 0, COVER)}" + (f"<br/>{src(panel_code)}" if src(panel_code) else ""))],
+        ["Inverter", escape(str(inv_code or blank(COVER, "inverter code", "no inverter line on the BOM"))), P(escape(str(inv_name)) + (f"<br/>{escape(str(inv_item.get('spec') or ''))}" if inv_item.get("spec") else "")),
+         _rating(inv_l, "kW"), P(f"{inv_type_c}, {inv_phase_c}; battery port {inv_port_c}; max PV {elec(inv_item, 'max_pv_voltage_v', 'V', 0, COVER)}, MPPT {elec(inv_item, 'mppt_min_v', 'V', 0, COVER)} to {elec(inv_item, 'mppt_max_v', 'V', 0, COVER)} × {mppt_count_text(COVER)}, "
+                                 f"{elec(inv_item, 'mppt_max_a', 'A', 0, COVER)} per MPPT" + (f" ({escape(str(inv_item.get('mppt_currents_a')))} A per input)" if inv_item.get("mppt_currents_a") else "")
+                                 + f"<br/>AC input {elec(inv_item, 'ac_input_a', 'A', 0, COVER)}; battery {elec(inv_item, 'charge_v_max', 'V', 1, COVER)} max, {elec(inv_item, 'battery_max_a', 'A', 0, COVER)} discharge, "
+                                 f"{elec(inv_item, 'charge_a_max', 'A', 0, COVER)} charge; certificate: {cert_text(COVER)}" + (f"<br/>{src(inv_code)}" if src(inv_code) else ""))],
     ]
     if kind != "net_metering":
-        model_rows.append(["Battery", escape(str(bat_code or BLANK)), P(escape(str(bat_name)) + (f"<br/>{escape(str(bat_item.get('spec') or ''))}" if bat_item.get("spec") else "")),
-                           _rating(bat_l, "kWh"), P(f"{elec(bat_item, 'nominal_v', 'V', 1)}, {elec(bat_item, 'capacity_ah', 'Ah', 0)}, {_rating(bat_l, 'kWh')}; max {elec(bat_item, 'continuous_a', 'A', 0)}, "
-                                                    f"recommended {elec(bat_item, 'discharge_a_recommended', 'A', 0)}, charge {elec(bat_item, 'charge_a_max', 'A', 0)}; ceiling {elec(bat_item, 'charge_v_max', 'V', 1)}; "
-                                                    f"class {escape(str(bat_item.get('battery_class') or BLANK))}; {_g(choices.get('battery_units') or (bat_l or {}).get('qty'))} in the bank"
+        model_rows.append(["Battery", escape(str(bat_code or blank(COVER, "battery code", "no battery line on the BOM"))), P(escape(str(bat_name)) + (f"<br/>{escape(str(bat_item.get('spec') or ''))}" if bat_item.get("spec") else "")),
+                           _rating(bat_l, "kWh"), P(f"{elec(bat_item, 'nominal_v', 'V', 1, COVER)}, {elec(bat_item, 'capacity_ah', 'Ah', 0, COVER)}, {_rating(bat_l, 'kWh')}; max {elec(bat_item, 'continuous_a', 'A', 0, COVER)}, "
+                                                    f"recommended {elec(bat_item, 'discharge_a_recommended', 'A', 0, COVER)}, charge {elec(bat_item, 'charge_a_max', 'A', 0, COVER)}; ceiling {elec(bat_item, 'charge_v_max', 'V', 1, COVER)}; "
+                                                    f"class {bat_class_word or blank(COVER, f'{bat_label}: class', 'not on the item (Materials page)')}; {_g(choices.get('battery_units') or (bat_l or {}).get('qty'))} in the bank"
                                                     + (f"<br/>{src(bat_code)}" if src(bat_code) else ""))])
     models_t = table(["Role", "Code", "Model (materials list)", "Rating", "Data on file (blank = not on the Materials page yet; \"datasheet\" names the file it came from)"], model_rows, [18 * mm, 26 * mm, 56 * mm, 16 * mm, 72 * mm])
     right_col = [Paragraph("Roof faces", h2), faces_t, Paragraph("Panel and inverter models from the materials list", h2), models_t]
@@ -763,8 +809,9 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         f"<b>5. Grounding and bonding (the BOM).</b> Ground rod: {_item_text(gnd_rod)}. Array bonding conductor: {_item_text(bonding)}, along the rail lines with jumpers between rows "
         f"(bare copper where the LGU asks; the gauge to be verified by the signing engineer). Earth lugs: {_item_text(lugs)}. Grounding run: {_g(gnd_run, 'm')} per inverter on the "
         f"{escape(str(choices.get('ac_gauge') or BLANK))} mm² THHN of the AC circuits. The equipment and electrode grounding conductor sizes: {TO_COMPLETE}.",
-        f"<b>6. Conductors and protection.</b> Breakers and conductors as the circuit schedule sheet lists them, from the wiring rules on file (THHN ampacity table, {', '.join(f'{k} mm² {v:g} A' for k, v in thhn_amp.items())}; "
-        f"verify the table edition). Derating, the breaker against the derated ampacity, conduit fill, the grounding conductor sizes and the short-circuit note: the design analysis sheet "
+        f"<b>6. Conductors and protection.</b> Breakers and conductors as the circuit schedule sheet lists them, from the wiring rules' sizing table (the THHN 60 °C column, the conservative sizing basis: "
+        f"{', '.join(f'{k} mm² {v:g} A' for k, v in thhn_amp.items())}; the 90 °C and 75 °C columns are on the design analysis sheet; verify the edition). "
+        "Derating, the breaker against the derated ampacity, conduit fill, the grounding conductor sizes and the short-circuit note: the design analysis sheet "
         "(pass, fail or not checked per circuit, with the tables used, their sources and the assumptions).",
         f"<b>7. Labels and placards.</b> PV system labels and placards at the service, the disconnect, the inverter and the DC box are miscellaneous supplies, not a BOM line; "
         f"what the LGU and the DU ask for: {TO_COMPLETE}.",
@@ -774,7 +821,8 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     index_t = Table([[P("No.", cellb), P("Sheet", cellb)]] + [[P(f"Sheet {i + 1}"), P(escape(n))] for i, n in enumerate(sheet_names)], colWidths=[20 * mm, 76 * mm], hAlign="LEFT")
     index_t.setStyle(kv_style)
     rev_rows: list[list] = [[P("Rev.", cellb), P("Date", cellb), P("Note", cellb), P("By", cellb)]]
-    rev_rows.append([P("0"), P(_d(plans_issued_at) if plans_issued_at else "the date of this build"), P("first issue"), P(BLANK)])
+    rev_rows.append([P("0"), P(_d(plans_issued_at) if plans_issued_at else "the date of this build"), P("first issue"),
+                     P(escape(plans_issued_by.strip()) if plans_issued_by and plans_issued_by.strip() else blank(COVER, "Revisions: the first issue's By", "no signed-in name was recorded at the first build"))])
     for r in revisions[-5:]:
         rev_rows.append([P(escape(str(r.get("no") or ""))), P(_d(r.get("date"))), P(escape(str(r.get("note") or ""))), P(escape(str(r.get("by") or "")) or BLANK)])
     rev_t = Table(rev_rows, colWidths=[12 * mm, 22 * mm, 42 * mm, 22 * mm], hAlign="LEFT")
@@ -804,7 +852,8 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     for g in faces_with_panels:
         story.append(PageBreak())
         scale = fit_scale(g, 272, 226, font_pt=7)
-        story.append(SheetMarker(f"Array layout: {g.get('name') or 'Roof'}", scale))
+        layout_name = f"Array layout: {g.get('name') or 'Roof'}"
+        story.append(SheetMarker(layout_name, scale))
         story.append(Paragraph(f"Array layout: {escape(str(g.get('name') or 'Roof'))}  ·  scale 1:{scale}", h1))
         drawing = plan_drawing(g, 272, highlight_used=g.get("used") is not None, dimensions=True, scale_denominator=scale, string_labels=True, north_arrow=True, font_pt=7, legend=False)
         n = len(g.get("panels") or [])
@@ -820,8 +869,8 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         facts += [
             ("Tilt", f"{_g(g.get('tilt_deg'))}°"), ("Looks toward", f"{_g(g.get('azimuth_deg'))}° ({escape(str(g.get('compass') or ''))}); north as the arrow shows"),
             ("Panels on this face", (f"{used} of {n} positions used" if used is not None else f"{n} positions") + (f"; {g.get('left_out')} left out for vents or marked areas" if int(g.get("left_out") or 0) else "")),
-            ("kWp on this face", f"{face_kwp:.2f} kWp" if watt else BLANK),
-            ("Panels laid", f"{escape(str(g.get('orientation') or BLANK))}, {_g(g.get('panel_length_m'))} × {_g(g.get('panel_width_m'))} m each"),
+            ("kWp on this face", f"{face_kwp:.2f} kWp" if watt else blank(layout_name, "kWp on this face", "the panel item carries no rating (Materials page)")),
+            ("Panels laid", f"{escape(str(g.get('orientation') or blank(layout_name, 'orientation', 'no panels laid on this face')))}, {_g(g.get('panel_length_m'))} × {_g(g.get('panel_width_m'))} m each"),
             ("Rows from the eave", _rows_from_eave(g)),
             ("Spacing", (f"{_g(g.get('gap_m'))} m between panels" if float(g.get("gap_m") or 0) > 0 else "panels touching, mid-clamps between them")),
             ("Setback", f"{float(g.get('setback_m') or 0) / 2:g} m from each edge (setback {_g(g.get('setback_m'))} m per dimension)"),
@@ -895,6 +944,7 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     # ---------------- the last sheet: what is not here, and why
     story.append(PageBreak())
     story.append(SheetMarker(last_name))
+    last_start = len(story)   # the last sheet's flowables are measured below and shrunk to the frame when the set is mostly blank
     story.append(Paragraph("Not yet in this set, and why", h1))
     panel_lbl = {"voc_v": "Voc", "vmp_v": "Vmp", "isc_a": "Isc", "imp_a": "Imp", "temp_coeff_voc_pct": "temperature coefficient of Voc", "max_system_voltage_v": "maximum system voltage"}
     inv_lbl = {"max_pv_voltage_v": "maximum PV voltage", "mppt_min_v": "MPPT window (low)", "mppt_max_v": "MPPT window (high)", "mppt_count": "MPPT count", "mppt_max_a": "current per MPPT"}
@@ -905,17 +955,9 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         + "; " + ("the inverter's " + ", ".join(inv_lbl[k] for k in inv_missing) if inv_missing else "the inverter's data is on file")
     )
     missing = []
-    if panel_missing or inv_missing:
-        # the diagram is in the set (round 13); what the owner has not supplied prints blank on it, and this entry says which figures
-        missing.append(("Single-line diagram (figures blank)", f"Blank on sheet {sheet_names.index(sld_name) + 1} where the Materials page is blank: {datasheet_state}."))
     if not sdn.get("available"):
         missing.append(("String table (Voc at the coldest cell, Vmp at the hottest, Isc per MPPT, the margins against the inverter's window)", f"The same datasheets: {datasheet_state}. "
                         "The string count and the panels per string are on the layout sheets by the current rule."))
-    svc = doc.service
-    if not (svc.main_breaker_a and svc.busbar_a and svc.interconnection):
-        # the schedule is in the set (round 13); the panelboard, the point of interconnection and the 120 % rule print blank until surveyed
-        missing.append(("Schedule of loads (service entrance blank)", f"Drawn on sheet {sheet_names.index(loads_name) + 1}; the panelboard, the point of interconnection and the 120 % rule print blank "
-                                                                       "until the Service entrance card on the Site step holds the main breaker, the busbar and the interconnection."))
     # the design analysis (round 13, item 2) is in the set: the entry stays only for the rows it could not check, naming the figures to type
     da = choices.get("design_analysis") or {}
     if not da:
@@ -926,9 +968,53 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     missing += mounting.missing   # the uplift inputs still blank, the tile detail, a roof type out of scope (none when the check passed on drawn details)
     if pee_blank:
         missing.append(("Signing engineer's details in the title block", "Blank lines until typed under Settings › Company › Signing engineer: " + escape(", ".join(pee_blank)) + "."))
+    if not missing:
+        missing.append(("Nothing", "Every sheet the set calls for is drawn and every row is checked; the blank lines on the sheets are listed below."))
     miss_t = Table([[P("Item", cellb), P("Why it is not here, and where it stands", cellb)]] + [[P(a, cellb), P(b)] for a, b in missing], colWidths=[70 * mm, 120 * mm], hAlign="LEFT")
     miss_t.setStyle(kv_style)
-    story.append(miss_t)   # the audit's own table moved to the schedule of loads sheet (round 13, item 5)
+
+    # ---- the blank lines of the set (round 13 review, finding 5): every one the sheets above printed, grouped by sheet and
+    # reason, the signing engineer's own lines under their heading; the count per sheet is the number of blank lines there
+    c7 = ParagraphStyle("blank_cell", parent=cell, fontSize=7, leading=8.4)
+    c7b = ParagraphStyle("blank_cellb", parent=c7, fontName=FS, textColor=brand.BLACK)
+    grid7 = TableStyle(grid.getCommands() + [("FONTSIZE", (0, 0), (-1, -1), 7), ("TOPPADDING", (0, 0), (-1, -1), 1.2), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.2)])
+
+    def sheet_no(name: str) -> str:
+        if name not in sheet_names:
+            return escape(name)
+        i = sheet_names.index(name) + 1
+        if name == sched_names[0] and len(sched_names) > 1:
+            return f"{i}–{i + 1}"
+        return str(i)
+
+    def blank_rows(engineer: bool) -> list[list]:
+        rows_ = []
+        for g in blanks.grouped(sheet_names):
+            if g["engineer"] != engineer:
+                continue
+            which = "; ".join(escape(item) + (f" (× {n})" if n > 1 else "") for item, n in g["items"].items())
+            rows_.append([Paragraph(f"Sheet {sheet_no(g['sheet'])}", c7b), Paragraph(str(g["n"]), c7), Paragraph(which, c7), Paragraph(escape(g["reason"]), c7)])
+        return rows_
+
+    def blank_table(rows_: list[list], none_text: str, widths: list[float]) -> Table:
+        data = [[Paragraph(h, c7b) for h in ("Sheet", "Lines", "Which figures", "Why they are blank, and where to type them")]]
+        data += rows_ or [[Paragraph("—", c7), Paragraph("0", c7), Paragraph(none_text, c7), Paragraph("", c7)]]
+        t = Table(data, colWidths=[w * mm for w in widths], hAlign="LEFT", repeatRows=1)
+        t.setStyle(grid7)
+        return t
+
+    # the "not yet" table and the signing engineer's lines side by side; the blank lines of the set under them, full width.
+    # The last sheet stays one sheet whatever the state: when the set is mostly blank (the seed alone) the block shrinks to
+    # the frame, as the cover's index does.
+    engineer_col = [Paragraph("The signing engineer's lines", h2), Paragraph("Figures the set leaves to the signing engineer by design, with the sheet they sit on.", small),
+                    blank_table(blank_rows(True), "none", [16, 11, 76, 91])]
+    top_last = Table([[[Paragraph("What the set still lacks", h2), miss_t], engineer_col]], colWidths=[196 * mm, 194 * mm], hAlign="LEFT")
+    top_last.setStyle(two_col)
+    block_last: list = [top_last, Paragraph("Blank lines in this set, by sheet", h2),
+                        Paragraph("Every blank line the sheets above print, with its reason and where the figure is typed; the title block's signature line is not a figure.", small),
+                        blank_table(blank_rows(False), "none: the set holds every figure it prints", [18, 12, 160, 200])]
+    used_last = sum(f.wrap(avail_w, FRAME_H)[1] for f in story[last_start:])
+    story.append(KeepInFrame(avail_w, max(FRAME_H - 6 * mm - used_last, 60 * mm), block_last, mode="shrink", hAlign="LEFT"))
 
     # build
     buf = io.BytesIO()

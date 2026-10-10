@@ -4,8 +4,8 @@ one horizontal bus from the array to the two-way meter, every device a balloon-n
 
 Nothing invented: every figure comes from `pricing.choices` (the string design, the breakers, the gauges, the runs),
 the BOM lines by role, the materials list and the survey's service block (`doc.service`); a figure the app does not
-hold prints as a blank line with its reason beside it, a device whose role has no item prints its role name and "no
-item in the materials list". The symbols are IEC 60617-style simple shapes, each named in the legend, and the legend
+hold prints as a blank line with its reason beside it (and is recorded in the set's collector for the last sheet, round
+13 review finding 5), a device whose role has no item prints its role name and "no item in the materials list". The symbols are IEC 60617-style simple shapes, each named in the legend, and the legend
 says to verify the symbol set against the DU's sample; the placard wording carries "verify the DU's wording"; the 120 %
 rule at the point of interconnection prints its arithmetic and PASS or FAIL (a hard warning, never a block).
 
@@ -24,7 +24,8 @@ from reportlab.platypus import Paragraph, Spacer, Table
 
 from ..pricing.service_checks import INTERCONNECTION_LABEL, poi_busbar_check
 from . import brand
-from .plans_pdf import BLANK, TO_COMPLETE, _amps_in, _f, _g, _line, _lines_by_role
+from .plans_blanks import BLANK, Blanks
+from .plans_pdf import TO_COMPLETE, _amps_in, _f, _g, _line, _lines_by_role
 
 SHEET_NAME = "Single-line diagram"
 DRAW_W_MM = 392.0           # the frame's content width (400 mm less the 4 mm paddings)
@@ -279,7 +280,7 @@ class _Sld:
 
 # ---------------------------------------------------------------- the data behind the sheet
 
-def _figures(doc: Any, results: dict, items: dict[str, dict], cfg: dict) -> dict:
+def _figures(doc: Any, results: dict, items: dict[str, dict], cfg: dict, blanks: Optional[Blanks] = None) -> dict:
     """Everything the diagram and its tables print, read once from the results, the items and the survey."""
     pricing = results.get("pricing") or {}
     sizing = results.get("sizing") or {}
@@ -297,6 +298,7 @@ def _figures(doc: Any, results: dict, items: dict[str, dict], cfg: dict) -> dict
     service = getattr(doc, "service", None)
     svc = service.model_dump() if hasattr(service, "model_dump") else dict(service or {})
     poi = choices.get("poi_busbar") or poi_busbar_check(svc, choices)[0]
+    poi = {**poi, "kind": poi.get("kind") or kind}
     strings = int(choices.get("strings") or 0)
     per_string = int(choices.get("panels_per_string") or 0)
     panels_n = int(sizing.get("panels") or 0)
@@ -312,7 +314,7 @@ def _figures(doc: Any, results: dict, items: dict[str, dict], cfg: dict) -> dict
         "sdn": sdn, "sc": sc, "circuits": circuits, "svc": svc, "poi": poi, "strings": strings, "per_string": per_string, "lengths": lengths,
         "units": units, "inputs": inputs, "per_mppt": per_mppt, "panels_n": panels_n,
         "watt": (panel_l or {}).get("rating"), "kwp": float((pricing.get("totals") or {}).get("kwp") or sizing.get("kwp") or 0),
-        "items": items,
+        "items": items, "blanks": blanks if blanks is not None else Blanks(),
     }
 
 
@@ -322,15 +324,19 @@ def _assign_inputs(strings: int, n_inputs: int) -> list[int]:
     return [k % n for k in range(strings)]
 
 
-def poi_lines(poi: dict) -> list[str]:
+def poi_lines(poi: dict, kind: Optional[str] = None) -> list[str]:
     """The 120 % rule as the sheets print it, one short line per step so a wrapped label keeps each figure whole: the
-    arithmetic, the limit and PASS or FAIL, or why it is not checked."""
+    arithmetic, the limit and PASS or FAIL, or why it is not checked. On a no-export job the rule is applied all the same
+    (the inverter is a source on the bus even with an export limit) and the line says it is conservative (review finding 10)."""
     if not poi.get("checked"):
         return [f"120 % rule: not checked — {poi.get('reason') or 'no figures'}"]
     units = f" × {poi['units']}" if int(poi.get("units") or 1) > 1 else ""
-    return [f"120 %: {_g(poi['grid_breaker_a'])} A{units} + {_g(poi['main_breaker_a'])} A = {_g(poi['sum_a'])} A",
-            f"limit {_g(poi['factor'])} × {_g(poi['busbar_a'])} A = {_g(poi['limit_a'])} A",
-            f"{'PASS' if poi['ok'] else 'FAIL'}; verify the PEC clause"]
+    lines = [f"120 %: {_g(poi['grid_breaker_a'])} A{units} + {_g(poi['main_breaker_a'])} A = {_g(poi['sum_a'])} A",
+             f"limit {_g(poi['factor'])} × {_g(poi['busbar_a'])} A = {_g(poi['limit_a'])} A",
+             f"{'PASS' if poi['ok'] else 'FAIL'}; verify the PEC clause"]
+    if str(kind or poi.get("kind") or "") == "off_grid":
+        lines.append("(applied although nothing is exported: conservative; the DU's view: verify)")
+    return lines
 
 
 # ---------------------------------------------------------------- the drawing
@@ -345,6 +351,19 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     wiring = fig["wiring"]
     items = fig["items"]
     rating_of = lambda l: _amps_in(items.get(str((l or {}).get("code") or ""), {})) if l else None  # noqa: E731
+    blanks: Blanks = fig["blanks"]
+    NOT_ON_ITEM = "not on the item (Materials page)"
+    NOT_SURVEYED = "not surveyed (Site step › Service entrance)"
+
+    def blank(item: str, reason: str) -> str:
+        """A blank line on this sheet, recorded with its reason for the last sheet (round 13 review, finding 5)."""
+        return blanks.add(SHEET_NAME, item, reason)
+
+    def fv(v: Any, nd: int, unit: str, item: str, reason: str) -> str:
+        return _f(v, nd, unit) if v not in (None, "") else blank(item, reason)
+
+    def gv(v: Any, unit: str, item: str, reason: str) -> str:
+        return _g(v, unit) if v not in (None, "") else blank(item, reason)
 
     # ---- the bands (mm): the grid line above, the bus, the battery row and the earth bar below
     BUS, GRID_Y, BAT_Y, EARTH_Y = 96.0, 126.0, 38.0, 11.0
@@ -384,7 +403,7 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
             x += w_m + gap
         chain_end = x - gap
         names = ", ".join(f"S{k + 1}" for k in ks[:4]) + (" …" if len(ks) > 4 else "")
-        head = f"{names}: {n} × {watt_txt}" if n else f"S1: {BLANK} × {watt_txt} (the system is not sized)"
+        head = f"{names}: {n} × {watt_txt}" if n else f"S1: {blank('panels per string', 'the system is not sized')} × {watt_txt} (the system is not sized)"
         if len(ks) > 1:
             head += f" ({len(ks)} alike, one drawn)"
         if not from_ds:
@@ -392,7 +411,9 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
         s.stack(array_x0, y + 8.8, [head], 84, FS, "start", bold_first=True)
         if r == 0:
             data = (f"Voc {_f(voc, 1, 'V')} STC, {_f(voc_cold, 1, 'V')} at {_g(t_cold, '°C')}; Vmp {_f(vmp, 1, 'V')}; Isc {_f(isc, 2, 'A')}; Imp {_f(imp, 2, 'A')}"
-                    if from_ds else f"Voc {BLANK} STC, {BLANK} at {_g(t_cold, '°C')}; Vmp {BLANK}; Isc {BLANK}; Imp {BLANK} (not on the item; string {_f(ch.get('string_voltage_v'), 0, 'V')} by the rule)")
+                    if from_ds else f"Voc {blank('Panel: Voc', NOT_ON_ITEM + ' (the datasheet)')} STC, {blank('Panel: Voc at T_cold', 'the datasheet is not on file')} at {_g(t_cold, '°C')}; "
+                                    f"Vmp {blank('Panel: Vmp', NOT_ON_ITEM + ' (the datasheet)')}; Isc {blank('Panel: Isc', NOT_ON_ITEM + ' (the datasheet)')}; Imp {blank('Panel: Imp', NOT_ON_ITEM + ' (the datasheet)')} "
+                                    f"(not on the item; string {_f(ch.get('string_voltage_v'), 0, 'V')} by the rule)")
             s.stack(array_x0, y - 4.8, [data], 84, FS, "start")
         # the home-run pair: + from the chain's right end, − from its left end over the top, both to the DC box
         yp, ym = y + 1.2, y - 1.2
@@ -412,14 +433,14 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
         s.stack(array_x0, row_ys[0] - 13.0, [f"{len(distinct)} distinct string lengths: one drawn; every string is in the table under the diagram"], 84, FS, "start")
     pv_gauge = ch.get("pv_gauge")
     mc4_l = _line(by_role, "mc4_pair")
-    run_lbl = [f"per string 2 × {_g(pv_gauge)} mm² PV wire,", f"{_g(ch.get('pv_run_m'), 'm')} per conductor" + (f"; {strings} strings" if strings > 1 else ""),
+    run_lbl = [f"per string 2 × {gv(pv_gauge, '', 'PV wire gauge', 'no gauge sized (the hard pv_cable warning)')} mm² PV wire,", f"{_g(ch.get('pv_run_m'), 'm')} per conductor" + (f"; {strings} strings" if strings > 1 else ""),
                f"connector pairs at the array end ({_code(mc4_l, 'mc4_pair')})"]
     s.stack(101.0, BUS + 13.4, run_lbl, 40, FS, "middle")
     # the array bonding conductor: dashed along the strings to the earth bar
     bond_y = row_ys[-1] - 9.0
     bonding = _line(by_role, "array_bonding")
     bond_mm2 = (circuits.get("C1") or {}).get("egc_provided_mm2")
-    bond_txt = f"array bonding {_g(bond_mm2)} mm² ({_code(bonding, 'array_bonding')}), dashed"
+    bond_txt = f"array bonding {gv(bond_mm2, '', 'array bonding conductor size', 'not in the item name or spec (Materials page), or no item for the role')} mm² ({_code(bonding, 'array_bonding')}), dashed"
     s.line(array_x0, bond_y, 121.0, bond_y, W_LEAD, dash=[1.6, 1.0])
     s.line(121.0, bond_y, 121.0, EARTH_Y, W_LEAD, dash=[1.6, 1.0])
     s.text(array_x0, bond_y - 3.2, _fit(bond_txt, F, FS, 110 * mm), FS, F, brand.GRAY)
@@ -477,7 +498,7 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     if dc_rating:
         brk_lbl = [f"{_f(dc_rating, 0, 'A')} 2P DC breaker per string ({_code(dc_l, 'dc_breaker')}), each string's DC disconnect"]
     else:
-        brk_lbl = [f"DC breaker per string, rated {_f(rating_of(dc_l), 0, 'A')} ({_code(dc_l, 'dc_breaker')})", "not checked: no Isc on file", "each string's DC disconnect"]
+        brk_lbl = [f"DC breaker per string, rated {fv(rating_of(dc_l), 0, 'A', 'DC breaker rating', 'no ampere figure in the item name (Materials page)')} ({_code(dc_l, 'dc_breaker')})", "not checked: no Isc on file", "each string's DC disconnect"]
     y_lbl = s.stack(box_x0 + 3.0, box_bot - 3.4, brk_lbl, 44, FS, "start")
     # the SPDs: one per MPPT input in use, to the box's earth bar; the stubs jump the other inputs' lines
     n_spd = int(ch.get("dc_spds") or 0)
@@ -485,7 +506,7 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     s.line(box_x0 + 0.8, bar_y, box_x1 - 2.0, bar_y, W_SYM)
     for i in range(min(n_spd, len(in_ys))):
         s.spd(box_x0 + 28.0 + i * 5.0, in_ys[i], bar_y, [yy for j, yy in enumerate(in_ys) if j != i])
-    spd_lbl = f"DC SPD {_f(spd_v, 0, 'V')} × {n_spd}, one per MPPT input in use ({_code(spd_l, 'dc_spd')})" if _has_item(spd_l) else "DC SPD: no item in the materials list (dc_spd)"
+    spd_lbl = f"DC SPD {fv(spd_v, 0, 'V', 'DC SPD voltage', 'no voltage figure in the item name (Materials page)')} × {n_spd}, one per MPPT input in use ({_code(spd_l, 'dc_spd')})" if _has_item(spd_l) else "DC SPD: no item in the materials list (dc_spd)"
     y_lbl = s.stack(box_x0 + 3.0, y_lbl - 0.6, [spd_lbl], 44, FS, "start")
     if joined:
         s.stack(box_x0 + 3.0, y_lbl - 0.6, ["verify a fuse per string where more than two join (no combiner role on the BOM)"], 44, FS, "start")
@@ -499,20 +520,30 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
             s.text(inv_x - 0.8, yi + 0.9, f"MPPT {i + 1}", TAG, F, brand.MUTED, "end")
     inv_l = fig["inv_l"]
     inv_code = str(inv_l.get("code")) if _has_item(inv_l) else "inverter: no item in the materials list"
-    inv_type = {"grid_tie": "grid-tie", "hybrid": "hybrid", "off_grid": "off-grid type", "charge_controller": "charge controller", "ess_set": "ESS set"}.get(str(ii.get("inverter_type") or ""), BLANK)
-    phase = f"{_g(ii.get('phase'))}Ø" if ii.get("phase") else BLANK
+    type_word = {"grid_tie": "grid-tie", "hybrid": "hybrid", "off_grid": "off-grid", "charge_controller": "charge controller", "ess_set": "ESS set"}.get(str(ii.get("inverter_type") or ""), "")
+    phase = f"{_g(ii.get('phase'))}Ø" if ii.get("phase") else blank("Inverter: phase", NOT_ON_ITEM)
     in_list = _mppt_inputs(ii)
-    inp_txt = "/".join(_g(a) for a in in_list) + " A" if any(a is not None for a in in_list) else BLANK
+    inp_txt = "/".join(_g(a) for a in in_list) + " A" if any(a is not None for a in in_list) else blank("Inverter: current per MPPT input", NOT_ON_ITEM)
     grid_flag = ch.get("inverter_grid_interactive")
     cert = str(fig["pricing"].get("inverter_certificate") or "").strip()
+    if grid_flag:
+        # the review's finding 7: the balloon leads with the role the job gives the inverter; the datasheet's type word follows it
+        role = "grid-interactive" + {"combination": " (hybrid)", "off_grid": " (no export)"}.get(kind, "")
+        head = (f"{inv_code}: {_g((inv_l or {}).get('rating'), 'kW')} {role}, {phase}" + (f" × {units}" if units > 1 else "")
+                + f"; the datasheet's type: {type_word if type_word else blank('Inverter: type', 'not marked on the item (Materials page)') + ' (not marked on the item)'}")
+    else:
+        head = f"{inv_code}: {_g((inv_l or {}).get('rating'), 'kW')} {type_word + ' type' if type_word else blank('Inverter: type', 'not marked on the item (Materials page)')}, {phase}" + (f" × {units}" if units > 1 else "")
     inv_lines = [
-        f"{inv_code}: {_g((inv_l or {}).get('rating'), 'kW')} {inv_type}, {phase}" + (f" × {units}" if units > 1 else ""),
-        f"{_g(ii.get('mppt_count')) if ii.get('mppt_count') else BLANK} MPPT inputs, {inp_txt}; max PV {_f(ii.get('max_pv_voltage_v'), 0, 'V')}; window {_f(ii.get('mppt_min_v'), 0, 'V')}–{_f(ii.get('mppt_max_v'), 0, 'V')}",
+        head,
+        f"{_g(ii.get('mppt_count')) if ii.get('mppt_count') else blank('Inverter: MPPT count', NOT_ON_ITEM)} MPPT inputs, {inp_txt}; max PV {fv(ii.get('max_pv_voltage_v'), 0, 'V', 'Inverter: maximum PV voltage', NOT_ON_ITEM)}; "
+        f"window {fv(ii.get('mppt_min_v'), 0, 'V', 'Inverter: MPPT window (low)', NOT_ON_ITEM)}–{fv(ii.get('mppt_max_v'), 0, 'V', 'Inverter: MPPT window (high)', NOT_ON_ITEM)}",
     ]
     s.stack(inv_x + side - 1.0, BUS + 30.0, inv_lines, 44, FS, "end", bold_first=True)
     out_lines = [
-        f"AC {_g(wiring.get('ac_voltage'), 'V')} 1Ø; grid-interactive: {'yes' if grid_flag else 'no' if grid_flag is False else 'not marked'}; certificate: {cert if cert else BLANK}",
-        f"battery port {ii.get('battery_class') or BLANK}, {_f(ii.get('charge_v_max'), 1, 'V')}, {_f(ii.get('battery_max_a'), 0, 'A')} discharge, {_f(ii.get('charge_a_max'), 0, 'A')} charge",
+        f"AC {_g(wiring.get('ac_voltage'), 'V')} 1Ø; grid-interactive: {'yes' if grid_flag else 'no' if grid_flag is False else 'not marked'}; "
+        f"certificate: {cert if cert else blank('Inverter: certificate', 'none on file: type it on the Materials page (confirm with the maker before the DU application)')}",
+        f"battery port {ii.get('battery_class') or blank('Inverter: battery port class', NOT_ON_ITEM)}, {fv(ii.get('charge_v_max'), 1, 'V', 'Inverter: charge voltage', NOT_ON_ITEM)}, "
+        f"{fv(ii.get('battery_max_a'), 0, 'A', 'Inverter: maximum discharge', NOT_ON_ITEM)} discharge, {fv(ii.get('charge_a_max'), 0, 'A', 'Inverter: charge current', NOT_ON_ITEM)} charge",
     ]
     s.stack(inv_x + side + 8.0, BUS - 30.0, out_lines, 44, FS, "start")
 
@@ -534,10 +565,12 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
             s.text(bat_end + 2.5, BAT_Y - 1.0, f"… × {n_units}", FS, F, brand.GRAY)
         bb_l = _line(by_role, "battery_breaker")
         bat_lines = [
-            f"{str(bat_l.get('code')) if _has_item(bat_l) else 'battery: no item in the materials list'}: {n_units} × {_g((bat_l or {}).get('rating'), 'kWh')} = {_f(ch.get('battery_nominal_kwh'), 2, 'kWh')}, "
-            f"{_f(bi.get('nominal_v'), 1, 'V')}; max discharge {_f(bi.get('continuous_a'), 0, 'A')} per unit",
-            f"battery breaker {_f(bc.get('breaker_a'), 0, 'A')} 2P ({_code(bb_l, 'battery_breaker')}); {bc.get('cable_gauge') or BLANK} mm² lug pairs, {_g(wiring.get('battery_pairs_per_battery'))} per unit; "
-            f"inverter battery current {_f(bc.get('current_a'), 0, 'A')}",
+            f"{str(bat_l.get('code')) if _has_item(bat_l) else 'battery: no item in the materials list'}: {n_units} × {gv((bat_l or {}).get('rating'), 'kWh', 'Battery: rating', 'no rating on the item (Materials page)')} = "
+            f"{fv(ch.get('battery_nominal_kwh'), 2, 'kWh', 'battery bank: nominal kWh', 'no battery priced')}, "
+            f"{fv(bi.get('nominal_v'), 1, 'V', 'Battery: nominal voltage', NOT_ON_ITEM)}; max discharge {fv(bi.get('continuous_a'), 0, 'A', 'Battery: maximum discharge', NOT_ON_ITEM)} per unit",
+            f"battery breaker {fv(bc.get('breaker_a'), 0, 'A', 'battery breaker rating', 'no breaker sized (the hard battery_breaker warning)')} 2P ({_code(bb_l, 'battery_breaker')}); "
+            f"{bc.get('cable_gauge') or blank('battery cable gauge', 'no cable sized (the hard battery_cable warning)')} mm² lug pairs, {_g(wiring.get('battery_pairs_per_battery'))} per unit; "
+            f"inverter battery current {fv(bc.get('current_a'), 0, 'A', 'inverter battery current', 'not computed (the inverter has no battery figure)')}",
         ]
         if n_units > 2:
             bat_lines.append("parallel bus: verify a battery combiner (not a BOM role)")
@@ -553,8 +586,8 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     s.line(ac_x, BUS, x_c4 - 4.0, BUS, W_BUS)
     s.breaker(x_c4, BUS, True, 2, 8.0)
     s.balloon(x_c4, BUS + 6.4, "C4")
-    s.stack(x_c4, BUS - 6.0, [f"{_f(ch.get('ac_breaker_a'), 0, 'A')} 2P ({_code(_line(by_role, 'ac_breaker'), 'ac_breaker')})",
-                               f"2 × {_g(ch.get('ac_gauge'))} mm² THHN, {_g(ch.get('ac_run_m'), 'm')}", "inverter output"], 24, FS, "middle")
+    s.stack(x_c4, BUS - 6.0, [f"{fv(ch.get('ac_breaker_a'), 0, 'A', 'inverter-output breaker', 'no standard size covers the design current (the hard ac_circuit warning)')} 2P ({_code(_line(by_role, 'ac_breaker'), 'ac_breaker')})",
+                               f"2 × {gv(ch.get('ac_gauge'), '', 'AC conductor gauge', 'no gauge sized (the hard ac_circuit warning)')} mm² THHN, {_g(ch.get('ac_run_m'), 'm')}", "inverter output"], 24, FS, "middle")
     ats = ch.get("ats")
     ats_l = _line(by_role, "ats")
     s.line(x_c4 + 4.0, BUS, x_ats - 7.0, BUS, W_BUS)
@@ -565,14 +598,14 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
         s.stack(x_ats, BUS - 6.6, ["transfer switch: built into the inverter (its item says so)"], 26, FS, "middle")
     else:
         s.ats(x_ats, BUS)
-        ats_txt = f"ATS {_f(rating_of(ats_l), 0, 'A')} ({ats_l.get('code')})" if _has_item(ats_l) else "ATS: no item in the materials list (ats)"
+        ats_txt = f"ATS {fv(rating_of(ats_l), 0, 'A', 'ATS rating', 'no ampere figure in the item name (Materials page)')} ({ats_l.get('code')})" if _has_item(ats_l) else "ATS: no item in the materials list (ats)"
         s.stack(x_ats, BUS - 6.6, [ats_txt, "transfer switch; bypass from above"], 26, FS, "middle")
     s.line(x_ats + 7.0, BUS, x_pb0, BUS, W_BUS)
     # the AC SPD on the board, to the earth bar
     s.dot(x_spd, BUS)
     s.spd(x_spd, BUS, EARTH_Y)
     acspd_l = _line(by_role, "ac_spd")
-    acspd_txt = f"AC SPD type 2, {_f(_volts_in(acspd_l.get('name')), 0, 'V')} ({acspd_l.get('code')}), on the AC board" if _has_item(acspd_l) else "AC SPD: no item in the materials list (ac_spd)"
+    acspd_txt = f"AC SPD type 2, {fv(_volts_in(acspd_l.get('name')), 0, 'V', 'AC SPD voltage', 'no voltage figure in the item name (Materials page)')} ({acspd_l.get('code')}), on the AC board" if _has_item(acspd_l) else "AC SPD: no item in the materials list (ac_spd)"
     s.stack(x_spd - 2.0, BUS - 20.0, [acspd_txt], 30, FS, "end")
     # the existing panelboard: the bus bar with the backfeed breaker, the main breaker at the service side
     pb_h = 16.0
@@ -580,13 +613,13 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     bar_x = x_pb0 + 6.0
     s.line(x_pb0, BUS, bar_x, BUS, W_BUS)
     s.line(bar_x, BUS - 5.5, bar_x, BUS + 5.5, W_BUS)
-    s.text(bar_x + 2.0, BUS + 1.2, f"bus {_g(svc.get('busbar_a'), 'A')}", TAG, F, brand.GRAY)
-    s.text(bar_x + 2.0, BUS - 5.6, "backfeed brk: C5, C6", TAG, F, brand.MUTED)
+    s.text(bar_x + 2.0, BUS + 1.2, f"bus {gv(svc.get('busbar_a'), 'A', 'existing panelboard: busbar rating', NOT_SURVEYED)}", TAG, F, brand.GRAY)
+    s.text(x_pb1 - 1.2, BUS - 5.6, "C5 backfeed brk; C6 bypass feed", TAG, F, brand.MUTED, "end")   # inside the box (review finding 11: C6 is a load-side feed)
     s.line(bar_x, BUS, x_pb1 - 12.0, BUS, W_BUS)
     s.breaker(x_pb1 - 8.0, BUS, True, 2, 7.0)
-    s.text(x_pb1 - 8.0, BUS + 4.0, f"main {_g(svc.get('main_breaker_a'), 'A')}", TAG, F, brand.GRAY, "middle")
+    s.text(x_pb1 - 8.0, BUS + 4.0, f"main {gv(svc.get('main_breaker_a'), 'A', 'existing panelboard: main breaker', NOT_SURVEYED)}", TAG, F, brand.GRAY, "middle")
     s.line(x_pb1 - 4.5, BUS, x_pb1, BUS, W_BUS)
-    pb_lines = ["existing panelboard: main " + _g(svc.get("main_breaker_a"), "A") + ", bus " + _g(svc.get("busbar_a"), "A")]
+    pb_lines = ["existing panelboard: main " + gv(svc.get("main_breaker_a"), "A", "existing panelboard: main breaker", NOT_SURVEYED) + ", bus " + gv(svc.get("busbar_a"), "A", "existing panelboard: busbar rating", NOT_SURVEYED)]
     if not (svc.get("main_breaker_a") and svc.get("busbar_a")):
         pb_lines.append("(not surveyed)")
     if svc.get("panelboard"):
@@ -596,7 +629,7 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     s.line(x_pb1, BUS, x_disc - 5.0, BUS, W_BUS)
     s.isolator(x_disc, BUS, 8.0)
     disc_l = _line(by_role, "ac_disconnect")
-    disc_txt = f"AC disconnect {_f(rating_of(disc_l), 0, 'A')} ({disc_l.get('code')})" if _has_item(disc_l) else "AC disconnect: no item in the materials list (ac_disconnect)"
+    disc_txt = f"AC disconnect {fv(rating_of(disc_l), 0, 'A', 'AC disconnect rating', 'no ampere figure in the item name (Materials page)')} ({disc_l.get('code')})" if _has_item(disc_l) else "AC disconnect: no item in the materials list (ac_disconnect)"
     s.stack(x_disc, BUS + 13.0, [disc_txt, "visible, lockable, for the DU (verify its place)"], 30, FS, "middle")
     s.line(x_disc + 5.0, BUS, x_meter - 4.6, BUS, W_BUS)
     # the point of interconnection: on the panelboard's bus for a load-side breaker (or when not chosen), else at the service
@@ -607,7 +640,7 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     poi_txt = ["point of interconnection: " + (INTERCONNECTION_LABEL.get(inter) if inter else "not chosen (Site step)")]
     if svc.get("interconnection_note"):
         poi_txt.append(str(svc["interconnection_note"]))
-    poi_txt += poi_lines(poi)
+    poi_txt += poi_lines(poi, kind)
     x_poi_lbl = x_poi + 3.0 if load_side else x_poi      # clear of the AC SPD's stub on the left
     y_end = s.stack(x_poi_lbl, BUS - 11.0, poi_txt, 36, FS, "middle", bold_first=True)
     if poi.get("checked") and not poi.get("ok"):
@@ -615,17 +648,18 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     # the meter
     two_way = kind in ("net_metering", "combination")
     s.meter(x_meter, BUS, two_way)
-    meter_lines = (["two-way meter: installed by the DU after the CFEI"] if two_way else ["existing meter; nothing exported"]) + [f"meter number: {svc.get('meter_no') or BLANK}"]
+    meter_lines = (["two-way meter: installed by the DU after the CFEI"] if two_way else ["existing meter; nothing exported"]) + [f"meter number: {svc.get('meter_no') or blank('meter number', NOT_SURVEYED)}"]
     s.stack(x_meter + 2.0, BUS + 15.0, meter_lines, 44, FS, "middle")
     # the service drop and the DU
     s.line(x_meter + 4.6, BUS, DRAW_W_MM - 4.0, BUS, W_BUS, dash=[3.0, 1.5])
     s.text(x_meter + 6.0, BUS - 3.6, "service drop", 6.5, F, brand.MUTED)
     du = str(svc.get("du_name") or "").strip()
     fl = svc.get("fault_level_ka")
-    du_lines = [f"{du if du else 'DU ' + BLANK}: fault level at the service {_f(fl, 1, 'kA') if fl not in (None, '') else BLANK}", "(from the DU, verify)",
+    du_lines = [f"{du if du else 'DU ' + blank('the DU', NOT_SURVEYED)}: fault level at the service {_f(fl, 1, 'kA') if fl not in (None, '') else blank('the fault level at the service', 'from the DU, typed on the Site step › Service entrance; verify')}",
+                "(from the DU, verify)",
                 _g(svc.get("voltage_v"), "V") if svc.get("voltage_v") else _g(wiring.get("ac_voltage"), "V") + " (assumption)",
-                f"{svc.get('phase')}Ø" if svc.get("phase") else f"phase {BLANK}", f"account {svc.get('account_no') or BLANK}"]
-    s.stack(DRAW_W_MM - 4.0, BUS + 36.0, du_lines, 46, FS, "end")
+                f"{svc.get('phase')}Ø" if svc.get("phase") else f"phase {blank('service phase', NOT_SURVEYED)}", f"account {svc.get('account_no') or blank('DU account number', NOT_SURVEYED)}"]
+    s.stack(DRAW_W_MM - 4.0, BUS + 36.0, du_lines, 62, FS, "end")   # wide enough for "fault level at the service 10.0 kA" on one line (review finding 3)
 
     # ---- the grid line above the bus: the grid feed to the inverter's AC input and the maintenance bypass to the ATS
     x_in = inv_x + side
@@ -639,7 +673,8 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     s.balloon(x_c5, GRID_Y - 6.4, "C5")
     s.line(x_c5 + 4.0, GRID_Y, x_poi, GRID_Y, W_BUS)
     s.line(x_poi, GRID_Y, x_poi, y_poi + 1.5, W_BUS)
-    grid_lbl = [f"grid feed to the inverter's AC input: {_f(ch.get('ac_grid_breaker_a'), 0, 'A')} 2P, 2 × {_g(ch.get('ac_grid_gauge'))} mm² THHN, {_g(ch.get('ac_run_m'), 'm')}"
+    grid_lbl = [f"grid feed to the inverter's AC input: {fv(ch.get('ac_grid_breaker_a'), 0, 'A', 'grid-side breaker', 'no standard size covers the design current (the hard ac_circuit warning)')} 2P, "
+                f"2 × {gv(ch.get('ac_grid_gauge'), '', 'grid-side conductor gauge', 'no gauge sized (the hard ac_circuit warning)')} mm² THHN, {_g(ch.get('ac_run_m'), 'm')}"
                 + ("" if ch.get("ac_grid_rating_known") else " (sized on the output: no AC input rating on the item)")]
     s.stack(x_c5, GRID_Y + 12.0, grid_lbl, 56, FS, "middle")
     # the bypass: down from the grid line into the transfer switch (or the bus when the switch is built in)
@@ -650,7 +685,7 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     s.breaker(xb, y_tap + 4.0 + (0.0 if not built_in else 2.0), False, 2, 8.0)
     s.line(xb, y_tap + 0.5, xb, y_tap, W_BUS)
     s.balloon(xb + 6.6, y_tap + 6.0, "C6")
-    s.stack(xb + 9.0, GRID_Y - 3.0, [f"maintenance bypass {_f(ch.get('ac_grid_breaker_a'), 0, 'A')} 2P"], 30, FS, "start")
+    s.stack(xb + 9.0, GRID_Y - 3.0, [f"maintenance bypass {fv(ch.get('ac_grid_breaker_a'), 0, 'A', 'bypass breaker', 'no standard size covers the design current (the hard ac_circuit warning)')} 2P"], 30, FS, "start")
 
     # ---- 7. grounding: the EGC bus along the bottom, the electrode under the panelboard, the bonds
     s.line(box_x0 + 0.8, EARTH_Y, x_disc, EARTH_Y, W_BUS)
@@ -662,10 +697,13 @@ def sld_drawing(fig: dict) -> Drawing:   # noqa: C901  (one function per sheet, 
     c7 = circuits.get("C7") or {}
     gec_gauge = c7.get("egc_provided_mm2") if c7 else ch.get("ac_gauge")
     rod_txt = f"{rod.get('name')} ({rod.get('code')})" if _has_item(rod) else "ground rod: no item in the materials list"
-    s.stack(x_disc, EARTH_Y + 3.0 + 3 * FS * 0.42, [
-        f"EGC bus: the grounding run {_g(gec_gauge)} mm² THHN, {_g(ch.get('grounding_run_m'), 'm')}; bonds dashed: array, DC box, inverter, battery rack (verify)",
-        f"electrode: {rod_txt}; GEC {_g(gec_gauge)} mm² to the rod, required 14 mm² or less for a rod (verify)",
-    ], 66, FS, "end")
+    # the caption sits to the right of the C7 balloon, where no bus line or symbol runs (review finding 3: anchored at the
+    # bus's end it was struck through by the bus line and overprinted the electrode); `start` anchored, as wide as the sheet leaves
+    cap_x = x_disc + 5.0 + BAL_R + 1.6
+    s.stack(cap_x, EARTH_Y + 2 * FS * 0.42 + 1.0, [
+        f"EGC bus: the grounding run {gv(gec_gauge, '', 'grounding run gauge', 'no AC conductor sized (the hard ac_circuit warning)')} mm² THHN, {_g(ch.get('grounding_run_m'), 'm')}; bonds dashed: array, DC box, inverter, battery rack (verify)",
+        f"electrode: {rod_txt}; GEC {gv(gec_gauge, '', 'GEC gauge', 'no AC conductor sized (the hard ac_circuit warning)')} mm² to the rod, required 14 mm² or less for a rod (verify)",
+    ], DRAW_W_MM - 4.0 - cap_x, FS, "start")
     return s.d
 
 
@@ -745,16 +783,22 @@ def placard_rows(fig: dict) -> list[list[str]]:
     max_voc = per_string * float(voc_cold) if (voc_cold and per_string) else None
     isc_total = strings * float(isc) if (isc and strings) else None
     grid_flag = ch.get("inverter_grid_interactive")
+    blanks: Blanks = fig["blanks"]
+    blank = lambda item, reason: blanks.add(SHEET_NAME, item, reason)  # noqa: E731
     rows = [
         ["At the service (meter and main)", "WARNING: DUAL POWER SOURCE — PV SYSTEM CONNECTED", VERIFY_WORDING],
         ["The AC disconnect", "PV SYSTEM AC DISCONNECT", VERIFY_WORDING],
-        ["The DC box", f"PV DC DISCONNECT: maximum Voc {_f(max_voc, 1, 'V') if max_voc else BLANK} at {_g(t_cold, '°C')} ({per_string or BLANK} × {_f(voc_cold, 2, 'V')}); "
-                       f"maximum circuit current: {strings or BLANK} strings × Isc {_f(isc, 2, 'A')} = {_f(isc_total, 2, 'A') if isc_total else BLANK}",
+        ["The DC box", f"PV DC DISCONNECT: maximum Voc {_f(max_voc, 1, 'V') if max_voc else blank('DC placard: maximum Voc', 'the datasheet (Voc at T_cold) is not on file')} at {_g(t_cold, '°C')} "
+                       f"({per_string or blank('DC placard: panels per string', 'the system is not sized')} × {_f(voc_cold, 2, 'V') if voc_cold else blank('DC placard: Voc at T_cold', 'the datasheet is not on file')}); "
+                       f"maximum circuit current: {strings or blank('DC placard: strings', 'the system is not sized')} strings × Isc {_f(isc, 2, 'A') if isc else blank('DC placard: Isc', 'not on the panel item (the datasheet)')} = "
+                       f"{_f(isc_total, 2, 'A') if isc_total else blank('DC placard: maximum circuit current', 'the Isc or the string count is not on file')}",
          "the NEC 690.53 placard; verify the PEC 6.90 clause and " + VERIFY_WORDING],
-        ["The inverter", f"{_g((fig['inv_l'] or {}).get('rating'), 'kW')} {'GRID-INTERACTIVE' if grid_flag else 'HYBRID'} INVERTER" + ("" if grid_flag else "; grid-interactive: " + ("no" if grid_flag is False else "not marked")), VERIFY_WORDING],
+        ["The inverter", f"{_g((fig['inv_l'] or {}).get('rating'), 'kW') if (fig['inv_l'] or {}).get('rating') else blank('inverter placard: rating', 'no rating on the item (Materials page)')} {'GRID-INTERACTIVE' if grid_flag else 'HYBRID'} INVERTER"
+         + ("" if grid_flag else "; grid-interactive: " + ("no" if grid_flag is False else "not marked")), VERIFY_WORDING],
     ]
     if kind != "net_metering":
-        rows.append(["The battery", f"ENERGY STORAGE {_f(ch.get('battery_nominal_kwh'), 2, 'kWh')}, {_f(fig['bat_item'].get('nominal_v'), 1, 'V')}", VERIFY_WORDING])
+        rows.append(["The battery", f"ENERGY STORAGE {_f(ch.get('battery_nominal_kwh'), 2, 'kWh') if ch.get('battery_nominal_kwh') else blank('battery placard: kWh', 'no battery priced')}, "
+                                    f"{_f(fig['bat_item'].get('nominal_v'), 1, 'V') if fig['bat_item'].get('nominal_v') else blank('battery placard: nominal voltage', 'not on the item (Materials page)')}", VERIFY_WORDING])
     if _line(fig["by_role"], "rsd") is not None:
         rows.append(["The array and the DC box", "RAPID SHUTDOWN: the BOM carries a rapid-shutdown item", VERIFY_WORDING])
     return rows
@@ -763,7 +807,7 @@ def placard_rows(fig: dict) -> list[list[str]]:
 def sld_sheet(doc: Any, results: dict, items: dict[str, dict], cfg: dict, st: dict) -> tuple[str, list]:
     """The hook `plans_pdf` calls: (the sheet's name, its flowables). `st` holds the set's paragraph and table styles
     (h1, h2, body, small, cell, cellb, grid, two_col)."""
-    fig = _figures(doc, results, items, cfg)
+    fig = _figures(doc, results, items, cfg, st.get("blanks"))
     P = lambda t, style=None: Paragraph(t, style or st["cell"])  # noqa: E731
     flows: list = [Paragraph(SHEET_NAME, st["h1"])]
     strings, per_string = fig["strings"], fig["per_string"]
@@ -775,7 +819,8 @@ def sld_sheet(doc: Any, results: dict, items: dict[str, dict], cfg: dict, st: di
     # beyond three distinct string lengths the array prints as a table beside the one drawn string
     lengths = fig["lengths"]
     if len(set(lengths)) > 3:
-        rows = [[f"S{k + 1}", str(n), _f(n * float(fig["sdn"].get("voc_cold_v") or 0), 1, "V") if fig["sdn"].get("voc_cold_v") else BLANK] for k, n in enumerate(lengths)]
+        rows = [[f"S{k + 1}", str(n), _f(n * float(fig["sdn"].get("voc_cold_v") or 0), 1, "V") if fig["sdn"].get("voc_cold_v") else fig["blanks"].add(SHEET_NAME, f"Voc of S{k + 1} at T_cold", "the datasheet is not on file")]
+                for k, n in enumerate(lengths)]
         t = Table([[P("String", st["cellb"]), P("Panels", st["cellb"]), P(f"Voc at {_g(fig['sdn'].get('t_cold_c'), '°C')}", st["cellb"])]] + [[P(c) for c in r] for r in rows],
                   colWidths=[18 * mm, 18 * mm, 30 * mm], hAlign="LEFT")
         t.setStyle(st["grid"])

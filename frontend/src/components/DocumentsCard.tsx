@@ -54,6 +54,7 @@ export default function DocumentsCard({
   urls,
   openDocument,
   plansIssuedAt,
+  plansIssuedBy,
   revisions,
   onIssueRevision,
   vicinity,
@@ -69,6 +70,8 @@ export default function DocumentsCard({
   openDocument: (url: string, inlineHint?: boolean) => void
   /** Round 13: the plan set's first issue (revision 0) and its revision log; "Issue a revision" appends the next number. */
   plansIssuedAt?: string | null
+  /** The signed-in person who first built the set, revision 0's "By" on the cover (the round-13 review's finding 14). */
+  plansIssuedBy?: string | null
   revisions?: RevisionEntry[]
   onIssueRevision?: () => void
   /** Round 13, item 4: the vicinity map on record, so the office is told here what sheet 2 will print. */
@@ -108,7 +111,7 @@ export default function DocumentsCard({
                     {plansIssuedAt ? (
                       <>
                         <span className="muted">
-                          {last ? `Rev. ${last.no}: ${last.note} — ${fmtDateShort(last.date)}, by ${last.by || '—'}` : `Rev. 0: first issue — ${fmtDateShort(plansIssuedAt)}`}
+                          {last ? `Rev. ${last.no}: ${last.note} — ${fmtDateShort(last.date)}, by ${last.by || '—'}` : `Rev. 0: first issue — ${fmtDateShort(plansIssuedAt)}, by ${plansIssuedBy || '—'}`}
                         </span>{' '}
                         {onIssueRevision && (
                           <button type="button" className="toggle link" onClick={onIssueRevision} disabled={busy}>

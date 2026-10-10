@@ -44,14 +44,16 @@ def poi_busbar_check(service: Any, choices: dict) -> tuple[dict, list[dict]]:
     `choices` the BOQ's (`ac_grid_breaker_a`, `inverter_units`). The block carries every figure of the inequality, so a
     sheet prints the arithmetic rather than a verdict alone:
 
-        {"interconnection", "checked", "reason", "grid_breaker_a", "units", "backfeed_a", "main_breaker_a", "busbar_a",
-         "factor", "limit_a", "sum_a", "ok", "source"}"""
+        {"interconnection", "kind", "checked", "reason", "grid_breaker_a", "units", "backfeed_a", "main_breaker_a", "busbar_a",
+         "factor", "limit_a", "sum_a", "ok", "source"}
+
+    `kind` is the job's (`choices["kind"]`): on a no-export job the sheets say the rule is applied conservatively (review finding 10)."""
     inter = str(_get(service, "interconnection") or "")
     main_a, bus_a = _num(_get(service, "main_breaker_a")), _num(_get(service, "busbar_a"))
     grid_a = _num((choices or {}).get("ac_grid_breaker_a"))
     units = max(int((choices or {}).get("inverter_units") or 1), 1)
     block: dict = {
-        "interconnection": inter, "checked": False, "reason": None,
+        "interconnection": inter, "kind": str((choices or {}).get("kind") or ""), "checked": False, "reason": None,
         "grid_breaker_a": grid_a, "units": units, "backfeed_a": grid_a * units if grid_a is not None else None,
         "main_breaker_a": main_a, "busbar_a": bus_a, "factor": BUSBAR_FACTOR,
         "limit_a": bus_a * BUSBAR_FACTOR if bus_a is not None else None, "sum_a": None, "ok": None, "source": RULE_SOURCE,

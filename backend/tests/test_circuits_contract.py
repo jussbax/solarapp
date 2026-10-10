@@ -144,7 +144,7 @@ def client(tmp_path_factory):
 
 def test_the_project_results_carry_the_block_and_the_datasheets_fill_the_pv_row(client):
     """Through the API: the Pila sample's results carry the seven rows; with the datasheets and a 500 V input on the
-    inverter the PV row's design current is 1.25 × 1.25 × Isc and its OCPD the DC breaker the generator chose; the
+    inverter the PV row's continuous current is 1.25 × Isc, its design current 1.25 × 1.25 × Isc and its OCPD the DC breaker the generator chose; the
     strings on the MPPT inputs decide the combined row; the set's sheet count is unchanged (nothing on the sheets
     reads the block yet)."""
     aid = client.post("/api/assessments", json=deepcopy(PILA_DOC)).json()["id"]
@@ -163,7 +163,9 @@ def test_the_project_results_carry_the_block_and_the_datasheets_fill_the_pv_row(
     rows = {c["id"]: c for c in ch["circuits"]}
     c1 = rows["C1"]
     assert sc["source"] == "datasheet" and c1["i_design_a"] == pytest.approx(sc["i_cond_a"]) == pytest.approx(1.25 * 1.25 * sc["isc_a"])
-    assert c1["ocpd_a"] == dcb["ocpd_a"] and c1["ocpd_code"] == dcb["code"] and c1["i_continuous_a"] == pytest.approx(sc["imp_a"])
+    # the review's finding 2: the continuous current is the PV article's 1.25 × Isc (13.53 A → 16.91 A), not Imp; the design current 1.25 × it
+    assert c1["ocpd_a"] == dcb["ocpd_a"] and c1["ocpd_code"] == dcb["code"] and c1["i_continuous_a"] == pytest.approx(1.25 * sc["isc_a"]) == pytest.approx(16.91, abs=0.01)
+    assert c1["i_design_a"] == pytest.approx(1.25 * c1["i_continuous_a"]) == pytest.approx(21.14, abs=0.01)
     assert c1["checks"]["design_le_ocpd"] is True and c1["checks"]["ampacity_ge_ocpd"] is (c1["ampacity_rule_a"] >= c1["ocpd_a"])
     joined = [i for i in ch["string_design"]["per_mppt"] if i["strings"] > 1]
     assert rows["C2"]["applies"] is bool(joined)

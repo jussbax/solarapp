@@ -8,8 +8,9 @@ Nothing invented: every table value here is a cited stand-in in the settings (`c
 flag the sheet prints with "verify" until the owner or the PEE ticks it; every default temperature and the insulation
 rating of a wire item that has none are ASSUMPTIONS and print as such. A check that needs a figure not on file (the
 conductor's area, the conduit's inside diameter, the breaker's rating without Isc) reads "not checked" with the reason,
-never a silent default; a table the app does not hold for a conductor type at all (the cable's 75 °C column) is a
-"verify" qualifier, never a pass on its own.
+never a silent default, and so does a BOM role the bill lacks (the battery rack's EGC, the round-13 review's finding 12);
+a table the app does not hold for a conductor type at all (the cable's 75 °C column) is a "verify" qualifier, never a
+pass on its own.
 
 The computation (2.3):
     T_conductor = T_ambient (+ the rooftop adder for a raceway on the roof)
@@ -22,11 +23,12 @@ The computation (2.3):
     fill % = Σ A_conductor / (π/4 × d_inner²) against 53 / 31 / 40 %        NEC Chapter 9 Table 1; PEC Chapter 10 verify
     EGC required by the OCPD rating                                          NEC 250.122; PEC Table 2.50.1.122 verify
 
-Severity (the coordinator's decision): a conductor the breaker does not protect at temperature (`conductor_derated`)
-and a terminal-ampacity failure (`terminal_ampacity`) are hard and block the customer documents, as the round-3 AC
-coordination does; the conduit fill (`conduit_fill`) and an undersized EGC (`egc_undersized`) are hard and print
-without blocking; a figure missing (`derating_not_checked`) and the fault level unknown (`fault_level_unknown`) are
-ordinary.
+Severity (the coordinator's decision): a conductor the breaker does not protect at temperature (`conductor_derated`),
+a terminal-ampacity failure (`terminal_ampacity`) and a breaker whose interrupting rating is below the DU's fault level
+at the service (`aic_below_fault`, the round-13 review's finding 1) are hard and block the customer documents, as the
+round-3 AC coordination does; the conduit fill (`conduit_fill`) and an undersized EGC (`egc_undersized`) are hard and
+print without blocking; a figure missing (`derating_not_checked`) and the fault level unknown (`fault_level_unknown`)
+are ordinary.
 """
 from __future__ import annotations
 
@@ -408,7 +410,8 @@ def derate_circuit(row: dict, cfg: PricingConfig, conductor: Optional[Item], con
                         f"{label}: {what} is {float(provided):g} mm² and the {float(ocpd):g} A breaker needs {req[1]:g} mm² ({cite(g.egc_source, g.egc_verified)}). "
                         "Set a larger conductor for the role under Pricing settings › BOM item roles.")})
             elif kind == "dc_battery":
-                qualifiers.append("EGC: the BOM carries no battery-rack EGC role, verify")
+                # review finding 12: a blank "provided" is a missing BOM role, a real omission on site, not a table the app lacks
+                not_checked.append("EGC: no battery-rack EGC role on the BOM (Pricing settings › BOM item roles)")
             else:
                 not_checked.append("the EGC provided is not on the record (no item for the role)")
     elif kind != "dc_combined":
@@ -451,7 +454,7 @@ def short_circuit_note(service: dict, inverter: Optional[Item], battery: Optiona
         if battery.fault_current_a:
             out["battery"] = {"amps": float(battery.fault_current_a), "assumed": False, "text": f"{float(battery.fault_current_a):g} A ({battery.code}: the BMS's short-circuit trip on the item)"}
         else:
-            out["battery"] = {"amps": None, "assumed": False, "text": f"the BMS's short-circuit trip of {battery.code}; verify with the maker"}
+            out["battery"] = {"amps": None, "assumed": False, "text": f"BLANK A (the BMS's short-circuit trip of {battery.code}: not on the item; verify with the maker)"}
             out["unknown"].append(f"the battery's short-circuit trip ({battery.code}, Materials page)")
     seen: set[str] = set()
     for b in breakers:
@@ -473,7 +476,8 @@ def short_circuit_note(service: dict, inverter: Optional[Item], battery: Optiona
             if a["aic_ka"] is None:
                 parts.append(f"{a['code']} BLANK")
             else:
-                parts.append(f"{a['code']} {a['aic_ka']:g} kA" + ("" if a["ok"] is None else (" at or above the DU's figure: holds" if a["ok"] else " below the DU's figure: does NOT hold")))
+                parts.append(f"{a['code']} {a['aic_ka']:g} kA" + ("" if a["ok"] is None else (" at or above the DU's figure: holds" if a["ok"]
+                                                                                                else " below the DU's figure: does NOT hold (aic_below_fault, holds the customer documents)")))
         out["aic_text"] = "breaker interrupting ratings (AIC) against the fault level at the service: " + "; ".join(parts) + ("; the DU's figure is blank, so nothing is compared" if utility is None else "") + " (verify)"
     return out
 
@@ -537,6 +541,13 @@ def analyse_design(choices: dict, lines: list, catalog: Catalog, cfg: PricingCon
     service = service or {}
     breakers = [b for b in (item_of("dc_breaker"), item_of("ac_breaker"), item_of("battery_breaker")) if b is not None]
     sc = short_circuit_note(service, inverter, battery, units, choices.get("ac_current_a"), breakers, cfg)
+    # round 13 review, finding 1: a breaker whose typed interrupting rating is below the typed fault level cannot clear the
+    # fault at the service; the comparison on the sheet is not enough, so it is hard and holds the customer documents
+    for a in sc["aic"]:
+        if a["ok"] is False:
+            warnings.append({"code": "aic_below_fault", "hard": True, "blocks_documents": True, "message": (
+                f"{a['code']}: interrupting rating {float(a['aic_ka']):g} kA is below the DU's {float(sc['utility_ka']):g} kA at the service: change the breaker role under "
+                "Pricing settings › BOM item roles (verify the DU's figure). The proposal, roof check, card and plans are held.")})
     if sc["unknown"]:
         warnings.append({"code": "fault_level_unknown", "message": (
             "Design analysis, the short-circuit note: not on file — " + "; ".join(sc["unknown"]) + ". The sheet prints the figure as a blank line with "

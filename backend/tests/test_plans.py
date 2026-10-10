@@ -78,6 +78,7 @@ def test_plans_build_for_the_reference_record_on_a3(client):
     assert "Single-line diagram" in sld and "Not to scale" in sld and "S1: " in sld and "(rule)" in sld   # the diagram without the datasheets: the rule's string
     assert "Hybrid: grid-interactive with a battery" in cover and "Main roof (south)" in cover and "Kitchen roof (east)" in cover
     assert "to be completed by the signing engineer" in cover and "PEC" not in cover   # no clause numbers, no standards named by the app
+    assert "the THHN 60 °C column, the conservative sizing basis" in " ".join(cover.split()) and "the 90 °C and 75 °C columns are on the design analysis sheet" in " ".join(cover.split())   # review finding 8
     assert "Array layout: Main roof (south)" in main and re.search(r"Scale 1:\d+ on A3", main) and "Eave (lower edge)" in main
     assert "9.00 m" in main and "5.00 m" in main          # the eave and the slope as dimension lines
     assert "Strings on this face" in main and re.search(r"S1\s+panels 1–\d+", main)
@@ -87,7 +88,7 @@ def test_plans_build_for_the_reference_record_on_a3(client):
     assert "Grounding and bonding" in schedule and "Voltage drop" in schedule and "Battery circuit" in schedule
     assert "Grid-side" in schedule and "Inverter output" in schedule   # pdftotext wraps the narrow cells
     assert "Design analysis: conductor derating" in analysis and "Sheet 8 of 10" in analysis   # test_design_analysis.py reads the sheet itself
-    assert "Not yet in this set, and why" in last and "Single-line diagram" in last and "String table" in last
+    assert "Not yet in this set, and why" in last and "Blank lines in this set, by sheet" in last and "String table" in last
     assert "Schedule of loads" in loads and "Refrigerator" in loads and "Connected load, existing" in loads   # the permit's format, its own sheet (round 13)
     assert "Refrigerator" not in last
     # the drop figures are the BOQ's

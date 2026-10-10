@@ -31,6 +31,9 @@ class Assessment(SQLModel, table=True):
     # "Reopen design" leaves them (the log is a record, not a status). An older database gets the columns at start-up
     # (db.ensure_columns); an older record without them prints "Rev. 0" as before.
     plans_issued_at: Optional[datetime] = None
+    # who first built the plans (the signed-in person's name), the "By" of revision 0 on the cover's revision table (round 13
+    # review, finding 14); None on a record issued before the column existed, which prints a blank line with that reason
+    plans_issued_by: Optional[str] = None
     revisions: Optional[list[dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True))
     # Round 13, item 4 (brief 4.1): the vicinity map on record, as reports.vicinity keeps it: which source the sheet prints
     # ("upload" wins over "osm"), the upload's file and note, the fetched mosaics with the pin they were made for, and the

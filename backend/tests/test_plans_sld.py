@@ -18,8 +18,14 @@ from fastapi.testclient import TestClient
 from solarapp.config import Settings
 from solarapp.data_download.cli import write_synthetic
 from solarapp.main import create_app
+from reportlab.graphics.shapes import Circle, Line, String
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+
 from solarapp.pricing.service_checks import poi_busbar_check
 from solarapp.reports.plans_pdf import BLANK
+from solarapp.reports.plans_sld import _figures, poi_lines, sld_drawing
+from solarapp.schemas import AssessmentDoc
 from tests.test_drawings import PILA_DOC
 from tests.test_survey_fields import SERVICE
 
@@ -86,7 +92,15 @@ def _build(client: TestClient, doc: dict) -> tuple[dict, list[str]]:
     res = r.json()["results"]
     pdf = client.get(f"/api/assessments/{aid}/plans.pdf")
     assert pdf.status_code == 200, pdf.text
+    res["_aid"] = aid
     return res, _pages(_pdf_text(pdf.content))
+
+
+def _drawing(client: TestClient, res: dict):
+    """The diagram itself (a reportlab Drawing) for the record `res` was computed on, with the materials list and the settings."""
+    doc = AssessmentDoc.model_validate(client.get(f"/api/assessments/{res['_aid']}").json()["doc"])
+    items = {it["code"]: it for it in client.get("/api/pricing/items", params={"limit": 1000, "include_inactive": True}).json()}
+    return sld_drawing(_figures(doc, res, items, client.get("/api/pricing/config").json()))
 
 
 def test_the_sheet_prints_the_sample_figures_and_its_balloons_match_the_circuit_rows(client):
@@ -125,6 +139,17 @@ def test_an_off_grid_job_draws_its_two_strings_and_exports_nothing(client):
     assert "existing meter; nothing exported" in sld and "two-way meter" not in sld
     assert "Battery with the grid as backup" in sld   # the kind in the title block
     assert "ENERGY STORAGE" in sld and "FS-BAT-003" in sld
+    # the review's finding 10: the 120 % rule is applied all the same on a no-export job, and says so (the block carries the kind)
+    poi = ch["poi_busbar"]
+    assert poi["kind"] == "off_grid" and poi["checked"] and poi["ok"]
+    assert poi_lines(poi) == ["120 %: 40 A + 100 A = 140 A", "limit 1.2 × 125 A = 150 A", "PASS; verify the PEC clause",
+                              "(applied although nothing is exported: conservative; the DU's view: verify)"]
+    assert "applied although nothing is exported" in " ".join(sld.split())
+    reading = next(p for p in _pages(subprocess.run(["pdftotext", "-", "-"], input=client.get(f"/api/assessments/{res['_aid']}/plans.pdf").content, capture_output=True, check=True).stdout.decode())
+                   if p.strip().startswith("Schedule of loads"))
+    assert "PASS; verify the PEC clause; (applied although nothing is exported: conservative; the DU's view: verify)" in " ".join(reading.split())
+    # the grid-interactive inverter on a no-export job leads with the role (finding 7)
+    assert "grid-interactive (no export), 1Ø; the datasheet's type: off-grid" in " ".join(s.text for s in _drawing(client, res).contents if isinstance(s, String))
 
 
 def test_a_net_metering_job_has_no_battery_and_the_last_sheet_lists_only_what_is_missing(client):
@@ -132,8 +157,10 @@ def test_a_net_metering_job_has_no_battery_and_the_last_sheet_lists_only_what_is
     sld, last = _sld_page(pages), pages[-1]
     assert "no battery (net metering)" in sld and "ENERGY STORAGE" not in sld and "two-way meter" in sld
     assert not re.search(r"\bC3\b", sld)   # the battery circuit does not apply
-    # the diagram is in the set: the last sheet names only the datasheet figures still blank, and on which sheet they print blank
-    assert "Single-line diagram (figures blank)" in last and "Blank on sheet 5 where the Materials page is blank" in last
+    # the diagram is in the set: the last sheet lists the figures still blank on it under its sheet number (review finding 5)
+    flat_last = " ".join(last.split())
+    assert "Sheet 5 2 Inverter: MPPT window (low); Inverter: MPPT window (high) not on the item (Materials page)" in flat_last
+    assert "Sheet 5 1 Inverter: certificate none on file: type it on the Materials page" in flat_last and "Single-line diagram (figures blank)" not in last
 
 
 def test_a_blank_service_block_prints_a_blank_line_with_its_reason_everywhere(client):
@@ -173,10 +200,33 @@ def test_the_120_rule_fails_on_a_100_a_busbar_and_passes_on_125(client):
     assert "PASS" in _sld_page(pages)
 
 
+def test_the_electrode_caption_clears_the_egc_bus_and_the_labels_read_as_the_review_asked(client):
+    """The review's finding 3: the electrode caption's box (the figure's, not the text's) sits clear of the EGC bus line and the
+    electrode, to the right of the C7 balloon, and the service block keeps "fault level at the service 10.0 kA" on one line.
+    Finding 7: the inverter balloon leads with the role and the datasheet's type word follows. Finding 11: C6 is the bypass feed."""
+    res, _pages_ = _build(client, _doc(fault_level_ka=10))
+    d = _drawing(client, res)
+    strings = [s for s in d.contents if isinstance(s, String)]
+    lines = [l for l in d.contents if isinstance(l, Line)]
+    earth_y = 11.0 * mm
+    bus = max((l for l in lines if abs(l.y1 - earth_y) < 0.01 and abs(l.y2 - earth_y) < 0.01), key=lambda l: abs(l.x2 - l.x1))   # the EGC bus
+    balloon = max((c for c in d.contents if isinstance(c, Circle) and abs(c.cy - earth_y) < 0.01), key=lambda c: c.cx)            # the C7 balloon
+    caption = [s for s in strings if any(w in s.text for w in ("EGC bus", "bonds dashed", "electrode:", "GEC", "or less for a rod"))]
+    assert len(caption) >= 4
+    box = (min(s.x for s in caption), min(s.y for s in caption), max(s.x + pdfmetrics.stringWidth(s.text, s.fontName, s.fontSize) for s in caption), max(s.y + s.fontSize for s in caption))
+    assert box[0] > max(bus.x1, bus.x2) + 1.0 * mm and box[0] >= balloon.cx + balloon.r      # right of the bus's end (and of the electrode under the panelboard) and of the balloon
+    assert box[2] <= d.width and box[1] >= 0                                                 # inside the sheet
+    assert any(s.text.endswith("fault level at the service 10.0 kA") for s in strings)       # not wrapped into "10.0" / "kA"
+    joined = " ".join(s.text for s in strings)
+    assert "FS-INV-008: 6 kW grid-interactive (hybrid), 1Ø; the datasheet's type: off-grid" in joined and "off-grid type" not in joined
+    assert "C5 backfeed brk; C6 bypass feed" in joined and "backfeed brk: C5, C6" not in joined
+
+
 def test_the_rule_itself():
     """The check is a plain function the sheets call too: the arithmetic, the units, and every reason it is not checked."""
     block, warns = poi_busbar_check({"interconnection": "load_side_breaker", "main_breaker_a": 100, "busbar_a": 125}, {"ac_grid_breaker_a": 40, "inverter_units": 1})
-    assert block["checked"] and block["sum_a"] == 140 and block["limit_a"] == 150 and block["ok"] and warns == []
+    assert block["checked"] and block["sum_a"] == 140 and block["limit_a"] == 150 and block["ok"] and warns == [] and block["kind"] == ""
+    assert poi_lines(block)[-1] == "PASS; verify the PEC clause" and poi_lines(block, "off_grid")[-1] == "(applied although nothing is exported: conservative; the DU's view: verify)"
     block, warns = poi_busbar_check({"interconnection": "load_side_breaker", "main_breaker_a": 100, "busbar_a": 125}, {"ac_grid_breaker_a": 40, "inverter_units": 2})
     assert block["backfeed_a"] == 80 and block["sum_a"] == 180 and block["ok"] is False and [w["code"] for w in warns] == ["poi_busbar"] and "× 2" in warns[0]["message"]
     for svc, word in (

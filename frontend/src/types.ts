@@ -1006,8 +1006,9 @@ export interface AssessmentOut {
   pricing_settings_changed: boolean
   status: EngineeringStatus
   proposal_issued_at: string | null
-  /** Round 13: when the plans for the PEE were first generated (revision 0); null until then. */
+  /** Round 13: when the plans for the PEE were first generated (revision 0), and by whom (the signed-in person); null until then. */
   plans_issued_at?: string | null
+  plans_issued_by?: string | null
   revisions?: RevisionEntry[]
   vicinity_map?: VicinityMap | null
 }

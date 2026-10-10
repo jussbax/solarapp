@@ -478,12 +478,17 @@ def circuits_block(choices: dict, lines: list, catalog: Catalog, cfg: PricingCon
     pv_gauge = choices.get("pv_gauge")
     c1["conductors"].update({"n_total": 2, "n_current_carrying": 2, "size_mm2": float(pv_gauge) if pv_gauge else None, "type": "PV wire"})
     c1["run_m"], c1["voltage_v"] = choices.get("pv_run_m"), choices.get("string_voltage_v")
-    c1["i_continuous_a"] = choices.get("string_current_a")
     if sc.get("source") == "datasheet" and sc.get("i_cond_a"):
+        # round 13 review, finding 2: the PV circuit's continuous current is the PV article's 1.25 × Isc (the figure the
+        # schedule sheet prints as the circuit current), not the module's Imp; the design current is the continuous factor on it
+        c1["i_continuous_a"] = float(sc["isc_factor"]) * float(sc["isc_a"])
         c1["i_design_a"] = float(sc["i_cond_a"])
-        c1["notes"].append(f"design current {float(sc['isc_factor']):g} × {cf:g} × Isc {float(sc['isc_a']):g} A (the datasheet; the PV article's circuit current and the continuous factor, verify the clause)")
+        c1["notes"].append(f"continuous current {float(sc['isc_factor']):g} × Isc {float(sc['isc_a']):g} A = {c1['i_continuous_a']:.2f} A, the PV article's circuit current (the datasheet; verify the clause); "
+                           f"design current {cf:g} × it = {c1['i_design_a']:.2f} A (the continuous factor)"
+                           + (f"; the string's operating current is Imp {float(sc['imp_a']):.2f} A" if sc.get("imp_a") else ""))
         c1["ocpd_a"] = (choices.get("dc_breaker") or {}).get("ocpd_a")
     else:
+        c1["i_continuous_a"] = choices.get("string_current_a")
         c1["i_design_a"] = float(c1["i_continuous_a"]) * cf if c1["i_continuous_a"] is not None else None
         c1["notes"].append(f"design current {cf:g} × the rule's string current (the panel has no Isc on file: the PV article's 1.25 × Isc is not applied)")
         dc_item = item_of("dc_breaker")
@@ -507,11 +512,19 @@ def circuits_block(choices: dict, lines: list, catalog: Catalog, cfg: PricingCon
     c2["applies"], c2["count"] = bool(joined), len(joined)
     if joined:
         worst = max(joined, key=lambda inp: float(inp.get("amps_at_imp") or 0))
-        c2["i_continuous_a"] = float(worst.get("amps_at_imp") or 0)
-        c2["i_design_a"] = c2["i_continuous_a"] * float(sc.get("isc_factor") or 1) * cf if sc.get("source") == "datasheet" else c2["i_continuous_a"] * cf
+        n_join = int(worst.get("strings") or 0)
+        if sc.get("source") == "datasheet" and sc.get("isc_a"):
+            # the same rule as C1 (review finding 2): the joined circuit's continuous current is strings × 1.25 × Isc
+            c2["i_continuous_a"] = n_join * float(sc["isc_factor"]) * float(sc["isc_a"])
+            c2["i_design_a"] = c2["i_continuous_a"] * cf
+            c2["notes"].append(f"continuous current {n_join} × {float(sc['isc_factor']):g} × Isc {float(sc['isc_a']):g} A = {c2['i_continuous_a']:.2f} A (the PV article's circuit current; verify the clause); "
+                               f"design current {cf:g} × it; the input's operating current is {float(worst.get('amps_at_imp') or 0):.2f} A at Imp")
+        else:
+            c2["i_continuous_a"] = float(worst.get("amps_at_imp") or 0)
+            c2["i_design_a"] = c2["i_continuous_a"] * cf
         c2["voltage_v"] = choices.get("string_voltage_v")
         c2["placement"] = "indoor_conduit"
-        c2["notes"].append(f"{int(worst['strings'])} strings join on MPPT {worst['input']} after their breakers in the DC box; the BOM carries no combiner and no conductor for the joined run: verify a fuse per string where more than two join")
+        c2["notes"].append(f"{n_join} strings join on MPPT {worst['input']} after their breakers in the DC box; the BOM carries no combiner and no conductor for the joined run: verify a fuse per string where more than two join")
     elif not per_mppt:
         c2["notes"].append("the inverter's MPPT inputs are not on its item: whether strings join on one input is not known")
     else:

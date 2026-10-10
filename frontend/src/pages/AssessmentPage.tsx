@@ -822,6 +822,7 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
                 }}
                 openDocument={openDocument}
                 plansIssuedAt={a?.plans_issued_at ?? null}
+                plansIssuedBy={a?.plans_issued_by ?? null}
                 revisions={a?.revisions ?? []}
                 onIssueRevision={issueRevision}
                 vicinity={a?.vicinity_map ?? null}
