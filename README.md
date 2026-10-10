@@ -111,9 +111,14 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
 ## The website and the estimate
 
 The company website lives in `site/` as plain HTML and CSS (pages under
-`site/pages/`, the shared frame in `site/layout.html`, styles and the small
-script under `site/static/`). `python site/build.py` writes it to
-`site/dist/`; the Docker build does this. Build with `--base-url https://pldevinc.com` for absolute share-image and page addresses (Facebook needs them), and with `--with-placeholders` to keep the photo placeholder blocks, which the public build drops.
+`site/pages/`, the shared frame in `site/layout.html`, a block shared by
+several pages under `site/partials/` pasted by `<!-- include: name -->`,
+styles and the small script under `site/static/`; the script fills the
+profile, and gives the pages their motion: sections that come in as they
+scroll into view, the proof figures that count up, the phone's sticky
+call to action, all off under reduced motion and absent with JavaScript
+off). `python site/build.py` writes it to `site/dist/`; the Docker build
+does this. Build with `--base-url https://pldevinc.com` for absolute share-image and page addresses (Facebook needs them), and with `--with-placeholders` to keep the photo placeholder blocks, which the public build drops.
 Contact details, the owner, the
 PEE, warranties, brands and the service area are filled in at page load
 from the company profile under Settings, so the pages never need editing
