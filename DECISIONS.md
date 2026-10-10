@@ -392,11 +392,11 @@ only at this stage: no inverter, wiring, financial or sizing modules yet
   and economics are the same engines as the full assessment, with the
   default panel laid in rows of eight and no roof limit below 40 panels,
   and the trip distance from the pin.
-- Shown to the visitor: panels, kWp and roof area, inverter, battery, the
-  installed price rounded up to the thousand with the four customer
-  sections, production and coverage, bill before and after, payback, net
-  over the period, CO2, and the assumptions in plain words. Nothing
-  internal.
+- Shown to the visitor (since round 9, 10 October 2026): the bill before and after, the monthly and first-year
+  saving, the payback, the installed price as one total, the panel count, the inverter and the battery with what it
+  carries in words, and the day scene with its hourly kW; the kWp, the roof area, the kWh made, the coverage, the
+  25-year total, the CO₂, the price split and the assumptions stay for the proposal (see "Rounds 8 and 9" below).
+  Nothing internal.
 - A name and contact book the free roof visit: saved as an assessment at
   stage "lead" with the four answers in the notes and the bill on file, so
   the full assessment starts from it. Public endpoints are rate limited
@@ -1825,3 +1825,41 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   note now adds why (two proxied hostnames are two caches) and the caching settings (Browser Cache TTL "Respect
   Existing Headers", no cache-everything rule, one Purge Everything after the deploy that introduces the stamps).
   The live site could not be read from the sandbox, so the Cloudflare side is the owner's to check.
+
+## Rounds 8 and 9: the estimate in the website's voice, the installations without "ours", the result as a teaser
+
+- The owner (10 October): "shouldn't it be emotion driven too similar to the whole website? Basically we sell
+  emotions and outcome?" Then: the peso-amount field on the usage card goes ("it won't do help much in estimating");
+  "Instead of 'our own homes' let's look for an angle of presenting the installations as proof that would not look
+  like biased since it will feel like it is a personal claim and no one wants to listen to someone lifting their own
+  chair." and, on the angle of saying it once as disclosure, "NO, we will drop ours entirely."; and "with the info we
+  already provided, nothing else is witheld that will compel the potential clients to enter the funnel, shouldn't it
+  be just a teaser making the customer wanting to know more?"
+- Round 8 (`docs/audits/round-8/`): marketing's angle brief for the widget, the copywriter's draft, marketing's
+  line-by-line review (54 accept, 4 change, 0 must go). The widget now opens on "Your new bill is a minute away.";
+  the three goals are the home page's three wants ("I just want a lower bill." / "I want the lights on when the
+  street goes dark." / "I want my roof to run my house.") with the kind's name opening the small text; the slider's
+  stops say why the hour matters; the result is "Your estimate for {place}"; the hero says what stays in your pocket
+  and what still comes; "What you get" and "What it does" replace the inventory; the battery alternative sells the
+  evening when the street is dark and keeps the saving whole without it; the booking card is "The exact figure is one
+  free visit away."; the day scene's captions describe the family's day and bend to the row (the grid topping up an
+  evening the battery cannot finish; the panels "starting to carry the house" at dawn); the copied summary leads
+  with the bill; "Try other answers" brings the cards back; the two engine warnings read as a person explaining.
+- Round 9 (`docs/audits/round-9/`): the three installations stand as worked examples a buyer compares their own
+  house to ("Three roofs in service. Which one is like yours?"; "Three roofs, one battery" / "Eight panels, panels
+  only" / "Sixteen panels, hip roof"), with the record doing the persuading: on net metering since 2023, more than
+  ₱33,000 of credit on that bill, every typhoon season stood, photographed from the air by us. No sentence on any
+  page, the proof strip, the meta lines or the share snippets says whose house it is; About opens "Measured first.
+  In service since 2023." The company's own lines (our crew, our workmanship warranty, our server) stay.
+- The result as a teaser (marketing's version A, the coordinator's pick): the site's promise ("your new bill and the
+  price in a minute") is kept, so the bill, the saving, the payback and the price stay; the kWp, the roof area, the
+  kWh made, the coverage, the 25-year total and the CO₂ leave the page and land in the proposal; the scene's counter,
+  chips and labels name the parts without sizes (the hourly kW readout stays as the proof); a closing block, "What
+  the free visit settles", lists what the visit adds (the panels the roof really holds, what the battery carries from
+  the house's own appliances, the exact price with every part and what is due when, the savings year by year and the
+  25-year figure, the sealed plans and the papers, the dates), bending for the battery-first goal (no net-metering
+  papers, no two-way meter) and for panels only; the sticky bar carries the new monthly bill. The engine, the lead
+  payload and the e-mail are unchanged; the signed-in office still sees everything.
+- Two defects fixed on the way: the first question card no longer slides in on load (the slide ran under the stage's
+  clip and read as a clipped border in screenshots); the scene counts the hour before 6 AM as night, so a morning
+  house never shows the evening caption at 5 AM.
