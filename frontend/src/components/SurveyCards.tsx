@@ -52,14 +52,14 @@ export function RoofConstructionFields({ value, onChange, perFace, idPrefix }: {
       )}
     </Field>
   )
-  const num = (label: string, key: 'purlin_thickness_mm' | 'purlin_spacing_m' | 'rafter_spacing_m' | 'mean_roof_height_m', unit: string, help?: string) => (
+  const num = (label: string, key: 'purlin_thickness_mm' | 'purlin_spacing_m' | 'rafter_spacing_m' | 'mean_roof_height_m' | 'fastener_pullout_kn', unit: string, help?: string, blankWord?: string) => (
     <Field label={label} unit={unit} help={help} id={`${idPrefix}-${key}`}>
-      {(id) => <NumberInput id={id} value={value[key]} onChange={(v) => set(key, v)} allowEmpty min={0} step={0.01} placeholder={perFace ? 'project' : 'not surveyed'} />}
+      {(id) => <NumberInput id={id} value={value[key] ?? null} onChange={(v) => set(key, v)} allowEmpty min={0} step={0.01} placeholder={perFace ? 'project' : (blankWord ?? 'not surveyed')} />}
     </Field>
   )
-  const text = (label: string, key: 'sheet_profile' | 'purlin_section' | 'condition', placeholder: string, className?: string) => (
+  const text = (label: string, key: 'sheet_profile' | 'purlin_section' | 'condition' | 'fastener_pullout_source', placeholder: string, className?: string) => (
     <Field label={label} id={`${idPrefix}-${key}`} className={className}>
-      {(id) => <input id={id} value={value[key]} onChange={(e) => set(key, e.target.value)} placeholder={perFace ? blank : placeholder} />}
+      {(id) => <input id={id} value={value[key] ?? ''} onChange={(e) => set(key, e.target.value)} placeholder={perFace ? blank : placeholder} />}
     </Field>
   )
   return (
@@ -74,6 +74,9 @@ export function RoofConstructionFields({ value, onChange, perFace, idPrefix }: {
       {num('Mean roof height', 'mean_roof_height_m', 'm', 'Ground to mid-slope')}
       {sel('Condition', 'condition_flag', FLAGS, 'Other than sound: the sheet says to verify')}
       {text('Condition note', 'condition', 'e.g. rust at the eave, two sheets replaced', 'wide')}
+      {/* round 13, item 3 (3.4): the fastener's allowable withdrawal for this roof, over the settings' figure, with its source */}
+      {num('Fastener withdrawal, allowable', 'fastener_pullout_kn', 'kN', "Blank = the settings' figure", 'settings')}
+      {text('Withdrawal figure: source', 'fastener_pullout_source', "e.g. the screw maker's sheet, 1.5 mm steel purlin")}
     </div>
   )
 }

@@ -221,6 +221,8 @@ export const api = {
   pricingConfig: () => request<PricingConfig>('/api/pricing/config'),
   savePricingConfig: (cfg: PricingConfig) => request<PricingConfig>('/api/pricing/config', { method: 'PUT', body: JSON.stringify(cfg) }),
   resetPricingConfig: () => request<PricingConfig>('/api/pricing/config/reset', { method: 'POST' }),
+  // round 13, item 3: the shipped wind-zone file (every province, every figure blank) the Mounting and wind page lists
+  windZones: () => request<{ source: string; fields: string[]; provinces: Record<string, { zone: string; v_kmh: number | null; source: string }> }>('/api/pricing/wind-zones'),
   materialCategories: () => request<{ name: string; count: number }[]>('/api/pricing/categories'),
   materialSuppliers: () => request<MaterialSupplier[]>('/api/pricing/suppliers'),
   materials: (params: { q?: string; category?: string; supplier?: string; include_inactive?: boolean; limit?: number }) => {

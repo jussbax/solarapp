@@ -5,6 +5,7 @@ import { FindSettings, PricingDraftProvider, PricingPage, SectionBody } from '..
 import { dirtyEntryIds, settingsIndex, useFindTarget, usePricingDraft, type FindRow } from '../components/pricingMeta'
 import { SETTINGS_ENTRIES, WEBSITE_SECTION, settingsEntryFor, type SettingsEntry } from '../components/shared'
 import AccountCard from '../components/AccountCard'
+import MountingSettings from '../components/MountingSettings'
 import PeopleCard from '../components/PeopleCard'
 import Field from '../components/Field'
 import { PROFILE_FIELDS, type AppSettings, type DataStatus } from '../types'
@@ -172,7 +173,7 @@ function SettingsInner({ user, onUser, status, onRefresh }: { user: Me; onUser: 
           <Route path="company" element={page(entry('company'), <ProfilePage which="company" s={s} saved={saved} setS={setS} setSaved={setSaved} owner={owner} titled={titled} />)} />
           <Route path="website" element={ownerOnly(entry('website'), <ProfilePage which="website" s={s} saved={saved} setS={setS} setSaved={setSaved} owner={owner} titled={titled} />)} />
           {pricingEntries.map((e) => (
-            <Route key={e.id} path={e.route.replace('/settings/', '')} element={ownerOnly(e, titled(e, <PricingPage entry={e} />))} />
+            <Route key={e.id} path={e.route.replace('/settings/', '')} element={ownerOnly(e, titled(e, e.id === 'mounting' ? <MountingSettings entry={e} /> : <PricingPage entry={e} />))} />
           ))}
           <Route path="account" element={page(entry('account'), <AccountCard user={user} onUser={onUser} />)} />
           <Route path="people" element={ownerOnly(entry('people'), <PeopleCard me={user} />)} />

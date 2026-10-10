@@ -38,9 +38,35 @@ export interface RoofConstruction {
   mean_roof_height_m: number | null
   condition: string
   condition_flag: ConditionFlag
+  /** Round 13, item 3: the fastener's allowable withdrawal for this roof with its source; blank = the settings' figure. */
+  fastener_pullout_kn: number | null
+  fastener_pullout_source: string
 }
 export function emptyRoofConstruction(): RoofConstruction {
-  return { roof_type: '', sheet_profile: '', purlin_material: '', purlin_section: '', purlin_thickness_mm: null, purlin_spacing_m: null, rafter_spacing_m: null, mean_roof_height_m: null, condition: '', condition_flag: '' }
+  return {
+    roof_type: '', sheet_profile: '', purlin_material: '', purlin_section: '', purlin_thickness_mm: null, purlin_spacing_m: null, rafter_spacing_m: null, mean_roof_height_m: null,
+    condition: '', condition_flag: '', fastener_pullout_kn: null, fastener_pullout_source: '',
+  }
+}
+
+export type Exposure = '' | 'B' | 'C' | 'D'
+/** The wind figures the signing engineer types per project for the uplift check (round 13, 3.5), each with its source; the app
+ * ships none. V comes from the province's row under Settings > Mounting and wind unless typed here; exposure B and Kzt 1.0 are
+ * labelled assumptions when blank; the GCp per roof zone (negative for uplift) has no default. */
+export interface WindInputs {
+  zone: string
+  v_kmh: number | null
+  v_source: string
+  exposure: Exposure
+  kzt: number | null
+  kzt_source: string
+  gcp_zone1: number | null
+  gcp_zone2: number | null
+  gcp_zone3: number | null
+  gcp_source: string
+}
+export function emptyWind(): WindInputs {
+  return { zone: '', v_kmh: null, v_source: '', exposure: '', kzt: null, kzt_source: '', gcp_zone1: null, gcp_zone2: null, gcp_zone3: null, gcp_source: '' }
 }
 
 /** One existing circuit of the panelboard as the office types it (5.3). */
@@ -236,6 +262,7 @@ export interface AssessmentDoc {
   service: ServiceEntrance
   roof_default: RoofConstruction
   site: SitePlan
+  wind: WindInputs
 }
 
 export interface EconomicsJob {
@@ -1054,6 +1081,7 @@ export function emptyDoc(): AssessmentDoc {
     service: emptyService(),
     roof_default: emptyRoofConstruction(),
     site: emptySite(),
+    wind: emptyWind(),
   }
 }
 

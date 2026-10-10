@@ -25,6 +25,8 @@ export const SETTINGS_ENTRIES: SettingsEntry[] = [
   { id: 'program', route: '/settings/pricing/program', label: 'Program of works', lead: 'The site day, the durations the schedule assumes, the payment terms a proposal starts from, and when money moves.', owner: true, sections: ['program'] },
   { id: 'savings', route: '/settings/pricing/savings', label: 'Customer savings', lead: 'Tariff, export credit, price rise, the analysis period and the lifetimes the customer savings count on.', owner: true, sections: ['economics'] },
   { id: 'system', route: '/settings/pricing/system', label: 'System design', lead: 'Losses after the panels and how many evenings the battery must carry.', owner: true, sections: ['system_losses', 'sizing'] },
+  // round 13, item 3: its own card (MountingSettings.tsx); the section's keys are the generic page's for the find box and the dirty mark
+  { id: 'mounting', route: '/settings/pricing/mounting', label: 'Mounting and wind', lead: "The fastener and the feet, and the uplift check's wind figures the signing engineer types with their sources; the app ships none.", owner: true, sections: ['mounting'] },
   { id: 'account', route: '/settings/account', label: 'Your account', lead: 'Your password, two-step verification, security keys and devices.' },
   { id: 'people', route: '/settings/people', label: 'People', lead: 'Who can sign in to the back office.', owner: true },
   { id: 'data', route: '/settings/data', label: 'Weather and data', lead: 'The weather dataset every calculation runs on.' },

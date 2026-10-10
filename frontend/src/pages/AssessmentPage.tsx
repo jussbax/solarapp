@@ -16,7 +16,8 @@ import Field from '../components/Field'
 import { PricingInputs, PricingResults } from '../components/PricingSection'
 import { ProgramInputs, ProgramResults } from '../components/ProgramSection'
 import { EconomicsInputs, EconomicsResults } from '../components/EconomicsSection'
-import { emptyDoc, emptyEconomicsJob, emptyPricingJob, emptyProgramJob, emptyRoofConstruction, emptyService, emptySite, ENGINEERING_STATUSES, NEW_DRAFT_ID, statusLabel } from '../types'
+import { emptyDoc, emptyEconomicsJob, emptyPricingJob, emptyProgramJob, emptyRoofConstruction, emptyService, emptySite, emptyWind, ENGINEERING_STATUSES, NEW_DRAFT_ID, statusLabel } from '../types'
+import { WindInputsFields } from '../components/WindInputs'
 import { RoofConstructionFields, ServiceEntranceCard, SitePlanCard } from '../components/SurveyCards'
 import { clearDraft, readDraft, writeDraft, type Draft } from '../draft'
 import { fmtDateShort, fmtDateTime, php0 } from '../fmt'
@@ -560,6 +561,14 @@ export default function AssessmentPage({ status }: { status: DataStatus | null }
               <summary>Roof construction for the whole project (a face may differ above)</summary>
               <div className="muted" style={{ margin: '4px 0 6px' }}>What the roof is made of, for the mounting detail and the uplift check (later sheets). Every field is optional; a blank prints "not surveyed", never a guess.</div>
               <RoofConstructionFields value={doc.roof_default ?? emptyRoofConstruction()} onChange={(roof_default) => patch({ roof_default })} idPrefix="roof-default" />
+            </details>
+            {/* round 13, item 3: the uplift check's wind figures, the signing engineer's, each with its source; the app ships none */}
+            <details className="more" data-testid="wind-fold">
+              <summary>Wind for the uplift check (the signing engineer's figures)</summary>
+              <div className="muted" style={{ margin: '4px 0 6px' }}>
+                Typed from NSCP 2015 Section 207 with the source of each figure (verify); the basic wind speed by province and the exposure constants live under Settings › Mounting and wind. Until typed, the mounting detail sheet prints "not checked" and says what is missing.
+              </div>
+              <WindInputsFields value={doc.wind ?? emptyWind()} onChange={(wind) => patch({ wind })} />
             </details>
           </div>
 
