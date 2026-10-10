@@ -126,5 +126,6 @@ def test_the_plan_set_and_the_quick_estimate_are_unchanged_by_the_fields(client)
     if shutil.which("pdftotext"):
         text = subprocess.run(["pdftotext", "-layout", "-", "-"], input=r.content, capture_output=True, check=True).stdout.decode()
         pages = [p for p in text.split("\f") if p.strip()]
-        assert len(pages) == 5 and "FLECO" not in text and "busbar" not in text.lower()
+        # six sheets since the design analysis (round 13, item 2); its short-circuit note reads the DU's name and fault level from the service block
+        assert len(pages) == 6 and "busbar" not in text.lower()
     assert AssessmentDoc().service == ServiceEntrance() and AssessmentDoc().site == SitePlan()
