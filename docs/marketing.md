@@ -128,7 +128,7 @@ the town name; no stock images.
 Landing-page headline options for the estimate page (the estimate page's
 own heading is "Your new bill is a minute away."):
 
-- "A ₱6,000 bill, down to about ₱1,900. Yours takes a minute."
+- "A ₱6,000 bill, down to about ₱1,900, panels only, for a house using about 500 kWh a month. Yours takes a minute."
 - "Your new bill is a minute away."
 
 ## Offer notes

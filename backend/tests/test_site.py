@@ -277,4 +277,4 @@ def test_home_hero_figures_match_the_engine():
     net_metering = (SITE / "pages" / "net-metering.html").read_text(encoding="utf-8")
     assert f"In our example below, a {before} bill comes down to about {after}, about two thirds off." in net_metering
     marketing = (ROOT / "docs" / "marketing.md").read_text(encoding="utf-8")
-    assert f"{hook}: our estimate for a house in" in marketing and f"{hook}. Yours takes a minute." in marketing
+    assert f"{hook}: our estimate for a house in" in marketing and f"{hook}, panels only, for a house using about 500 kWh a month. Yours takes a minute." in marketing

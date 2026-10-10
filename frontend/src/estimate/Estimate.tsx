@@ -47,8 +47,7 @@ function summarySystem(v: Variant) {
   const s = v.system
   const panels = `${s.panels} ${s.panels === 1 ? 'panel' : 'panels'}`
   const battery = hasBattery(v) ? ` and a battery${s.battery_note ? `, ${s.battery_note}` : ''}` : ', and a battery can be added later'
-  const typical = hasBattery(v) ? 'a typical roof and a typical house' : 'a typical roof'
-  return `${panels}${battery}; sized to ${typical} until the free on-site assessment, and fitted to yours in the proposal.`
+  return `${panels}${battery}; sized to a typical roof until the free on-site assessment, and fitted to yours in the proposal.`
 }
 
 /** The other variant's bill inside a clause: "the bill about ₱1,252 a month", or "a small bill" under SMALL_BILL. */
@@ -449,7 +448,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
               <li>{shown.goal === 'off_grid' ? 'no plans signed and sealed, no permit, and nobody filing them' : 'no plans signed and sealed, no permit, no net metering papers, and nobody filing them'}</li>
               <li>{shown.goal === 'off_grid' ? 'no dates on the calendar: not the permit, not the installation, not the switch-on' : 'no dates on the calendar: not the permit, not the installation, not the switch-on, not the two-way meter'}</li>
             </ul>
-            <p>The visit is free, and nothing is decided until you say so; book it below and every line above is answered in your proposal, within two working days.</p>
+            <p>The visit is free, and nothing is decided until you say so. Book it below: every line above is answered in your proposal, within two working days of the visit.</p>
           </div>
 
           <div className="pld-book" id="pld-book" ref={bookRef}>
