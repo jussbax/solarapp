@@ -631,14 +631,14 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
         {building ? (
           <>
             <div className="pld-scene-read"><b className="pld-scene-hour">Dawn</b> · your system, piece by piece</div>
-            <p className="pld-scene-cap" aria-live="polite">Then a typical day, hour by hour.</p>
+            <p className="pld-scene-cap">Then a typical day, hour by hour.</p>
           </>
         ) : (
           <>
             <div className="pld-scene-read">
               <b className="pld-scene-hour">{clock(hour)}</b> · {parts.map((p, i) => (p.b ? <b key={i}>{p.t}</b> : <span key={i}>{p.t}</span>))}
             </div>
-            <p className="pld-scene-cap" aria-live="polite">{cap}</p>
+            <p className="pld-scene-cap">{cap}</p>
           </>
         )}
       </div>

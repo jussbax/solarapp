@@ -1780,3 +1780,25 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   same people on every visit, an engineer on every plan."
 - The estimate widget's script now answers with `Cache-Control: no-cache` on both processes, so a redeploy shows on
   the next load instead of after the browser's heuristic cache expires.
+
+## The second round on the cards and the scene: fewer cues, a slider, 24 seconds and no controls
+
+- The owner (10 October), on the merged cards and scene: "We can remove the animation on the first question, in
+  the location too, and instead of 3 choices we make it a 3 point slider for the question 4, instead of sun moon
+  cycle let's just show a morning animation showing more people are in the house in the morning, or more people in
+  the house in the evening, that's it. As for the show estimate the energy flow is not that good for energy coming
+  from solar it's hard to understand it unlike the grid flow. We should also make it 24 seconds for 24 hours,
+  remove the replay and play controls and just make it a continuous animation."
+- Cards 1 and 2 carry no cue; the question and its choices sit at the top of the card and the stage's height eases
+  between cards. Card 3 keeps the dial. Card 4 is a three-stop slider (Mostly morning · All day · Mostly evening;
+  "All day" to start) with the people scene above it: the same section of a house, a dawn sky with four figures at
+  the kitchen, the laundry and the pump for the morning, daylight with two for all day, a dusk sky with four on the
+  sofa, the TV and the aircon lit for the evening; the figures crossfade in 400 ms and stand still under reduced
+  motion. No sun-and-moon cycle. The slider's stop still lands and waits for "Show my estimate".
+- The day scene runs one second an hour: 24 seconds a day, the build-up once, then the loop without end. Play,
+  pause, replay and the scrubber are gone. The flow from the panels follows a drawn conduit (gold, down the roof's
+  edge to the inverter and on to the house), the same way the grid's flow follows the service drop, with a pulse at
+  the array and "from the panels", "to the house", "to the grid" or "from the grid" at the path ends while that
+  flow runs. Under reduced motion the scene is one still frame at noon with the readout for that hour.
+- The hourly caption is no longer a live region: a screen reader announced it every second. The SVG's `role="img"`
+  label describes the day once; the readout stays visible text.
