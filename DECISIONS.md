@@ -1902,3 +1902,10 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   band "Your new bill is a minute away." with "Every month you wait is another month at the old bill"; the service
   area moved from the lead to the band so the lead stays four lines on a phone. Brownouts keeps the dark street as
   its own hook; About keeps the company's line.
+
+## The brands strip carries the makers' marks
+
+- The owner sent the five logos (10 October): Jinko Solar and Trina Solar, Deye and Felicity Solar, Suntree. They
+  live in `site/static/brands/` as PNGs trimmed to one height (120 px, shown at 44 px on a desktop and 34 on a phone)
+  on white tiles under "Brands we install" on the home page, in colour, with the maker's name as the alt text. The
+  placeholder block is gone. No line says which brand goes where: the proposal names the parts.
