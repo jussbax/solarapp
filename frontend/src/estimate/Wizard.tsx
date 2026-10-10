@@ -1,6 +1,6 @@
 // The four questions of the public estimate, one card at a time: the visitor answers, the card slides
 // away and the next one slides in. Two cards carry a cue above the question (an inline SVG that reacts
-// to the answer): the meter dial that fills with the monthly use, and the house in section with the
+// to the answer): the meter dial that fills with the monthly kWh, and the house in section with the
 // people in it, more of them in the morning or in the evening as the slider moves. The state lives in
 // Estimate.tsx and comes in as props; this file holds the order of the cards, the slide and the cues.
 // The words of the questions and the choices are the ones the form carried before.
@@ -25,7 +25,6 @@ const SLIDE_MS = 320
 const LAND_MS = 350
 /** The meter dial on card 3 is full at this much a month; anything past it stays full. */
 const DIAL_KWH = 1000
-const DIAL_PHP = 15000
 
 const reducedMotion = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const num = (s: string) => parseFloat(s.replace(/,/g, ''))
@@ -50,8 +49,6 @@ export interface WizardProps {
   geoBusy: boolean
   kwh: string
   setKwh: (v: string) => void
-  php: string
-  setPhp: (v: string) => void
   pattern: Pattern
   setPattern: (p: Pattern) => void
   ready: boolean
@@ -81,8 +78,7 @@ export default function Wizard(p: WizardProps) {
   const goRef = useRef((_to: number) => {})
 
   const kwhNum = num(p.kwh)
-  const phpNum = num(p.php)
-  const hasUse = (Number.isFinite(kwhNum) && kwhNum > 0) || (Number.isFinite(phpNum) && phpNum > 0)
+  const hasUse = Number.isFinite(kwhNum) && kwhNum > 0
   const hasPlace = !!p.townName || !!p.pin
   const patternIdx = Math.max(0, PATTERNS.findIndex((s) => s.id === p.pattern))
   // the last card always has an answer: the slider stands at "All day" until it is moved
@@ -233,7 +229,7 @@ export default function Wizard(p: WizardProps) {
         </>
       )
     } else if (i === 2) {
-      cue = <UseCue kwh={kwhNum} php={phpNum} />
+      cue = <UseCue kwh={kwhNum} />
       body = (
         <>
           <div className="pld-row">
@@ -241,12 +237,8 @@ export default function Wizard(p: WizardProps) {
               <span>kWh on your latest bill</span>
               <input inputMode="decimal" value={p.kwh} onChange={(ev) => p.setKwh(ev.target.value)} onKeyDown={enterGoesNext} placeholder="e.g. 338" />
             </label>
-            <label className="pld-field">
-              <span>or the amount you paid (₱)</span>
-              <input inputMode="decimal" value={p.php} onChange={(ev) => p.setPhp(ev.target.value)} onKeyDown={enterGoesNext} placeholder="e.g. 4,000" />
-            </label>
           </div>
-          <div className="pld-hint">The kWh is printed on the bill, usually near "consumption". Either one is fine.</div>
+          <div className="pld-hint">The kWh is printed on the bill, usually near "consumption".</div>
         </>
       )
     } else {
@@ -351,14 +343,13 @@ const TICKS = [180, 135, 90, 45, 0]
   })
   .join('')
 
-/** Card 3: a meter dial that fills as the number grows, 0–1,000 kWh or ₱0–15,000; past the end it stays full. */
-function UseCue({ kwh, php }: { kwh: number; php: number }) {
+/** Card 3: a meter dial that fills as the number grows, 0–1,000 kWh; past the end it stays full. */
+function UseCue({ kwh }: { kwh: number }) {
   const id = useId()
   const useKwh = Number.isFinite(kwh) && kwh > 0
-  const usePhp = !useKwh && Number.isFinite(php) && php > 0
-  const frac = useKwh ? Math.min(1, kwh / DIAL_KWH) : usePhp ? Math.min(1, php / DIAL_PHP) : 0
-  const value = useKwh ? n0(kwh) : usePhp ? `₱${n0(php)}` : ''
-  const unit = useKwh ? ' kWh a month' : usePhp ? ' a month' : ''
+  const frac = useKwh ? Math.min(1, kwh / DIAL_KWH) : 0
+  const value = useKwh ? n0(kwh) : ''
+  const unit = useKwh ? ' kWh a month' : ''
   return (
     <svg className="pld-wz-svg pld-wz-use" viewBox="0 0 800 260" data-full={frac >= 1 ? 'yes' : 'no'} focusable="false">
       <defs>

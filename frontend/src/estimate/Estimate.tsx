@@ -59,7 +59,6 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
   const [found, setFound] = useState('')   // "Pila, Laguna": the town the phone's location pointed at, shown under the pickers
   const [geoBusy, setGeoBusy] = useState(false)
   const [kwh, setKwh] = useState('')
-  const [php, setPhp] = useState('')
   const [pattern, setPattern] = useState<Pattern>('balanced')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -120,8 +119,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
     }
   }, [province, townsHere.length, fetched, api])
   const kwhNum = parseFloat(kwh.replace(/,/g, ''))
-  const phpNum = parseFloat(php.replace(/,/g, ''))
-  const hasUse = (Number.isFinite(kwhNum) && kwhNum > 0) || (Number.isFinite(phpNum) && phpNum > 0)
+  const hasUse = Number.isFinite(kwhNum) && kwhNum > 0
   const hasPlace = !!townName || !!pin
   const ready = hasUse && hasPlace
   const enabled = status !== 'down' && (status?.enabled ?? true)
@@ -170,7 +168,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
     lat: townName ? null : pin?.lat ?? null,
     lon: townName ? null : pin?.lon ?? null,
     monthly_kwh: Number.isFinite(kwhNum) && kwhNum > 0 ? kwhNum : null,
-    monthly_php: Number.isFinite(phpNum) && phpNum > 0 ? phpNum : null,
+    monthly_php: null,
     pattern,
   })
 
@@ -202,7 +200,6 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
     setPin(null)
     setFound('')
     setKwh('')
-    setPhp('')
     setPattern('balanced')
     setError(null)
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
@@ -340,7 +337,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
           provinces={provinces} townsHere={townsHere}
           pin={pin} setPin={setPin} found={found} setFound={setFound}
           useGps={useGps} geoBusy={geoBusy}
-          kwh={kwh} setKwh={setKwh} php={php} setPhp={setPhp}
+          kwh={kwh} setKwh={setKwh}
           pattern={pattern} setPattern={setPattern}
           ready={ready} enabled={enabled} busy={busy} error={error} run={run}
           downNote={downNote} status={status}

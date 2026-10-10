@@ -103,7 +103,7 @@ def _consumption(req: QuickRequest, default_tariff: float) -> tuple[float, float
         tariff = default_tariff
         note = f"We read your ₱{req.monthly_php:,.0f} bill as about {kwh:,.0f} kWh, at ₱{default_tariff:.2f} per kWh."
     else:
-        raise ValueError("Enter the kWh from your bill, or the amount you paid.")
+        raise ValueError("Enter the kWh from your bill.")
     if kwh < MIN_MONTHLY_KWH:
         raise ValueError(TOO_LITTLE)
     return kwh, tariff, note
