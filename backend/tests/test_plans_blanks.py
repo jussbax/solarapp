@@ -106,8 +106,9 @@ def test_every_blank_line_of_the_typed_set_has_its_row_on_the_last_sheet(client)
     for text in ("Inverter FS-INV-008: certificate", "Inverter FS-INV-008: AC input rating", "Inverter FS-INV-008: MPPT window (low)",
                  "interrupting rating (AIC) of IAN-PRT-009", "interrupting rating (AIC) of IAN-PRT-003", "the battery's short-circuit trip",
                  "C3: EGC provided", "C, the clearance under the panel (the L-foot height)", "not on the L-foot item (Materials page)",
-                 "The signing engineer's lines", "main breaker AF (the frame rating)", "fed from", "demand load (W, VA, A)", "Revisions: the first issue's By"):
+                 "The signing engineer's lines", "main breaker AF (the frame rating)", "fed from", "demand load (W, VA, A)"):
         assert text in flat, text
+    assert "Revisions: the first issue's By" not in flat   # recorded at the first build through the API (review finding 14)
     assert "Single-line diagram (figures blank)" not in flat and "Schedule of loads (service entrance blank)" not in flat
 
 
@@ -135,4 +136,5 @@ def test_the_builder_takes_a_collector_and_the_seed_alone_stays_one_last_sheet()
     pages = _pages(pdf)
     assert len(pages) == 8 and pages[-1].strip().startswith("Not yet in this set") and "Blank lines in this set, by sheet" in pages[-1]
     assert blanks.count("Single-line diagram") >= 10 and blanks.count("Schedule of loads") >= 1 and blanks.count("Cover and general notes") >= 5
+    assert any(r["item"] == "Revisions: the first issue's By" for r in blanks.rows)   # no signed-in name outside the API: a blank line with its reason
     assert "Sheet 3" in pages[-1] and "Blank lines in this set, by sheet" in pages[-1]   # the diagram is sheet 3 of this set, its blanks listed under that number

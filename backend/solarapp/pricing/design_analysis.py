@@ -8,8 +8,9 @@ Nothing invented: every table value here is a cited stand-in in the settings (`c
 flag the sheet prints with "verify" until the owner or the PEE ticks it; every default temperature and the insulation
 rating of a wire item that has none are ASSUMPTIONS and print as such. A check that needs a figure not on file (the
 conductor's area, the conduit's inside diameter, the breaker's rating without Isc) reads "not checked" with the reason,
-never a silent default; a table the app does not hold for a conductor type at all (the cable's 75 °C column) is a
-"verify" qualifier, never a pass on its own.
+never a silent default, and so does a BOM role the bill lacks (the battery rack's EGC, the round-13 review's finding 12);
+a table the app does not hold for a conductor type at all (the cable's 75 °C column) is a "verify" qualifier, never a
+pass on its own.
 
 The computation (2.3):
     T_conductor = T_ambient (+ the rooftop adder for a raceway on the roof)
@@ -409,7 +410,8 @@ def derate_circuit(row: dict, cfg: PricingConfig, conductor: Optional[Item], con
                         f"{label}: {what} is {float(provided):g} mm² and the {float(ocpd):g} A breaker needs {req[1]:g} mm² ({cite(g.egc_source, g.egc_verified)}). "
                         "Set a larger conductor for the role under Pricing settings › BOM item roles.")})
             elif kind == "dc_battery":
-                qualifiers.append("EGC: the BOM carries no battery-rack EGC role, verify")
+                # review finding 12: a blank "provided" is a missing BOM role, a real omission on site, not a table the app lacks
+                not_checked.append("EGC: no battery-rack EGC role on the BOM (Pricing settings › BOM item roles)")
             else:
                 not_checked.append("the EGC provided is not on the record (no item for the role)")
     elif kind != "dc_combined":

@@ -112,8 +112,9 @@ def test_the_first_build_issues_revision_0_and_a_revision_prints_on_every_sheet(
     r = client.post(f"/api/assessments/{aid}/revisions", json={"note": "x"})
     assert r.status_code == 409 and "revision 0" in r.json()["detail"]
     assert client.get(f"/api/assessments/{aid}/plans.pdf").status_code == 200
-    first = client.get(f"/api/assessments/{aid}").json()["plans_issued_at"]
-    assert first is not None
+    out = client.get(f"/api/assessments/{aid}").json()
+    first = out["plans_issued_at"]
+    assert first is not None and out["plans_issued_by"] == "u"   # review finding 14: the signed-in person who first built the set
     assert client.get(f"/api/assessments/{aid}/plans.pdf").status_code == 200
     assert client.get(f"/api/assessments/{aid}").json()["plans_issued_at"] == first   # the second build keeps the first date
     # a note is required
@@ -129,7 +130,7 @@ def test_the_first_build_issues_revision_0_and_a_revision_prints_on_every_sheet(
     for page in pages:
         assert "Rev. 1: busbar and main breaker surveyed —" in flat(page) and "Rev. 0" not in page
     cover = flat(pages[0])
-    assert "Revisions" in cover and "first issue" in cover and "1 " in cover and "busbar and main breaker surveyed" in cover and " u" in cover
+    assert "Revisions" in cover and "first issue u" in cover and "1 " in cover and "busbar and main breaker surveyed" in cover and " u" in cover   # Rev. 0's "By" and Rev. 1's
     # the log is append-only and "Reopen design" leaves it
     r = client.post(f"/api/assessments/{aid}/revisions", json={"note": "inverter moved to the utility room"})
     assert [x["no"] for x in r.json()["revisions"]] == [1, 2]
@@ -147,9 +148,9 @@ def test_an_older_database_gets_the_revision_columns_at_start_up(tmp_path):
                           "doc JSON NOT NULL, results JSON, results_stale BOOLEAN, proposal_issued_at DATETIME)"))
         conn.execute(text("INSERT INTO assessments (id, created_at, updated_at, customer_name, address, doc, results_stale) VALUES (1, '2026-01-01', '2026-01-01', 'Old', '', '{}', 0)"))
     added = ensure_columns(engine, "assessments", Assessment)
-    assert {"plans_issued_at", "revisions"} <= set(added) and ensure_columns(engine, "assessments", Assessment) == []
+    assert {"plans_issued_at", "plans_issued_by", "revisions"} <= set(added) and ensure_columns(engine, "assessments", Assessment) == []
     from sqlmodel import Session
 
     with Session(engine) as s:
         a = s.get(Assessment, 1)
-        assert a.plans_issued_at is None and a.revisions is None   # reads as "Rev. 0", an empty log
+        assert a.plans_issued_at is None and a.plans_issued_by is None and a.revisions is None   # reads as "Rev. 0", an empty log, the By a blank line

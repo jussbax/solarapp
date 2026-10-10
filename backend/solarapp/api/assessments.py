@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Respon
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
-from ..auth import require_account, require_user
+from ..auth import current_account, require_account, require_user
 from ..compute import ComputeError, compute_results
 from ..config import Settings, get_settings
 from ..core.dataset import NasaReference, PvgisDataset
@@ -85,7 +85,7 @@ def _out(a: Assessment, settings_changed: bool = False) -> AssessmentOut:
         id=a.id, created_at=a.created_at, updated_at=a.updated_at,
         doc=AssessmentDoc.model_validate(a.doc), results=a.results, results_stale=a.results_stale,
         pricing_settings_changed=settings_changed, status=project_status(a), proposal_issued_at=a.proposal_issued_at,
-        plans_issued_at=a.plans_issued_at, revisions=_revisions(a),
+        plans_issued_at=a.plans_issued_at, plans_issued_by=a.plans_issued_by, revisions=_revisions(a),
         vicinity_map=VicinityMap.model_validate(a.vicinity_map) if a.vicinity_map else None,
     )
 
@@ -328,6 +328,7 @@ def plans_for_the_pee(
     assessment_id: int,
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
+    account: Optional[User] = Depends(current_account),
 ) -> Response:
     """The plans for the PEE (round 4): the A3 drawing set the signing engineer seals, built from the geometry, the
     BOM and the settings of the current calculation. Internal, so it prints on test weather like the program of works;
@@ -340,9 +341,11 @@ def plans_for_the_pee(
     catalog = load_catalog(session, include_inactive=True)
     items = {code: asdict(item) for code, item in catalog.items.items()}
     if a.plans_issued_at is None:
-        # the set exists for the record from here (round 13, brief 6.3): revision 0, "first issue", dated now; a later
-        # download keeps the first date, and "Issue a revision" appends the next number. Nothing else about the record moves.
+        # the set exists for the record from here (round 13, brief 6.3): revision 0, "first issue", dated now and signed by the
+        # person who built it (the review's finding 14); a later download keeps the first date and name, and "Issue a revision"
+        # appends the next number. Nothing else about the record moves.
         a.plans_issued_at = utcnow()
+        a.plans_issued_by = (account.display_name or account.username).strip() if account else None
         session.add(a)
         session.commit()
         session.refresh(a)
@@ -350,7 +353,7 @@ def plans_for_the_pee(
     # the vicinity map on record (round 13, item 4): never fetched here, so the build never waits on the tile server
     pdf = build_plans_pdf(AssessmentDoc.model_validate(a.doc), results, company, items=items, config=load_config(session).model_dump(mode="json"),
                           project_no=f"P-{a.created_at.year}-{a.id:04d}", datasheets=datasheet_sources(session),
-                          plans_issued_at=a.plans_issued_at.isoformat(), revisions=[r.model_dump() for r in _revisions(a)],
+                          plans_issued_at=a.plans_issued_at.isoformat(), plans_issued_by=a.plans_issued_by, revisions=[r.model_dump() for r in _revisions(a)],
                           vicinity=a.vicinity_map, project_dir=vicinity.project_dir(settings.data_dir, a.id))
     return Response(pdf, media_type="application/pdf", headers=_download_name("plans", a, "pdf"))
 

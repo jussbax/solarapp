@@ -323,13 +323,14 @@ def _revision_line(plans_issued_at: Optional[str], revisions: list[dict]) -> str
 
 def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Optional[dict[str, dict]] = None,
                     config: Optional[dict] = None, project_no: str = "", today: Optional[date] = None, datasheets: Optional[dict[str, dict]] = None,
-                    plans_issued_at: Optional[str] = None, revisions: Optional[list[dict]] = None,
+                    plans_issued_at: Optional[str] = None, revisions: Optional[list[dict]] = None, plans_issued_by: Optional[str] = None,
                     vicinity: Optional[dict] = None, project_dir: Optional[Path] = None, blanks: Optional[Blanks] = None) -> bytes:
     """The A3 drawing set as PDF bytes. `items` is the materials list by code (dicts of the Item fields) for the
     models' specs and electrical data; `config` is the pricing settings as a dict (wiring rules and BOM item roles);
     `datasheets` (round 12) says per code which datasheet file and date an item's figures came from, so each figure
     on the sheets can say so, or stay BLANK: nothing is derived on the sheet. `plans_issued_at` and `revisions`
-    (round 13) are the record's first issue and its revision log; without them the set reads "Rev. 0". `vicinity` is the
+    (round 13) are the record's first issue and its revision log; without them the set reads "Rev. 0"; `plans_issued_by` is the
+    signed-in person who first built the set, revision 0's "By" (a blank line with its reason when none was recorded). `vicinity` is the
     record's vicinity-map block and `project_dir` the folder its files live in (round 13, item 4); without them the
     site sheet prints the pin and says no map was fetched. `blanks` is the collector of the set's blank lines (one is made when
     none is passed); every sheet module records each blank line it prints with its reason and the last sheet lists them."""
@@ -808,8 +809,9 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         f"<b>5. Grounding and bonding (the BOM).</b> Ground rod: {_item_text(gnd_rod)}. Array bonding conductor: {_item_text(bonding)}, along the rail lines with jumpers between rows "
         f"(bare copper where the LGU asks; the gauge to be verified by the signing engineer). Earth lugs: {_item_text(lugs)}. Grounding run: {_g(gnd_run, 'm')} per inverter on the "
         f"{escape(str(choices.get('ac_gauge') or BLANK))} mm² THHN of the AC circuits. The equipment and electrode grounding conductor sizes: {TO_COMPLETE}.",
-        f"<b>6. Conductors and protection.</b> Breakers and conductors as the circuit schedule sheet lists them, from the wiring rules on file (THHN ampacity table, {', '.join(f'{k} mm² {v:g} A' for k, v in thhn_amp.items())}; "
-        f"verify the table edition). Derating, the breaker against the derated ampacity, conduit fill, the grounding conductor sizes and the short-circuit note: the design analysis sheet "
+        f"<b>6. Conductors and protection.</b> Breakers and conductors as the circuit schedule sheet lists them, from the wiring rules' sizing table (the THHN 60 °C column, the conservative sizing basis: "
+        f"{', '.join(f'{k} mm² {v:g} A' for k, v in thhn_amp.items())}; the 90 °C and 75 °C columns are on the design analysis sheet; verify the edition). "
+        "Derating, the breaker against the derated ampacity, conduit fill, the grounding conductor sizes and the short-circuit note: the design analysis sheet "
         "(pass, fail or not checked per circuit, with the tables used, their sources and the assumptions).",
         f"<b>7. Labels and placards.</b> PV system labels and placards at the service, the disconnect, the inverter and the DC box are miscellaneous supplies, not a BOM line; "
         f"what the LGU and the DU ask for: {TO_COMPLETE}.",
@@ -819,7 +821,8 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     index_t = Table([[P("No.", cellb), P("Sheet", cellb)]] + [[P(f"Sheet {i + 1}"), P(escape(n))] for i, n in enumerate(sheet_names)], colWidths=[20 * mm, 76 * mm], hAlign="LEFT")
     index_t.setStyle(kv_style)
     rev_rows: list[list] = [[P("Rev.", cellb), P("Date", cellb), P("Note", cellb), P("By", cellb)]]
-    rev_rows.append([P("0"), P(_d(plans_issued_at) if plans_issued_at else "the date of this build"), P("first issue"), P(blank(COVER, "Revisions: the first issue's By", "not recorded at the first build"))])
+    rev_rows.append([P("0"), P(_d(plans_issued_at) if plans_issued_at else "the date of this build"), P("first issue"),
+                     P(escape(plans_issued_by.strip()) if plans_issued_by and plans_issued_by.strip() else blank(COVER, "Revisions: the first issue's By", "no signed-in name was recorded at the first build"))])
     for r in revisions[-5:]:
         rev_rows.append([P(escape(str(r.get("no") or ""))), P(_d(r.get("date"))), P(escape(str(r.get("note") or ""))), P(escape(str(r.get("by") or "")) or BLANK)])
     rev_t = Table(rev_rows, colWidths=[12 * mm, 22 * mm, 42 * mm, 22 * mm], hAlign="LEFT")
