@@ -29,7 +29,6 @@
 .pld-row > * { flex: 1 1 200px; min-width: 0; }
 .pld-field { display: block; }
 .pld-field > span { display: block; font-size: 13px; color: var(--pld-muted); margin-bottom: 4px; }
-.pld-field-btn > span { visibility: hidden; }
 .pld input, .pld select { font: inherit; font-size: 16px; width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--pld-line); border-radius: 10px; background: #fff; color: var(--pld-text); }
 .pld input:focus, .pld select:focus { outline: 2px solid var(--pld-gold); outline-offset: 1px; }
 .pld-hint { font-size: 13.5px; color: var(--pld-muted); margin: 8px 0 0; }
@@ -40,6 +39,7 @@
 @media (hover: hover) { .pld-primary:hover:not(:disabled) { background: var(--pld-gold); border-color: var(--pld-gold); color: var(--pld-ink); } }
 .pld-wide { width: 100%; margin-top: 16px; font-size: 17px; }
 .pld-link { background: none; border: 0; padding: 0; color: var(--pld-gold-text); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.pld-link:disabled { cursor: default; text-decoration: none; opacity: 0.7; }
 .pld-note { padding: 10px 14px; border-radius: 10px; margin: 12px 0 0; font-size: 14.5px; }
 .pld-warn { background: var(--pld-warn-bg); color: var(--pld-warn); }
 .pld-warn a { color: inherit; font-weight: 600; }

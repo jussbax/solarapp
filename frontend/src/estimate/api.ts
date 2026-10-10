@@ -79,6 +79,7 @@ export function makeApi(base: string, source: LeadSource) {
   return {
     status: () => call<EstimateStatus>('/api/quick/status'),
     towns: (province: string) => call<Town[]>(`/api/quick/towns?province=${encodeURIComponent(province)}`),
+    place: (lat: number, lon: number) => call<{ town: string; province: string; km: number; inside: boolean }>(`/api/quick/place?lat=${lat}&lon=${lon}`),
     estimate: (body: EstimateRequest) => call<EstimateResult>('/api/quick/estimate', { method: 'POST', body: JSON.stringify(body) }),
     lead: (body: LeadRequest) => call<{ ok: boolean; id?: number }>('/api/quick/lead', { method: 'POST', body: JSON.stringify(body) }),
   }

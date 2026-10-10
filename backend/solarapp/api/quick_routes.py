@@ -21,8 +21,8 @@ from sqlmodel import Session
 from ..auth import current_user
 from ..config import Settings, get_settings
 from ..core.dataset import PvgisDataset
-from ..core.quick import GOAL_LABEL, PATTERN_LABEL, quick_estimate
-from ..core.towns import provinces, towns_payload
+from ..core.quick import GOAL_LABEL, OUT_OF_AREA_KM, PATTERN_LABEL, quick_estimate
+from ..core.towns import nearest_town, provinces, towns_payload
 from ..db import get_engine, get_session
 from ..models import Lead, QuickEstimateLog
 from ..notify import lead_notice, send_lead_notice, smtp_configured
@@ -141,6 +141,17 @@ def quick_towns(request: Request, province: str = "") -> list[dict]:
     """One province's cities and municipalities for the picker (the whole country is 1,600 rows; a province is a few dozen)."""
     _throttle(request, TOWNS_PER_HOUR)
     return towns_payload(province)
+
+
+@router.get("/place")
+def quick_place(request: Request, lat: float, lon: float) -> dict:
+    """The town nearest a phone's location, so the picker can fill itself in; off the map past OUT_OF_AREA_KM."""
+    _throttle(request, TOWNS_PER_HOUR)
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        raise HTTPException(status_code=422, detail="lat/lon out of range")
+    t, km = nearest_town(lat, lon)
+    inside = km <= OUT_OF_AREA_KM
+    return {"town": t[0] if inside else "", "province": t[1] if inside else "", "km": round(km, 1), "inside": inside}
 
 
 @router.get("/status")

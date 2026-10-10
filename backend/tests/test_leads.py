@@ -75,6 +75,14 @@ def test_website_lead_lands_in_the_inbox_not_the_project_list(client, caplog):
     login(client)
 
 
+def test_place_names_the_nearest_town_and_refuses_the_sea(client):
+    r = client.get("/api/quick/place?lat=14.09&lon=121.15")
+    assert r.status_code == 200 and r.json()["town"] == "Santo Tomas" and r.json()["province"] == "Batangas" and r.json()["inside"]
+    far = client.get("/api/quick/place?lat=10.0&lon=135.0").json()   # the Philippine Sea
+    assert not far["inside"] and far["town"] == "" and far["province"] == ""
+    assert client.get("/api/quick/place?lat=95&lon=0").status_code == 422
+
+
 def test_pin_leads_keep_the_pin_and_say_near(client):
     lid = book(client, town="", province="", lat=14.09, lon=121.15, name="Pin Person", address="Brgy. Sambat, beside the chapel")
     lead = client.get(f"/api/leads/{lid}").json()

@@ -62,6 +62,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
   const [province, setProvince] = useState('')
   const [townName, setTownName] = useState('')
   const [pin, setPin] = useState<{ lat: number; lon: number } | null>(null)
+  const [found, setFound] = useState('')   // "Pila, Laguna": the town the phone's location pointed at, shown under the pickers
   const [geoBusy, setGeoBusy] = useState(false)
   const [kwh, setKwh] = useState('')
   const [php, setPhp] = useState('')
@@ -138,9 +139,24 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
       return
     }
     navigator.geolocation.getCurrentPosition(
-      (p) => {
-        setPin({ lat: +p.coords.latitude.toFixed(5), lon: +p.coords.longitude.toFixed(5) })
-        setTownName('')
+      async (p) => {
+        const at = { lat: +p.coords.latitude.toFixed(5), lon: +p.coords.longitude.toFixed(5) }
+        try {
+          const r = await api.place(at.lat, at.lon)
+          if (!r.inside) {
+            setError("Your location is outside the Philippines. Pick the town of the house instead.")
+          } else {
+            // the pickers show the town the location points at; the visitor can still change it
+            setProvince(r.province)
+            setTownName(r.town)
+            setPin(null)
+            setFound(`${r.town}, ${r.province}`)
+          }
+        } catch {
+          setPin(at)   // the lookup failed: the estimate still runs on the location itself
+          setTownName('')
+          setFound('')
+        }
         setGeoBusy(false)
       },
       () => {
@@ -319,6 +335,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
               onChange={(ev) => {
                 setProvince(ev.target.value)
                 setTownName('')
+                setFound('')
               }}
             >
               <option value="">Choose</option>
@@ -337,6 +354,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
               onChange={(ev) => {
                 setTownName(ev.target.value)
                 if (ev.target.value) setPin(null)
+                if (ev.target.value !== townName) setFound('')
               }}
             >
               <option value="">{province ? 'Choose' : 'Pick a province first'}</option>
@@ -347,15 +365,20 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
               ))}
             </select>
           </label>
-          <div className="pld-field pld-field-btn">
-            <span>Or</span>
-            <button type="button" className="pld-btn" onClick={useGps} disabled={geoBusy}>
-              {geoBusy ? 'Finding you…' : 'Use my location'}
-            </button>
-          </div>
         </div>
-        {pin && !townName && <div className="pld-hint">Location set from your phone. Pick a town instead if that's not where the house is.</div>}
-        {!pin && !townName && <div className="pld-hint">Not in the list? Use your location at the house, or message us.</div>}
+        {found && townName ? (
+          <div className="pld-hint">Your location points at {found}. Change it if that's not where the house is.</div>
+        ) : pin && !townName ? (
+          <div className="pld-hint">Location set from your phone. Pick a town instead if that's not where the house is.</div>
+        ) : (
+          <div className="pld-hint">
+            At the house?{' '}
+            <button type="button" className="pld-link" onClick={useGps} disabled={geoBusy}>
+              {geoBusy ? 'Finding your town…' : 'Use my location'}
+            </button>{' '}
+            and the town fills in. Not in the list? Message us.
+          </div>
+        )}
 
         <div className="pld-step">3. How much electricity do you use in a month?</div>
         <div className="pld-row">
