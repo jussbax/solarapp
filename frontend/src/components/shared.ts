@@ -17,7 +17,7 @@ export interface SettingsEntry {
 }
 
 export const SETTINGS_ENTRIES: SettingsEntry[] = [
-  { id: 'company', route: '/settings/company', label: 'Company', lead: 'Who you are on the documents: profile, contact line, warranties, where to pay.' },
+  { id: 'company', route: '/settings/company', label: 'Company', lead: 'Who you are on the documents: profile, the signing engineer, contact line, warranties, where to pay.' },
   { id: 'website', route: '/settings/website', label: 'Website', lead: 'The estimate page and the booking form: links, brands, privacy line, and what the public estimate assumes.', owner: true },
   { id: 'materials', route: '/settings/pricing/materials', label: 'Materials and markup', lead: 'What each item sells for: markup and wastage by category, the job-level fees and VAT, the wiring rules, the string design and the items the generator picks.', owner: true, sections: ['categories', 'job', 'wiring', 'string_design', 'roles'] },
   { id: 'labor', route: '/settings/pricing/labor', label: 'Labor and crew', lead: 'Day rates, the roof and ground work behind the man-hours, hauling, crew transport, tools, and the job defaults a project starts from.', owner: true, sections: ['labor', 'job_defaults', 'roof', 'ground', 'hauling', 'mobdemob', 'tools'] },

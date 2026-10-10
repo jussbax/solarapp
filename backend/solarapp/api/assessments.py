@@ -11,12 +11,12 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session, select
 
-from ..auth import require_user
+from ..auth import require_account, require_user
 from ..compute import ComputeError, compute_results
 from ..config import Settings, get_settings
 from ..core.dataset import NasaReference, PvgisDataset
 from ..db import get_session
-from ..models import Assessment, utcnow
+from ..models import Assessment, User, utcnow
 from ..pricing.config import settings_version
 from ..pricing.datasheets import datasheet_sources
 from ..pricing.job import PricingContext
@@ -26,7 +26,7 @@ from ..reports.customer_pdf import build_customer_pdf
 from ..reports.plans_pdf import build_plans_pdf
 from ..reports.program_pdf import build_program_pdf
 from ..reports.quotation_pdf import build_quotation_pdf, customer_battery_kwh
-from ..schemas import JOB_STAGES, AssessmentDoc, AssessmentOut, AssessmentSummary
+from ..schemas import JOB_STAGES, AssessmentDoc, AssessmentOut, AssessmentSummary, RevisionEntry, RevisionIn
 from .appliances import remember_appliances
 from .deps import get_nasa, get_pvgis
 from .settings_routes import company_settings
@@ -73,11 +73,17 @@ def project_status(a: Assessment) -> str:
     return "draft"
 
 
+def _revisions(a: Assessment) -> list[RevisionEntry]:
+    """The revision log as stored (round 13); an older record without the column reads as an empty log."""
+    return [RevisionEntry.model_validate(r) for r in (a.revisions or [])]
+
+
 def _out(a: Assessment, settings_changed: bool = False) -> AssessmentOut:
     return AssessmentOut(
         id=a.id, created_at=a.created_at, updated_at=a.updated_at,
         doc=AssessmentDoc.model_validate(a.doc), results=a.results, results_stale=a.results_stale,
         pricing_settings_changed=settings_changed, status=project_status(a), proposal_issued_at=a.proposal_issued_at,
+        plans_issued_at=a.plans_issued_at, revisions=_revisions(a),
     )
 
 
@@ -329,9 +335,40 @@ def plans_for_the_pee(
     company = company_settings(session, settings)
     catalog = load_catalog(session, include_inactive=True)
     items = {code: asdict(item) for code, item in catalog.items.items()}
+    if a.plans_issued_at is None:
+        # the set exists for the record from here (round 13, brief 6.3): revision 0, "first issue", dated now; a later
+        # download keeps the first date, and "Issue a revision" appends the next number. Nothing else about the record moves.
+        a.plans_issued_at = utcnow()
+        session.add(a)
+        session.commit()
+        session.refresh(a)
+        log.info("plans issued id=%s", assessment_id)
     pdf = build_plans_pdf(AssessmentDoc.model_validate(a.doc), results, company, items=items, config=load_config(session).model_dump(mode="json"),
-                          project_no=f"P-{a.created_at.year}-{a.id:04d}", datasheets=datasheet_sources(session))
+                          project_no=f"P-{a.created_at.year}-{a.id:04d}", datasheets=datasheet_sources(session),
+                          plans_issued_at=a.plans_issued_at.isoformat(), revisions=[r.model_dump() for r in _revisions(a)])
     return Response(pdf, media_type="application/pdf", headers=_download_name("plans", a, "pdf"))
+
+
+@router.post("/{assessment_id}/revisions", response_model=AssessmentOut)
+def issue_revision(assessment_id: int, body: RevisionIn, account: User = Depends(require_account), session: Session = Depends(get_session)) -> AssessmentOut:
+    """"Issue a revision" (round 13, brief 6.3): appends the next number to the plan set's revision log with the note and
+    the signed-in person's name. The log is append-only; revision 0 is the first issue, so the plans must have been
+    generated once before a revision can be issued. The next plans PDF prints the new number on every sheet."""
+    a = _get(session, assessment_id)
+    if a.plans_issued_at is None:
+        raise HTTPException(status_code=409, detail="Generate the plans for the PEE first: the first issue is revision 0, and a revision follows it.")
+    note = body.note.strip()
+    if not note:
+        raise HTTPException(status_code=422, detail="A revision needs a note that says what changed.")
+    entries = list(a.revisions or [])
+    entry = RevisionEntry(no=len(entries) + 1, date=utcnow().isoformat(), note=note, by=(account.display_name or account.username).strip())
+    a.revisions = entries + [entry.model_dump()]   # a new list, so SQLAlchemy sees the JSON column change
+    a.updated_at = utcnow()
+    session.add(a)
+    session.commit()
+    session.refresh(a)
+    log.info("plans revision issued id=%s no=%s by=%s", assessment_id, entry.no, account.username)
+    return _out_live(session, a)
 
 
 @router.get("/{assessment_id}/card.png")

@@ -11,8 +11,10 @@ import { PROFILE_FIELDS, type AppSettings, type DataStatus } from '../types'
 import { fmtDateTime } from '../fmt'
 import { useNarrow } from '../components/responsive'
 
-// the profile fields, grouped the way the owner reads them: profile, the contact line, the warranties, where to pay, then the website
+// the profile fields, grouped the way the owner reads them: profile, the signing engineer, the contact line, the warranties, where to pay, then the website
 const WARRANTY_KEYS = ['warranty_workmanship_years', 'warranty_panels_product_years', 'warranty_panels_performance_years', 'warranty_inverter_years', 'warranty_battery_years']
+// the signing engineer's lines in the plans' title block (mirrors backend profile.PEE_KEYS); none is public
+const PEE_KEYS = ['pee_name', 'pee_license', 'pee_prc_valid_until', 'pee_ptr_no', 'pee_ptr_date', 'pee_ptr_place', 'pee_tin', 'pee_address', 'pee_firm', 'pee_firm_address', 'pee_phone', 'pee_email']
 // website only (mirrors backend profile.WEBSITE_KEYS): messenger, facebook, brands, callback_promise, after_sales, privacy_note
 const WEBSITE_KEYS = new Set(['messenger', 'facebook', 'brands', 'callback_promise', 'after_sales', 'privacy_note'])
 /** A hint that is an example goes in the field as its placeholder; a hint that is an instruction goes under it. Never both. */
@@ -90,7 +92,7 @@ function SettingsInner({ user, onUser, status, onRefresh }: { user: Me; onUser: 
     () =>
       PROFILE_FIELDS.filter((f) => owner || !WEBSITE_KEYS.has(f.key)).map((f) => {
         const web = WEBSITE_KEYS.has(f.key)
-        const block = web ? 'Estimate page and booking form' : WARRANTY_KEYS.includes(f.key) ? 'Warranties' : f.key === 'payment_details' ? 'Where to pay' : 'Profile'
+        const block = web ? 'Estimate page and booking form' : WARRANTY_KEYS.includes(f.key) ? 'Warranties' : PEE_KEYS.includes(f.key) ? 'Signing engineer' : f.key === 'payment_details' ? 'Where to pay' : 'Profile'
         const e = entry(web ? 'website' : 'company')
         return { id: `profile-${f.key}`, find: `profile.${f.key}`, label: f.label.replace(/\s*\(years\)$/, ''), where: `${e.label} › ${block}`, route: e.route, hay: `${f.label} ${f.key} ${f.hint ?? ''} ${block} ${e.label}`.toLowerCase() }
       }),
@@ -317,12 +319,28 @@ function ProfilePage({
         <div className="form-grid">
           {field('company_name')}
           {field('owner_name')}
-          {field('pee_name')}
-          {field('pee_license')}
           {field('address')}
           {field('phone')}
           {field('email')}
           {field('service_area')}
+        </div>
+        <h3>Signing engineer</h3>
+        <div className="muted" style={{ marginBottom: 6 }}>
+          Printed in the title block of every sheet of the plans for the PEE. A blank field prints as a blank line for the engineer to fill by hand; nothing here is public.
+        </div>
+        <div className="form-grid" data-testid="pee-fields">
+          {field('pee_name')}
+          {field('pee_license')}
+          {field('pee_prc_valid_until')}
+          {field('pee_tin')}
+          {field('pee_ptr_no')}
+          {field('pee_ptr_date')}
+          {field('pee_ptr_place')}
+          {field('pee_firm')}
+          {field('pee_address', { className: 'wide' })}
+          {field('pee_firm_address', { className: 'wide' })}
+          {field('pee_phone')}
+          {field('pee_email')}
         </div>
         <h3>Contact line on documents</h3>
         <div className="form-grid">{field('company_contact', { className: 'full', label: 'One line under the company name' })}</div>

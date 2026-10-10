@@ -5,14 +5,19 @@ carries its source as the brief gives it; every default is an assumption and say
 The order the brief builds them in: 3.5 the battery circuit on the sheet's figures, 3.7 the voltage match, 3.6 the
 charge check, 3.8 Ah-to-kWh, then 3.1 to 3.4 (strings from the cold Voc, the string current from Imp, the PV
 conductor and the DC breaker from Isc with the 1.25 and 1.56 factors, parallel strings per MPPT).
+
+Round 13 (docs/audits/round-13/engineer-brief.md, 2.1): `circuits_block` at the end writes `pricing.choices.circuits`,
+one record per circuit of the job, from the figures the generator already computed; the design analysis and the
+single-line diagram read it.
 """
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
-from .catalog import Item
+from .catalog import Catalog, Item
 from .config import PricingConfig, StringDesign
 
 
@@ -383,3 +388,210 @@ def mppt_assignment(inverter: Optional[Item], strings: int, per_string: int, pan
                 msg += " Unequal strings on one input mismatch at Vmp."
             warnings.append({"code": "mppt_current", "message": msg})
     return per_mppt, warnings
+
+
+# ---------------------------------------------------------------- round 13: the circuits contract (brief 2.1)
+
+# The seven circuits every job's block carries, in the order the schedule, the single-line diagram and the design
+# analysis number them (C1 upwards). A row is always present so the balloon numbers never move; `applies` says whether
+# the job has that circuit (no battery on net metering, no combined DC circuit when no two strings share an input).
+CIRCUIT_ROWS: tuple[tuple[str, str, str], ...] = (
+    ("C1", "PV string (each)", "dc_pv"),
+    ("C2", "Combined DC (strings joined on one MPPT input)", "dc_combined"),
+    ("C3", "Battery", "dc_battery"),
+    ("C4", "Inverter output", "ac_inverter_output"),
+    ("C5", "Grid feed (grid to the inverter's AC input)", "ac_grid_feed"),
+    ("C6", "Maintenance bypass", "ac_bypass"),
+    ("C7", "Equipment grounding", "egc"),
+)
+# the figures the design analysis (a later step) fills: every one None here, and the row says so
+NOT_YET_DERATED = "derating (ambient, temperature and bundling factors), conduit fill and the EGC size are not computed yet: the design analysis is a later step"
+_CHECK_KEYS = ("design_le_ocpd", "ampacity_ge_ocpd", "ocpd_le_derated", "terminal_ge_design", "next_size_up_used", "fill_ok", "egc_ok")
+
+
+def mm2_in_text(*texts: Any) -> Optional[float]:
+    """The conductor size an item's name or spec states ("THHN 8.0mm2", "GROUNDING WIRE 10mm2"); None when none."""
+    for t in texts:
+        m = re.search(r"(\d+(?:\.\d+)?)\s*mm\s*(?:2|²)", str(t or ""), re.I)
+        if m:
+            return float(m.group(1))
+    return None
+
+
+def _circuit(cid: str, name: str, kind: str) -> dict:
+    """One record with every key of the contract present, None until a figure fills it."""
+    return {
+        "id": cid, "name": name, "kind": kind, "applies": True, "count": 0,
+        "conductors": {"n_total": None, "n_current_carrying": None, "size_mm2": None, "insulation_c": None, "type": None},
+        "run_m": None, "voltage_v": None, "i_continuous_a": None, "i_design_a": None, "ocpd_a": None, "ocpd_code": None,
+        "placement": None, "conduit_code": None, "conduit_inner_diameter_mm": None,
+        "ambient_c": None, "rooftop_adder_c": None, "t_conductor_c": None,
+        "ampacity_rule_a": None, "ampacity_rule_column": None,
+        "ampacity_base_a": None, "ampacity_terminal_a": None, "f_temp": None, "f_fill": None, "ampacity_derated_a": None,
+        "fill_pct": None, "fill_limit_pct": None, "egc_required_mm2": None, "egc_provided_mm2": None, "egc_provided_code": None,
+        "drop_pct": None, "checks": {k: None for k in _CHECK_KEYS}, "status": "not checked", "notes": [],
+    }
+
+
+def _boq_checks(row: dict) -> None:
+    """The BOQ's own rules restated on the record (brief 2.3): the design current at or below the OCPD, the table ampacity
+    at or above the OCPD. A failed one is a fail (the generator's hard warning already says so); the derated checks are
+    None until the design analysis computes them, so a row never reads "pass" here."""
+    d, o, a = row["i_design_a"], row["ocpd_a"], row["ampacity_rule_a"]
+    if d is not None and o is not None:
+        row["checks"]["design_le_ocpd"] = float(d) <= float(o) + 1e-9
+    if a is not None and o is not None:
+        row["checks"]["ampacity_ge_ocpd"] = float(a) >= float(o) - 1e-9
+    row["status"] = "fail" if any(v is False for v in row["checks"].values()) else "not checked"
+    row["notes"].append(NOT_YET_DERATED)
+
+
+def circuits_block(choices: dict, lines: list, catalog: Catalog, cfg: PricingConfig, inverter: Optional[Item], battery: Optional[Item], units: int) -> list[dict]:
+    """`pricing.choices.circuits` (round 13, brief 2.1): one record per circuit, built from the figures the generator
+    already wrote into `choices` and the BOM lines (the string current and voltage, the PV gauge and drop, the DC
+    breaker, the AC currents, breakers, gauges and drops, the battery circuit, the runs, the conduit, the grounding
+    run and the array bonding). Nothing is derived here that the BOQ does not print: a figure the generator has not
+    computed is None with its reason in `notes`, and `status` reads "not checked" until the design analysis derates
+    the rows, or "fail" where the BOQ's own coordination already fails."""
+    w, r = cfg.wiring, cfg.roles
+    by_role: dict[str, Any] = {}
+    for l in lines:
+        by_role.setdefault(l.role, l)
+    sdn = choices.get("string_design") or {}
+    sc = sdn.get("current") or {}
+    per_mppt = sdn.get("per_mppt") or []
+    strings = int(choices.get("strings") or 0)
+    cf = float(w.continuous_factor)
+    rows = {cid: _circuit(cid, name, kind) for cid, name, kind in CIRCUIT_ROWS}
+
+    def code_of(role: str) -> Optional[str]:
+        l = by_role.get(role)
+        return l.code if l is not None else None
+
+    def item_of(role: str) -> Optional[Item]:
+        c = code_of(role)
+        return catalog.get(c) if c else None
+
+    # C1: the PV string circuit (each string alike: the same count, gauge and run)
+    c1 = rows["C1"]
+    c1["applies"], c1["count"] = strings > 0, strings
+    pv_gauge = choices.get("pv_gauge")
+    c1["conductors"].update({"n_total": 2, "n_current_carrying": 2, "size_mm2": float(pv_gauge) if pv_gauge else None, "type": "PV wire"})
+    c1["run_m"], c1["voltage_v"] = choices.get("pv_run_m"), choices.get("string_voltage_v")
+    c1["i_continuous_a"] = choices.get("string_current_a")
+    if sc.get("source") == "datasheet" and sc.get("i_cond_a"):
+        c1["i_design_a"] = float(sc["i_cond_a"])
+        c1["notes"].append(f"design current {float(sc['isc_factor']):g} × {cf:g} × Isc {float(sc['isc_a']):g} A (the datasheet; the PV article's circuit current and the continuous factor, verify the clause)")
+        c1["ocpd_a"] = (choices.get("dc_breaker") or {}).get("ocpd_a")
+    else:
+        c1["i_design_a"] = float(c1["i_continuous_a"]) * cf if c1["i_continuous_a"] is not None else None
+        c1["notes"].append(f"design current {cf:g} × the rule's string current (the panel has no Isc on file: the PV article's 1.25 × Isc is not applied)")
+        dc_item = item_of("dc_breaker")
+        listed = dc_item.amps_listed() if dc_item else []
+        c1["notes"].append("the DC breaker's rating is not checked without Isc on file" + (f"; the role item is listed in {', '.join(f'{x:g}' for x in listed)} A" if listed else ""))
+    c1["ocpd_code"] = code_of("dc_breaker")
+    c1["placement"] = "rooftop_free_air"
+    c1["notes"].append("placement: the string home runs in free air under the array (the rule's placement until the BOM carries a rooftop conduit)")
+    c1["drop_pct"] = choices.get("pv_drop")
+    if pv_gauge and str(pv_gauge) in w.pv_cable_ampacity:
+        c1["ampacity_rule_a"], c1["ampacity_rule_column"] = float(w.pv_cable_ampacity[str(pv_gauge)]), "PV cable table (the wiring rules; verify the cable's rating)"
+    bonding = item_of("array_bonding")
+    c1["egc_provided_mm2"], c1["egc_provided_code"] = (mm2_in_text(bonding.name, bonding.spec), bonding.code) if bonding else (None, code_of("array_bonding"))
+    if c1["egc_provided_mm2"] is None:
+        c1["notes"].append("the array bonding conductor's size is not in its item's name or spec" if bonding else "no item in the materials list for the array bonding role")
+    _boq_checks(c1)
+
+    # C2: strings joined on one MPPT input (no combiner or conductor role in the BOM)
+    c2 = rows["C2"]
+    joined = [inp for inp in per_mppt if int(inp.get("strings") or 0) > 1]
+    c2["applies"], c2["count"] = bool(joined), len(joined)
+    if joined:
+        worst = max(joined, key=lambda inp: float(inp.get("amps_at_imp") or 0))
+        c2["i_continuous_a"] = float(worst.get("amps_at_imp") or 0)
+        c2["i_design_a"] = c2["i_continuous_a"] * float(sc.get("isc_factor") or 1) * cf if sc.get("source") == "datasheet" else c2["i_continuous_a"] * cf
+        c2["voltage_v"] = choices.get("string_voltage_v")
+        c2["placement"] = "indoor_conduit"
+        c2["notes"].append(f"{int(worst['strings'])} strings join on MPPT {worst['input']} after their breakers in the DC box; the BOM carries no combiner and no conductor for the joined run: verify a fuse per string where more than two join")
+    elif not per_mppt:
+        c2["notes"].append("the inverter's MPPT inputs are not on its item: whether strings join on one input is not known")
+    else:
+        c2["notes"].append("no two strings share an MPPT input on this job: no combined DC circuit")
+    c2["notes"].append(NOT_YET_DERATED)
+
+    # C3: the battery circuit
+    c3 = rows["C3"]
+    bc = choices.get("battery_circuit") or {}
+    c3["applies"] = bool(bc) and int(choices.get("battery_units") or 0) > 0
+    c3["count"] = units if c3["applies"] else 0
+    if c3["applies"]:
+        gauge = bc.get("cable_gauge")
+        c3["conductors"].update({"n_total": 2, "n_current_carrying": 2, "size_mm2": float(gauge) if gauge else None, "type": "battery cable"})
+        c3["notes"].append(f"{int(w.battery_pairs_per_battery)} lug pairs per battery unit as the BOM carries them; the pair's length is the item's, not a run")
+        if battery is not None and battery.nominal_v:
+            c3["voltage_v"] = float(battery.nominal_v)
+        else:
+            c3["voltage_v"] = float(w.battery_voltage)
+            c3["notes"].append(f"battery voltage: the wiring rules' {float(w.battery_voltage):g} V (the battery's nominal voltage is not on the item)")
+        c3["i_continuous_a"], c3["i_design_a"] = bc.get("current_a"), bc.get("breaker_min_a")
+        c3["ocpd_a"], c3["ocpd_code"] = bc.get("breaker_a"), code_of("battery_breaker")
+        c3["placement"] = "indoor_free_air"
+        c3["notes"].append("placement: the battery cables run free between the bank and the inverter (the rule's placement until the survey records the run)")
+        c3["notes"].append("drop: the BOQ checks the battery cable on ampacity against the breaker, not on drop")
+        c3["ampacity_rule_a"], c3["ampacity_rule_column"] = bc.get("cable_ampacity_a"), "battery cable table (the wiring rules; verify the cable's rating)"
+        c3["notes"].append("the BOM carries no battery-rack equipment grounding conductor: verify")
+        _boq_checks(c3)
+    else:
+        c3["notes"].append("no battery on this job" if str(choices.get("kind")) == "net_metering" else "no battery circuit was priced")
+
+    # C4, C5, C6: the AC circuits (round 3: one inverter-output circuit and two grid-side circuits per inverter)
+    n_cond = max(int(w.ac_conductors_per_circuit), 1)
+    inv_circuits = max(int(r.ac_breakers_per_inverter), 0)
+    grid_circuits = max(int(r.ac_grid_breakers_per_inverter), 0)
+    thhn_code = code_of("thhn")
+    grid_code = code_of("thhn_grid") or thhn_code
+    conduit_code = code_of("conduit")
+    grid_known = bool(choices.get("ac_grid_rating_known"))
+    ac_specs = (
+        ("C4", inv_circuits >= 1, units * inv_circuits, choices.get("ac_current_a"), choices.get("ac_breaker_a"), choices.get("ac_gauge"), choices.get("ac_drop"), thhn_code,
+         "the inverter's rated output over the AC voltage"),
+        ("C5", grid_circuits >= 1, units if grid_circuits >= 1 else 0, choices.get("ac_grid_current_a"), choices.get("ac_grid_breaker_a"), choices.get("ac_grid_gauge"), choices.get("ac_grid_drop"), grid_code,
+         "the inverter's AC input rating" if grid_known else "the inverter's output current (its AC input rating is not on the item)"),
+        ("C6", grid_circuits >= 2, units if grid_circuits >= 2 else 0, choices.get("ac_grid_current_a"), choices.get("ac_grid_breaker_a"), choices.get("ac_grid_gauge"), choices.get("ac_grid_drop"), grid_code,
+         "the grid-side figure, as the feed"),
+    )
+    for cid, applies, count, i_cont, ocpd, gauge, drop, code, basis in ac_specs:
+        c = rows[cid]
+        c["applies"], c["count"] = bool(inverter is not None and applies), count if inverter is not None else 0
+        if not c["applies"]:
+            c["notes"].append("no inverter was priced" if inverter is None else "no such circuit under Pricing settings › BOM item roles")
+            continue
+        c["conductors"].update({"n_total": n_cond, "n_current_carrying": n_cond, "size_mm2": float(gauge) if gauge else None, "type": "THHN"})
+        c["notes"].append("line and neutral per circuit, both current-carrying; the ground is the grounding run (C7)")
+        c["run_m"], c["voltage_v"] = choices.get("ac_run_m"), float(w.ac_voltage)
+        c["i_continuous_a"] = i_cont
+        c["i_design_a"] = float(i_cont) * cf if i_cont is not None else None
+        c["notes"].append(f"current: {basis}; design current {cf:g} × it, the breaker the next standard size")
+        c["ocpd_a"], c["ocpd_code"] = ocpd, code_of("ac_breaker")
+        if ocpd is None:
+            c["notes"].append("no standard breaker size covers the design current (the hard ac_circuit warning)")
+        c["placement"], c["conduit_code"] = "indoor_conduit", conduit_code
+        c["notes"].append("placement: in the BOM's conduit indoors (the rule's placement until the survey records the run); the conduit's inside diameter is not on the item")
+        c["drop_pct"] = drop
+        if gauge and str(gauge) in w.thhn_ampacity:
+            c["ampacity_rule_a"], c["ampacity_rule_column"] = float(w.thhn_ampacity[str(gauge)]), "THHN 60 °C column (the wiring rules; verify the table edition)"
+        c["egc_provided_mm2"], c["egc_provided_code"] = (float(choices["ac_gauge"]) if choices.get("ac_gauge") else None), thhn_code
+        c["notes"].append("EGC provided: the grounding run on the THHN line of the AC circuits (the BOM's conductor)")
+        _boq_checks(c)
+
+    # C7: the equipment grounding (the grounding run on the THHN line, the array bonding along the rails)
+    c7 = rows["C7"]
+    c7["applies"], c7["count"] = inverter is not None, units
+    g = choices.get("ac_gauge")
+    c7["conductors"].update({"n_total": 1, "n_current_carrying": 0, "size_mm2": float(g) if g else None, "type": "THHN"})
+    c7["run_m"] = choices.get("grounding_run_m")
+    c7["egc_provided_mm2"], c7["egc_provided_code"] = (float(g) if g else None), thhn_code
+    c7["notes"].append(f"the grounding run per inverter on the {g or '—'} mm² THHN line of the AC circuits; the array bonding conductor: "
+                       + (f"{bonding.code} {bonding.name}" + (f", {c1['egc_provided_mm2']:g} mm²" if c1["egc_provided_mm2"] else "") if bonding else "no item in the materials list")
+                       + "; the ground rod: " + (code_of("ground_rod") or "none"))
+    c7["notes"].append("the sizes required per OCPD and the grounding electrode conductor: not computed yet (the design analysis is a later step)")
+    return [rows[cid] for cid, _, _ in CIRCUIT_ROWS]

@@ -25,6 +25,13 @@ class Assessment(SQLModel, table=True):
     # when the proposal PDF was first generated for this record (round 4): the engineering status reads "proposal
     # issued" from it and the price lock keys off it; "Reopen design" clears it. Outside the document, so a Save never wipes it.
     proposal_issued_at: Optional[datetime] = None
+    # Round 13 (docs/audits/round-13/engineer-brief.md, 6.3): when the plans PDF was first generated for this record, which is
+    # revision 0 ("first issue") of the drawing set, and the append-only revision log the office adds to with "Issue a
+    # revision" on the Documents card: entries {no, date, note, by}. Both outside the document, so a Save never wipes them;
+    # "Reopen design" leaves them (the log is a record, not a status). An older database gets the columns at start-up
+    # (db.ensure_columns); an older record without them prints "Rev. 0" as before.
+    plans_issued_at: Optional[datetime] = None
+    revisions: Optional[list[dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class ApplianceCatalog(SQLModel, table=True):

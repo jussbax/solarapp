@@ -2021,3 +2021,65 @@ owner's answers to its section 6 (`docs/audits/round-12/implementation.md` has w
     not "typed".
   - The AC note for a unit whose output exceeds the largest standard breaker size prints "above the largest
     standard size" beside the hard warning instead of failing the pricing (observed in step 4, fixed here).
+
+## The plan set's groundwork: the title block, the circuits contract, the survey fields
+
+Round 13, 10 October 2026: the engineer's brief for the rest of the plan set (`docs/audits/round-13/engineer-brief.md`),
+step 1 of its order of work (section 7): the three pieces every later sheet builds on, so the office can start surveying
+service entrances and roof construction while the single-line diagram, the design analysis, the site plan, the schedule of
+loads and the mounting detail are built (`docs/audits/round-13/step1.md` has what was built and every departure).
+
+- The title block (item 6). The signing engineer's lines come from the company profile (Settings › Company › Signing
+  engineer): beside the name and PRC number, the PRC validity, the PTR number, date and place, the TIN, the PEE's address,
+  the firm (or "sole practice") and its address, the phone and the email; none is public. The signature block prints
+  them on every sheet: "{name}, PEE — PRC No. {no}, valid until {date}"; "PTR No. {no}, issued {date} at {place}"; "TIN
+  {tin}"; "{address} · {firm}"; the firm's address, phone and email on a seventh line (the brief's six lines leave
+  three of its fields unprinted, and the block's heading says every field prints); then the signature, date and seal
+  line. A field the profile does not hold prints as a blank line, never a guess, and the last sheet names the blank
+  ones and where to type them, dropping the entry when the profile holds them all. The project cell carries "Owner:
+  {customer}" (the customer is the owner on the plans), the address, the kind in words, the system line, the date with
+  the calculation stamp and the revision line.
+- The revision log. `Assessment.plans_issued_at` is set when the plans PDF is first generated and is revision 0, "first
+  issue"; a later download keeps the date. `Assessment.revisions` is append-only: "Issue a revision" on the Documents
+  card (`POST /api/assessments/{id}/revisions`) appends the next number with a required note and the signed-in
+  person's name, and is refused before the first issue. "Reopen design" leaves both: the log is a record, not a status.
+  The title block prints "Rev. {n}: {note} — {date}" for the latest entry beside the calculation stamp; the cover
+  carries the sheet index (every sheet's number and name) and the revision table (the first issue and the last five
+  entries). An older database gets the two columns at start-up; an older record prints "Rev. 0" as before.
+- The circuits contract (brief 2.1). `pricing.choices.circuits`, written at the end of `generate_boq` from the figures
+  it already computed (`design_checks.circuits_block`): seven records on every job in a fixed order, so the balloon
+  numbers on the single-line diagram, the schedule and the design analysis never move: C1 the PV string (each), C2 the
+  strings joined on one MPPT input, C3 the battery, C4 the inverter output, C5 the grid feed, C6 the maintenance bypass,
+  C7 the equipment grounding; `applies` says whether the job has the circuit (no battery on net metering; no combined
+  circuit when no two strings share an input). Each record: `conductors` (the count, the current-carrying count, the
+  size, the type: PV wire, THHN, battery cable; the insulation rating None until the item field exists), `run_m`,
+  `voltage_v`, `i_continuous_a`, `i_design_a` (× 1.25; the PV row 1.25 × 1.25 × Isc when Isc is on file, else 1.25 ×
+  the rule's current and the note says so), `ocpd_a` and `ocpd_code`, `placement` (the rule's: the string runs in free
+  air under the array, the AC circuits in the BOM's conduit indoors, the battery cables free; a surveyed run replaces
+  it later) with `conduit_code`, `ampacity_rule_a` and `ampacity_rule_column` (the wiring rules' table figure the BOQ
+  sized the conductor on: the THHN 60 °C column, the PV and battery cable tables), `drop_pct` (the BOQ's), the EGC
+  provided (the grounding run on the THHN line; the array bonding item's size read from its name), and `checks` with
+  the BOQ's own coordination restated (`design_le_ocpd`, `ampacity_ge_ocpd`). The derated figures the design analysis
+  will compute (`ambient_c`, `rooftop_adder_c`, `t_conductor_c`, `ampacity_base_a`, `ampacity_terminal_a`, `f_temp`,
+  `f_fill`, `ampacity_derated_a`, `fill_pct`, `fill_limit_pct`, `egc_required_mm2`, `conduit_inner_diameter_mm` and
+  the five derated checks) are None with the reason in `notes`; `status` is "not checked" until then, or "fail" where
+  the BOQ's coordination already fails; no row reads "pass" on step 1. The runs the lines were priced on join
+  `choices` (`pv_run_m`, `ac_run_m`, `grounding_run_m`, `conduit_m`). Nothing on a sheet reads the block yet; the BOM,
+  the totals and the website estimate are unchanged.
+- The survey fields (brief 1.3, 3.2, 4.2), one schema change. `AssessmentDoc.service` (the Service entrance card on
+  the Site step): the DU, the account and meter numbers, the existing panelboard in words, the phase (1 or 3), the
+  service voltage, the main breaker and the busbar rating, the point of interconnection (a backfeed breaker on the load
+  side, a supply-side tap, the line side of the main) with its note, the DU's available fault current (2.3) and the
+  panelboard's existing circuits as the office types them (5.3). `RoofFace.construction` and `AssessmentDoc.roof_default`
+  (a fold under each face and under the Roof faces card): the roof type (rib-type or corrugated metal, clay or
+  concrete tile, concrete deck, other), the sheet profile, the purlin material, section, thickness and spacing, the
+  rafter spacing, the mean roof height, the condition note and flag; a blank field on a face reads the project's
+  default. `AssessmentDoc.site` (the Site plan card): the lot and house outlines and the inverter, battery, point of
+  interconnection and meter points as typed coordinates with their locations in words, and per face `plan_offset_m`,
+  the eave midpoint's offset from the pin in metres east and north; the map's draw tools are a later step. Every field
+  is optional and blank until surveyed; no field has a default (the wiring rules' 230 V prints as a labelled assumption
+  on the sheets that read it, not as a stored value); the words are enumerations and a point is a pair in degrees (a
+  422 otherwise); a survey edit is an input and makes the results stale. Nothing on a sheet reads the fields yet.
+- Not in step 1, by the brief's order: the 120 % busbar rule and the `poi_busbar` warning (item 1, with the
+  single-line diagram that prints it), the derating engine and its settings (item 2), the wind fields and settings
+  (item 3), the vicinity map and the drawn outlines (item 4).

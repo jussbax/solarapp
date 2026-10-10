@@ -17,6 +17,78 @@ export interface ShadeObstacle {
   share: number
 }
 
+// ---- round 13 (docs/audits/round-13/engineer-brief.md, 1.3, 3.2, 4.2): the survey record the plan set reads. Every field is
+// optional and blank until surveyed; a blank prints as a blank line with its reason on the sheets, never a guess.
+export type RoofType = '' | 'rib_metal' | 'corrugated_metal' | 'tile_clay' | 'tile_concrete' | 'concrete_deck' | 'other'
+export type PurlinMaterial = '' | 'steel_c' | 'steel_tubular' | 'wood' | 'none'
+export type ConditionFlag = '' | 'sound' | 'rusted' | 'thin' | 'old'
+export type Interconnection = '' | 'load_side_breaker' | 'supply_side_tap' | 'line_side_of_main'
+/** [latitude, longitude] in degrees, typed for now (the map's draw tools are a later step). */
+export type GeoPoint = [number, number]
+
+/** What the roof is made of (3.2): per face, a blank field reads the project's default (AssessmentDoc.roof_default). */
+export interface RoofConstruction {
+  roof_type: RoofType
+  sheet_profile: string
+  purlin_material: PurlinMaterial
+  purlin_section: string
+  purlin_thickness_mm: number | null
+  purlin_spacing_m: number | null
+  rafter_spacing_m: number | null
+  mean_roof_height_m: number | null
+  condition: string
+  condition_flag: ConditionFlag
+}
+export function emptyRoofConstruction(): RoofConstruction {
+  return { roof_type: '', sheet_profile: '', purlin_material: '', purlin_section: '', purlin_thickness_mm: null, purlin_spacing_m: null, rafter_spacing_m: null, mean_roof_height_m: null, condition: '', condition_flag: '' }
+}
+
+/** One existing circuit of the panelboard as the office types it (5.3). */
+export interface PanelboardCircuit {
+  no: string
+  description: string
+  breaker_a: number | null
+  poles: number | null
+  wire_mm2: number | null
+  conduit_mm: number | null
+}
+
+/** The service entrance as surveyed (1.3), the DU's fault level (2.3) and the existing circuits (5.3). */
+export interface ServiceEntrance {
+  du_name: string
+  account_no: string
+  meter_no: string
+  panelboard: string
+  phase: 1 | 3 | null
+  voltage_v: number | null
+  main_breaker_a: number | null
+  busbar_a: number | null
+  interconnection: Interconnection
+  interconnection_note: string
+  fault_level_ka: number | null
+  circuits: PanelboardCircuit[]
+}
+export function emptyService(): ServiceEntrance {
+  return { du_name: '', account_no: '', meter_no: '', panelboard: '', phase: null, voltage_v: null, main_breaker_a: null, busbar_a: null, interconnection: '', interconnection_note: '', fault_level_ka: null, circuits: [] }
+}
+
+/** The site plan's survey (4.2): the outlines and the equipment points as typed coordinates, each point with its location in words. */
+export interface SitePlan {
+  lot_polygon: GeoPoint[]
+  house_polygon: GeoPoint[]
+  inverter_location: string
+  inverter_point: GeoPoint | null
+  battery_location: string
+  battery_point: GeoPoint | null
+  poi_location: string
+  poi_point: GeoPoint | null
+  meter_location: string
+  meter_point: GeoPoint | null
+}
+export function emptySite(): SitePlan {
+  return { lot_polygon: [], house_polygon: [], inverter_location: '', inverter_point: null, battery_location: '', battery_point: null, poi_location: '', poi_point: null, meter_location: '', meter_point: null }
+}
+
 export interface RoofFace {
   id: string
   name: string
@@ -30,6 +102,9 @@ export interface RoofFace {
   panel_count_override: number | null
   walls: WallObstacle[]
   obstacles: ShadeObstacle[]
+  /** Round 13: the construction (a blank field reads the project's default) and the eave midpoint's offset from the pin in metres [east, north]. */
+  construction: RoofConstruction
+  plan_offset_m: [number, number] | null
 }
 
 export interface ShadeFace {
@@ -157,6 +232,10 @@ export interface AssessmentDoc {
   pricing: PricingJob
   program: ProgramJob
   economics: EconomicsJob
+  /** Round 13: the survey record the plan set reads; every field optional and blank until surveyed. */
+  service: ServiceEntrance
+  roof_default: RoofConstruction
+  site: SitePlan
 }
 
 export interface EconomicsJob {
@@ -873,6 +952,14 @@ export interface SiteBlock {
   tmy_hot_cell_c: number | null
 }
 
+/** One line of the plan set's revision log (round 13): appended by "Issue a revision", never edited. Revision 0 is the first issue, dated by plans_issued_at. */
+export interface RevisionEntry {
+  no: number
+  date: string
+  note: string
+  by: string
+}
+
 export interface AssessmentOut {
   id: number
   created_at: string
@@ -883,6 +970,9 @@ export interface AssessmentOut {
   pricing_settings_changed: boolean
   status: EngineeringStatus
   proposal_issued_at: string | null
+  /** Round 13: when the plans for the PEE were first generated (revision 0); null until then. */
+  plans_issued_at?: string | null
+  revisions?: RevisionEntry[]
 }
 
 export interface DataStatus {
@@ -908,6 +998,17 @@ export const PROFILE_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: 'owner_name', label: "Owner's name", hint: 'Signs the proposal; named in the booking thank-you.' },
   { key: 'pee_name', label: 'Professional Electrical Engineer' },
   { key: 'pee_license', label: 'PEE licence number (PRC)' },
+  // round 13 (brief 6.1): the rest of the signing engineer's title-block lines; a blank prints as a blank line on every sheet
+  { key: 'pee_prc_valid_until', label: 'PRC licence valid until', hint: 'e.g. 31 Dec 2028' },
+  { key: 'pee_ptr_no', label: 'PTR number' },
+  { key: 'pee_ptr_date', label: 'PTR date of issue', hint: 'e.g. 5 Jan 2026' },
+  { key: 'pee_ptr_place', label: 'PTR place of issue', hint: 'e.g. Pila, Laguna' },
+  { key: 'pee_tin', label: 'TIN' },
+  { key: 'pee_address', label: "PEE's address" },
+  { key: 'pee_firm', label: 'Firm', hint: 'e.g. sole practice' },
+  { key: 'pee_firm_address', label: "Firm's address" },
+  { key: 'pee_phone', label: "PEE's phone" },
+  { key: 'pee_email', label: "PEE's email" },
   { key: 'service_area', label: 'Where you install', hint: 'e.g. the Philippines' },
   { key: 'brands', label: 'Brands you install', hint: 'One line, e.g. Blue Carbon TOPCon panels, Felicity hybrid inverters, LiFePO4 batteries' },
   { key: 'warranty_workmanship_years', label: 'Workmanship warranty (years)' },
@@ -924,7 +1025,7 @@ export const PROFILE_FIELDS: { key: string; label: string; hint?: string }[] = [
 export const SKY_CONDITIONS = ['clear', 'partly cloudy', 'hazy', 'cloudy', 'overcast']
 
 export function newFace(name: string): RoofFace {
-  return { id: newId(), name, shape: 'rect', length_m: 10, width_m: 6, ridge_m: null, tilt_deg: 15, azimuth_deg: 180, panels_left_out: 0, panel_count_override: null, walls: [], obstacles: [] }
+  return { id: newId(), name, shape: 'rect', length_m: 10, width_m: 6, ridge_m: null, tilt_deg: 15, azimuth_deg: 180, panels_left_out: 0, panel_count_override: null, walls: [], obstacles: [], construction: emptyRoofConstruction(), plan_offset_m: null }
 }
 
 export function newId(): string {
@@ -950,6 +1051,9 @@ export function emptyDoc(): AssessmentDoc {
     pricing: emptyPricingJob(),
     program: emptyProgramJob(),
     economics: emptyEconomicsJob(),
+    service: emptyService(),
+    roof_default: emptyRoofConstruction(),
+    site: emptySite(),
   }
 }
 
@@ -1198,6 +1302,55 @@ export interface PricingChoicesExtra {
   battery_options?: { code: string; name: string; rating_kwh: number; units: number; total_kwh: number; supplier: string; landed: number; continuous_a?: number | null }[]
 }
 export type PricingChoices = NonNullable<PricingBlock['choices']> & PricingChoicesExtra
+
+/** Round 13 (docs/audits/round-13/engineer-brief.md, 2.1): one circuit of the job as pricing.choices.circuits carries it, C1 to C7
+ * in a fixed order; `applies` says whether the job has the circuit; a figure the generator has not computed is null with its
+ * reason in `notes`; `status` is "not checked" until the design analysis derates the row, "fail" where the BOQ's own
+ * coordination already fails. */
+export interface CircuitRecord {
+  id: string
+  name: string
+  kind: 'dc_pv' | 'dc_combined' | 'dc_battery' | 'ac_inverter_output' | 'ac_grid_feed' | 'ac_bypass' | 'egc'
+  applies: boolean
+  count: number
+  conductors: { n_total: number | null; n_current_carrying: number | null; size_mm2: number | null; insulation_c: number | null; type: 'THHN' | 'PV wire' | 'battery cable' | null }
+  run_m: number | null
+  voltage_v: number | null
+  i_continuous_a: number | null
+  i_design_a: number | null
+  ocpd_a: number | null
+  ocpd_code: string | null
+  placement: 'rooftop_conduit' | 'rooftop_free_air' | 'indoor_conduit' | 'indoor_free_air' | null
+  conduit_code: string | null
+  conduit_inner_diameter_mm: number | null
+  ambient_c: number | null
+  rooftop_adder_c: number | null
+  t_conductor_c: number | null
+  /** The wiring rules' table figure the BOQ sized the conductor on, and which table it is. */
+  ampacity_rule_a: number | null
+  ampacity_rule_column: string | null
+  ampacity_base_a: number | null
+  ampacity_terminal_a: number | null
+  f_temp: number | null
+  f_fill: number | null
+  ampacity_derated_a: number | null
+  fill_pct: number | null
+  fill_limit_pct: number | null
+  egc_required_mm2: number | null
+  egc_provided_mm2: number | null
+  egc_provided_code: string | null
+  drop_pct: number | null
+  checks: { design_le_ocpd: boolean | null; ampacity_ge_ocpd: boolean | null; ocpd_le_derated: boolean | null; terminal_ge_design: boolean | null; next_size_up_used: boolean | null; fill_ok: boolean | null; egc_ok: boolean | null }
+  status: 'pass' | 'fail' | 'not checked'
+  notes: string[]
+}
+export interface PricingChoicesExtra {
+  circuits?: CircuitRecord[]
+  pv_run_m?: number
+  ac_run_m?: number
+  grounding_run_m?: number
+  conduit_m?: number
+}
 
 /** The id under which an unsaved new project keeps its draft on the device (the record has no id until the first Save). */
 export const NEW_DRAFT_ID = 0

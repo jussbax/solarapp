@@ -80,13 +80,23 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    projection and any installment structure belong to the finance module
    (the engine still computes them behind the API for it). "Plans
    for the PEE" is an internal A3 landscape drawing set for the signing
-   engineer: a title block and signature block on every sheet (the PEE's
-   name and PRC number from the company profile, blank lines otherwise),
-   the cover and general notes, one array layout per roof face at a stated
-   standard scale with dimension lines, strings and a north arrow, the
-   equipment and circuit schedule from the BOM, and a last sheet that says
-   what still waits on the datasheets (the single-line diagram, the string
-   table) with the audit's schedule of loads. Each
+   engineer: a title block and signature block on every sheet (the owner,
+   the project and the kind; the signing engineer's name, PRC number and
+   validity, PTR, TIN, address and firm from the company profile, a blank
+   line for each field it does not hold; the revision line), the cover
+   and general notes with the sheet index and the revision log (the first
+   download is revision 0; "Issue a revision" on the Documents card
+   appends a numbered, noted entry), one array layout per roof face at a
+   stated standard scale with dimension lines, strings and a north arrow,
+   the equipment and circuit schedule from the BOM, and a last sheet that
+   says what still waits on the datasheets (the single-line diagram, the
+   string table) with the audit's schedule of loads. The BOQ also writes
+   the per-circuit records (`pricing.choices.circuits`) the single-line
+   diagram and the design analysis will read, and the Site step holds the
+   survey record they need: the service entrance (the DU, the existing
+   panelboard, its main breaker and busbar, the point of interconnection),
+   the roof construction per face and the site plan's points and outlines
+   as typed coordinates, every field blank until surveyed. Each
    project shows an engineering status read from its facts (draft,
    surveyed, designed, proposal issued) on its head and in the project
    list; generating the proposal PDF marks it issued and locks the price
@@ -376,7 +386,9 @@ After the first update, in the browser:
   checks use (until then the checks note that the flag is unknown).
 - Settings: fill the company profile (contact details, the PEE, warranties,
   where to pay, the callback promise); they print on every document and on
-  the website.
+  the website. Under Settings › Company › Signing engineer, the PEE's PRC
+  validity, PTR, TIN, address and firm print in the title block of every
+  sheet of the plans; a blank field prints as a blank line.
 - Sign in with the `.env` username and password: that creates the owner's
   account, and an authenticator set up the old way (the `twofactor.json`
   file) and any security keys already registered carry over to it. From

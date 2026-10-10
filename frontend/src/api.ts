@@ -198,6 +198,8 @@ export const api = {
   programUrl: (id: number) => `/api/assessments/${id}/program.pdf`,
   /** The plans for the PEE (A3 drawing set); refused like the proposal on stale or design-blocked results. */
   plansUrl: (id: number) => `/api/assessments/${id}/plans.pdf`,
+  /** "Issue a revision" of the plan set (round 13): appends the next number with the note; 409 before the plans were first generated. */
+  issueRevision: (id: number, note: string) => request<AssessmentOut>(`/api/assessments/${id}/revisions`, { method: 'POST', body: JSON.stringify({ note }) }),
   cardUrl: (id: number, nextStep = '') => `/api/assessments/${id}/card.png${nextStep ? `?next_step=${encodeURIComponent(nextStep)}` : ''}`,
   /** Fetch a generated document, so a 409 (stale results) or an outage becomes a message in the bar and never a raw JSON page. */
   fetchDocument: async (url: string): Promise<FetchedDocument> => {
