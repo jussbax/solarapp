@@ -16,9 +16,10 @@ from ..auth import require_owner, require_user
 from ..db import get_session
 from ..models import MaterialItem, MaterialSupplier, utcnow
 from ..pricing.config import PricingConfig, settings_version
+from ..pricing.datasheets import add_item_from_spec, datasheet_page, import_datasheets, link_spec, note_overrides
 from ..pricing.importer import read_workbook
 from ..pricing.store import SEED_PATH, catalog_status, load_config, persist_import, save_config
-from ..schemas import MaterialItemIn, MaterialItemPatch
+from ..schemas import DatasheetLink, MaterialItemIn, MaterialItemPatch
 
 MAX_UPLOAD, MAX_UNZIPPED = 10 * 1024 * 1024, 200 * 1024 * 1024
 log = logging.getLogger("solarapp.audit")
@@ -153,11 +154,13 @@ def update_item(code: str, body: MaterialItemPatch, session: Session = Depends(g
     row = session.get(MaterialItem, code)
     if row is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    for k, v in body.model_dump(exclude_unset=True).items():
+    patch = body.model_dump(exclude_unset=True)
+    for k, v in patch.items():
         setattr(row, k, v)
     row.updated_at = utcnow()
     session.add(row)
     session.commit()
+    note_overrides(session, code, patch)   # round 12: a figure typed over the datasheet's is kept on the next run
     session.refresh(row)
     return row
 
@@ -169,3 +172,73 @@ def delete_item(code: str, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Item not found")
     session.delete(row)
     session.commit()
+
+
+# ---- round 12: the maker's datasheet workbooks (docs/audits/round-12/engineer-brief.md, 5.1 and 2.5)
+
+async def _read_upload(file: UploadFile, what: str) -> bytes:
+    if not (file.filename or "").lower().endswith(".xlsx"):
+        raise HTTPException(status_code=422, detail=f"Upload the {what} as .xlsx")
+    if file.size is not None and file.size > MAX_UPLOAD:
+        raise HTTPException(status_code=413, detail="The workbook is larger than 10 MB.")
+    data = await file.read(MAX_UPLOAD + 1)
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(status_code=413, detail="The workbook is larger than 10 MB.")
+    return data
+
+
+@router.post("/datasheets", dependencies=[Depends(require_owner)])
+async def import_datasheet_upload(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(False, description="report what would change and write nothing"),
+    apply_held: bool = Query(False, description="apply the held figures too (only on the owner's word: brief 6.4, 6.8)"),
+    session: Session = Depends(get_session),
+) -> dict:
+    """One datasheet workbook (panels, inverters or batteries; the kind is read from the sheets, not the name): the
+    per-row report of the importer, the same one `python -m solarapp.pricing.datasheets` prints."""
+    data = await _read_upload(file, "datasheet workbook")
+    name = Path(file.filename or "datasheet.xlsx").name
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / name
+        path.write_bytes(data)
+        try:
+            with zipfile.ZipFile(path) as z:
+                infos = z.infolist()
+                if len(infos) > 2000 or sum(i.file_size for i in infos) > MAX_UNZIPPED:
+                    raise HTTPException(status_code=422, detail="The workbook is unreasonably large inside.")
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=422, detail="That is not an .xlsx workbook.")
+        try:
+            report = await run_in_threadpool(import_datasheets, session, [path], {str(path): name}, dry_run, apply_held)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=422, detail=f"Could not read the datasheet workbook. ({e})")
+    log.info("datasheets imported file=%r counts=%s dry_run=%s", name[:80], report.counts, dry_run)
+    return report.to_dict()
+
+
+@router.get("/datasheets")
+def datasheet_rows(category: Optional[str] = None, session: Session = Depends(get_session)) -> dict:
+    """The specs rows and, per equipment item, where each electrical figure came from (the Materials page's view)."""
+    return datasheet_page(session, category)
+
+
+@router.post("/datasheets/{spec_id}/link", dependencies=[Depends(require_owner)])
+def datasheet_link(spec_id: int, body: DatasheetLink, session: Session = Depends(get_session)) -> dict:
+    """"Link to item": a manual match, applied at once and never moved by a later run."""
+    try:
+        return link_spec(session, spec_id, body.code)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/datasheets/{spec_id}/add-item", response_model=MaterialItem, status_code=201, dependencies=[Depends(require_owner)])
+def datasheet_add_item(spec_id: int, body: DatasheetLink, session: Session = Depends(get_session)) -> MaterialItem:
+    """"Add as item": the datasheet row as a new, inactive item at list price 0 with the owner's code."""
+    try:
+        return add_item_from_spec(session, spec_id, body.code, body.supplier or "")
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))

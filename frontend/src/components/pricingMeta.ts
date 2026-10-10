@@ -17,7 +17,7 @@ export const SECTION_LABELS: Record<string, string> = {
   job_defaults: 'Job defaults', wiring: 'Wiring rules', roles: 'Items the generator uses', program: 'Program of works', economics: 'Customer savings',
   system_losses: 'Losses after the panels', sizing: 'Panel and battery autonomy', quick: 'Estimate page',
 }
-export const SKIP = new Set(['imported_from', 'imported_at'])
+export const SKIP = new Set(['imported_from', 'imported_at', 'datasheets_imported_from', 'datasheets_imported_at'])
 /** Percentages are stored as fractions (0.12) and edited as percent (12). */
 export const PCT_KEYS = new Set([
   'vat', 'agent_commission', 'freight_markup', 'services_markup', 'ocm_share', 'tariff_escalation', 'degradation', 'discount_rate', 'om_share_per_year',

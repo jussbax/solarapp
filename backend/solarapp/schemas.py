@@ -469,6 +469,18 @@ class MaterialItemIn(BaseModel):
     imp_a: Optional[float] = Field(default=None, gt=0)
     temp_coeff_voc_pct: Optional[float] = None
     temp_coeff_isc_pct: Optional[float] = None
+    # round 12: the datasheet fields (brief, section 1); every one optional
+    max_system_voltage_v: Optional[float] = Field(default=None, gt=0)
+    inverter_type: str = ""
+    phase: Optional[int] = Field(default=None, ge=1, le=3)
+    battery_class: str = ""
+    charge_v_max: Optional[float] = Field(default=None, gt=0)
+    charge_a_max: Optional[float] = Field(default=None, gt=0)
+    mppt_currents_a: str = ""
+    battery_inputs: Optional[int] = Field(default=None, ge=1)
+    nominal_v: Optional[float] = Field(default=None, gt=0)
+    capacity_ah: Optional[float] = Field(default=None, gt=0)
+    discharge_a_recommended: Optional[float] = Field(default=None, gt=0)
 
 
 class MaterialItemPatch(BaseModel):
@@ -507,6 +519,23 @@ class MaterialItemPatch(BaseModel):
     imp_a: Optional[float] = Field(default=None, gt=0)
     temp_coeff_voc_pct: Optional[float] = None
     temp_coeff_isc_pct: Optional[float] = None
+    max_system_voltage_v: Optional[float] = Field(default=None, gt=0)
+    inverter_type: Optional[str] = None
+    phase: Optional[int] = Field(default=None, ge=1, le=3)
+    battery_class: Optional[str] = None
+    charge_v_max: Optional[float] = Field(default=None, gt=0)
+    charge_a_max: Optional[float] = Field(default=None, gt=0)
+    mppt_currents_a: Optional[str] = None
+    battery_inputs: Optional[int] = Field(default=None, ge=1)
+    nominal_v: Optional[float] = Field(default=None, gt=0)
+    capacity_ah: Optional[float] = Field(default=None, gt=0)
+    discharge_a_recommended: Optional[float] = Field(default=None, gt=0)
+
+
+class DatasheetLink(BaseModel):
+    """A manual link from a datasheet row to a material item, or the code of the item to add from it (round 12)."""
+    code: str = Field(min_length=3, max_length=40)
+    supplier: Optional[str] = None
 
 
 class QuickRequest(BaseModel):

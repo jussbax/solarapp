@@ -47,11 +47,34 @@ class Item:
     imp_a: Optional[float] = None
     temp_coeff_voc_pct: Optional[float] = None
     temp_coeff_isc_pct: Optional[float] = None
+    # round 12: the eleven fields the maker's datasheet workbooks fill (docs/audits/round-12/engineer-brief.md, section 1)
+    max_system_voltage_v: Optional[float] = None   # panels: maximum DC system voltage (the lower when the sheet gives two)
+    inverter_type: str = ""                        # inverters: grid_tie, hybrid, off_grid, charge_controller, ess_set; blank = unknown
+    phase: Optional[int] = None                    # inverters: 1 or 3; None = unknown
+    battery_class: str = ""                        # the battery port's class on an inverter, the pack's own on a battery: LV, HV, none; blank = unknown
+    charge_v_max: Optional[float] = None           # inverters: the highest voltage the battery port charges to; batteries: the pack's ceiling
+    charge_a_max: Optional[float] = None           # inverters: the most it pushes into the battery; batteries: the most the pack accepts
+    mppt_currents_a: str = ""                      # inverters: the per-input currents as the sheet lists them ("18/36/36")
+    battery_inputs: Optional[int] = None           # inverters: battery ports; None reads as one (a sheet that says "80A + 80A" sets 2)
+    nominal_v: Optional[float] = None              # batteries: nominal voltage
+    capacity_ah: Optional[float] = None            # batteries: capacity in Ah
+    discharge_a_recommended: Optional[float] = None   # batteries: the recommended continuous discharge current (the soft check); continuous_a is the BMS maximum
 
     @property
     def is_hybrid_inverter(self) -> bool:
+        """A unit with a battery port the BOQ may put on a job. The datasheet's type decides when it is on file
+        (section 1.4 of the round-12 brief: hybrid and off-grid are the owner's hybrids, a grid-tie unit and a charge
+        controller are not); without it, the name test that stood before."""
+        if self.category == "All-in-one System":
+            return True
+        if self.category != "Inverter":
+            return False
+        if self.inverter_type in ("hybrid", "off_grid"):
+            return True
+        if self.inverter_type in ("grid_tie", "charge_controller", "ess_set"):
+            return False
         n = self.name.lower()
-        return self.category == "All-in-one System" or (self.category == "Inverter" and ("hybrid" in n or "off-grid" in n))
+        return "hybrid" in n or "off-grid" in n
 
     def amps_in_name(self) -> Optional[float]:
         m = re.findall(r"(\d+(?:\.\d+)?)\s*A\b", self.name)
@@ -65,7 +88,12 @@ class Item:
 ELECTRICAL_FIELDS = (
     "grid_interactive", "certifications", "max_pv_voltage_v", "mppt_min_v", "mppt_max_v", "mppt_count", "mppt_max_a",
     "ac_input_a", "battery_max_a", "has_transfer_switch", "continuous_a", "voc_v", "vmp_v", "isc_a", "imp_a", "temp_coeff_voc_pct", "temp_coeff_isc_pct",
+    # round 12: the datasheet fields; on the list so a materials re-import keeps them when its row has no value (store.KEEP_WHEN_BLANK)
+    "max_system_voltage_v", "inverter_type", "phase", "battery_class", "charge_v_max", "charge_a_max", "mppt_currents_a", "battery_inputs",
+    "nominal_v", "capacity_ah", "discharge_a_recommended",
 )
+# the electrical fields that hold text, blank when unknown (the rest are numbers or flags, None when unknown)
+ELECTRICAL_TEXT_FIELDS = ("certifications", "inverter_type", "battery_class", "mppt_currents_a")
 
 
 def infer_grid_interactive(name: str, remarks: str = "") -> Optional[bool]:

@@ -418,6 +418,9 @@ class PricingConfig(BaseModel):
     roles: BoqRoles = Field(default_factory=BoqRoles)
     imported_from: Optional[str] = None
     imported_at: Optional[str] = None
+    # round 12: when the datasheet workbooks were last imported, and which files (a stamp, like imported_at; never a price)
+    datasheets_imported_from: Optional[str] = None
+    datasheets_imported_at: Optional[str] = None
 
     def category(self, name: str) -> CategoryRule:
         for c in self.categories:
@@ -431,7 +434,7 @@ class PricingConfig(BaseModel):
 
 
 # Settings that never move a price or a customer document: the website estimate's own knobs and the import stamp.
-VERSION_EXCLUDES = {"quick", "imported_from", "imported_at", "company_base"}
+VERSION_EXCLUDES = {"quick", "imported_from", "imported_at", "datasheets_imported_from", "datasheets_imported_at", "company_base"}
 
 
 def settings_version(cfg: PricingConfig) -> str:

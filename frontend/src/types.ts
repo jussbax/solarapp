@@ -1025,6 +1025,18 @@ export interface MaterialItem {
   imp_a?: number | null
   temp_coeff_voc_pct?: number | null
   temp_coeff_isc_pct?: number | null
+  // round 12: the eleven datasheet fields (docs/audits/round-12/engineer-brief.md, section 1)
+  max_system_voltage_v?: number | null
+  inverter_type?: string
+  phase?: number | null
+  battery_class?: string
+  charge_v_max?: number | null
+  charge_a_max?: number | null
+  mppt_currents_a?: string
+  battery_inputs?: number | null
+  nominal_v?: number | null
+  capacity_ah?: number | null
+  discharge_a_recommended?: number | null
 }
 
 export interface FaceSimulation {

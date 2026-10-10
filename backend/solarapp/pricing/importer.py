@@ -36,8 +36,21 @@ ELECTRICAL_HEADERS: dict[str, tuple[str, ...]] = {
     "imp_a": ("imp", "impa", "impp"),
     "temp_coeff_voc_pct": ("tempcoeffvoc", "tempcoeffvocpct", "voctempcoeff", "betavoc"),
     "temp_coeff_isc_pct": ("tempcoeffisc", "tempcoeffiscpct", "isctempcoeff", "alphaisc"),
+    # round 12: the datasheet fields, so the materials workbook may carry the same columns the datasheet workbooks do
+    "max_system_voltage_v": ("maxsystemvoltage", "maxsystemvoltagev", "maxdcsystemvoltage", "systemvoltage"),
+    "inverter_type": ("invertertype", "typesofinverter", "typeofinverter"),
+    "phase": ("phase", "phases"),
+    "battery_class": ("batteryclass", "batteryvoltageclass", "lvhv"),
+    "charge_v_max": ("chargevmax", "maxchargevoltage", "maxchargevoltagev", "chargevoltagemax"),
+    "charge_a_max": ("chargeamax", "maxchargecurrent", "maxrecommendedchargecurrent", "chargecurrentmax"),
+    "mppt_currents_a": ("mpptcurrents", "mpptcurrentsa", "mpptinputcurrents"),
+    "battery_inputs": ("batteryinputs", "batteryports"),
+    "nominal_v": ("nominalv", "nominalvoltage", "batteryvoltage"),
+    "capacity_ah": ("capacityah", "capacity", "ah"),
+    "discharge_a_recommended": ("dischargearecommended", "recommendeddischargecurrent", "recommendeddischarge"),
 }
-_INT_FIELDS = {"mppt_count"}
+_INT_FIELDS = {"mppt_count", "phase", "battery_inputs"}
+_TEXT_FIELDS = {"certifications", "inverter_type", "battery_class", "mppt_currents_a"}
 
 
 def _norm_header(v: Any) -> str:
@@ -70,7 +83,8 @@ def electrical_values(row: tuple, cols: dict[str, int], category: str, name: str
     """The electrical fields for one row: the workbook column when present and filled, else what the remarks say,
     else None. `grid_interactive` is inferred from the name and remarks when no column answers it."""
     out: dict = dict.fromkeys(ELECTRICAL_FIELDS, None)
-    out["certifications"] = ""
+    for k in _TEXT_FIELDS:
+        out[k] = ""
     out.update(electrical_from_remarks(category, name, spec, remarks))
     if category == "Inverter":
         out["certifications"] = certifications_in_remarks(remarks)
@@ -83,7 +97,7 @@ def electrical_values(row: tuple, cols: dict[str, int], category: str, name: str
             b = _bool(v)
             if b is not None:
                 out[field_name] = b
-        elif field_name == "certifications":
+        elif field_name in _TEXT_FIELDS:
             out[field_name] = _s(v)
         elif field_name in _INT_FIELDS:
             out[field_name] = int(_f(v))
