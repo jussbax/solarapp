@@ -22,7 +22,7 @@ BLANK = "__________"
 SHEET_NAME = "Design analysis"
 # the columns of 2.2, with their widths on the 392 mm the frame leaves between its paddings
 COLUMNS: list[tuple[str, float]] = [
-    ("Circuit", 28), ("Conductors (n × mm², type, insulation)", 36), ("Run", 12), ("Continuous A", 13), ("Design A (× 1.25)", 13), ("Base ampacity (column)", 26),
+    ("Circuit", 28), ("Conductors (n × mm², type, insulation)", 36), ("Run", 12), ("Continuous A", 13), ("Design A (× 1.25; C1: 1.25 × 1.25 × Isc)", 13), ("Base ampacity (column)", 26),
     ("Ambient °C (+ rooftop adder)", 20), ("F_temp", 12), ("F_fill (n current-carrying)", 14), ("Derated A", 14), ("Terminal A (75 °C)", 16), ("OCPD A", 14),
     ("OCPD within the derated A? (next size up?)", 24), ("Drop %", 12), ("Conduit (code, inside Ø)", 28), ("Fill % / limit", 20), ("EGC required / provided", 24), ("Pass", 66),
 ]
@@ -230,9 +230,10 @@ def analysis_sheet(doc: AssessmentDoc, results: dict, items: Optional[dict[str, 
     story.append(block)
     # the legend on its own, after the block, so it never drags the block to a second page
     story.append(Paragraph("<b>How to read the Pass column.</b> <b>pass</b>: every check computed and holding; the brackets name each assumption used and each table still to verify, "
-                           "so a pass never stands on an assumption alone. <b>FAIL</b>: a check fails; a conductor the breaker does not protect at temperature and a terminal figure "
-                           "below the load hold the customer documents (the same class as the AC coordination), a conduit over its fill limit and an undersized EGC print without "
-                           "holding them. <b>not checked</b>: a figure the app does not hold; the reason names the item field to type (Materials page) or the datasheet figure (the "
-                           "panel's Isc). Every table above is a cited stand-in from the NEC edition the PEC follows until the owner or the signing engineer ticks it confirmed under "
+                           "so a pass never stands on an assumption alone. <b>FAIL</b>: a check fails; a conductor the breaker does not protect at temperature, a terminal figure "
+                           "below the load and a breaker whose interrupting rating is below the DU's fault level (the short-circuit note, aic_below_fault) hold the customer documents "
+                           "(the same class as the AC coordination), a conduit over its fill limit and an undersized EGC print without "
+                           "holding them. <b>not checked</b>: a figure the app does not hold; the reason names the item field to type (Materials page), the datasheet figure (the "
+                           "panel's Isc) or the BOM role missing (the battery rack's EGC). Every table above is a cited stand-in from the NEC edition the PEC follows until the owner or the signing engineer ticks it confirmed under "
                            "Pricing settings › Design analysis; the signing engineer replaces every assumption before sealing.", small))
     return SHEET_NAME, story

@@ -46,7 +46,8 @@ def _wire(code: str, name: str, **kw) -> Item:
 
 
 def _pv_row(i_cont: float, i_design: float, ocpd: float, placement: str = "rooftop_free_air", egc: float = 10.0) -> dict:
-    """The brief's 630 W string (2.6): two 4 mm² PV wires, I_cond 25.28 A as the design current, the 32 A breaker."""
+    """The brief's 630 W string (2.6): two 4 mm² PV wires, the continuous current 1.25 × Isc 16.18 A = 20.22 A (the PV article's
+    circuit current, review finding 2), I_cond 25.28 A as the design current, the 32 A breaker."""
     r = _circuit("C1", "PV string (each)", "dc_pv")
     r["conductors"].update({"n_total": 2, "n_current_carrying": 2, "size_mm2": 4.0, "type": "PV wire"})
     r.update({"run_m": 25, "voltage_v": 366.3, "i_continuous_a": i_cont, "i_design_a": i_design, "ocpd_a": ocpd, "ocpd_code": "IAN-PRT-010", "placement": placement,
@@ -153,18 +154,18 @@ def test_the_630_w_string_in_free_air_and_in_a_rooftop_conduit_under_both_band_t
     0.606 → 24.2 A < 25.28 A → fail, conductor_derated, the 6 mm² cable is needed: both outcomes stated, the settings decide."""
     cfg = PricingConfig()
     pv = imported.catalog.get("BC-WIR-001")
-    row = _pv_row(15.48, 25.28, 32)
+    row = _pv_row(20.22, 25.28, 32)
     out = derate_circuit(row, cfg, pv, None)
     assert row["ambient_c"] == 35 and row["rooftop_adder_c"] == 0 and row["ampacity_base_a"] == 40 and row["f_temp"] == pytest.approx(0.957, abs=0.001)
     assert row["ampacity_derated_a"] == pytest.approx(38.3, abs=0.05) and row["checks"]["ocpd_le_derated"] is True and row["status"] == "pass"
     assert "the cable's rating: verify" in out["qualifiers"] and "ambient assumed 35 °C" in out["qualifiers"] and row["ampacity_terminal_a"] is None
     assert any("no 75 °C column on file for the PV wire" in q for q in out["qualifiers"]) and row["egc_required_mm2"] == 5.5 and row["checks"]["egc_ok"] is True
     # the project cell's typical-year maximum, ceiled, replaces the setting when higher: 36.2 → 37 °C, no longer an assumption
-    row = _pv_row(15.48, 25.28, 32)
+    row = _pv_row(20.22, 25.28, 32)
     out = derate_circuit(row, cfg, pv, None, tmy_max_air_c=36.2)
     assert row["ambient_c"] == 37 and not any("ambient assumed" in q for q in out["qualifiers"]) and row["f_temp"] == pytest.approx(math.sqrt(53 / 60), abs=1e-6)
     # in a rooftop conduit 25 mm above the roof, the 2014 bands: +22 °C → 57 °C
-    row = _pv_row(15.48, 25.28, 32, placement="rooftop_conduit")
+    row = _pv_row(20.22, 25.28, 32, placement="rooftop_conduit")
     out = derate_circuit(row, cfg, pv, imported.catalog.get("IAN-ENC-011"))
     assert row["rooftop_adder_c"] == 22 and row["t_conductor_c"] == 57 and row["f_temp"] == pytest.approx(math.sqrt(33 / 60), abs=1e-6) and row["ampacity_derated_a"] == pytest.approx(29.66, abs=0.01)
     assert row["checks"]["ocpd_le_derated"] is False and row["checks"]["next_size_up_used"] is True and "next size up" in out["qualifiers"] and out["warnings"] == []
@@ -172,7 +173,7 @@ def test_the_630_w_string_in_free_air_and_in_a_rooftop_conduit_under_both_band_t
     # the 2017-style single adder the owner may set: +33 → 68 °C → 24.2 A below the 25.28 A design current: fail, hard, blocks
     cfg2 = cfg.model_copy(deep=True)
     cfg2.derating.rooftop_adder_c = {"0": 33}
-    row = _pv_row(15.48, 25.28, 32, placement="rooftop_conduit")
+    row = _pv_row(20.22, 25.28, 32, placement="rooftop_conduit")
     out = derate_circuit(row, cfg2, pv, imported.catalog.get("IAN-ENC-011"))
     assert row["t_conductor_c"] == 68 and row["f_temp"] == pytest.approx(math.sqrt(22 / 60), abs=1e-6) and row["ampacity_derated_a"] == pytest.approx(24.2, abs=0.05)
     assert row["checks"]["ocpd_le_derated"] is False and row["checks"]["next_size_up_used"] is False and row["status"] == "fail"
@@ -181,7 +182,7 @@ def test_the_630_w_string_in_free_air_and_in_a_rooftop_conduit_under_both_band_t
     # the maker's ampacity typed on the cable replaces the table figure and drops the "verify the cable's rating" qualifier
     pv2 = deepcopy(pv)
     pv2.ampacity_a, pv2.insulation_c = 44, 90
-    row = _pv_row(15.48, 25.28, 32)
+    row = _pv_row(20.22, 25.28, 32)
     out = derate_circuit(row, cfg, pv2, None)
     assert row["ampacity_base_a"] == 44 and "the cable's rating: verify" not in out["qualifiers"] and "insulation assumed 90 °C" not in out["qualifiers"]
 
@@ -235,10 +236,10 @@ def test_the_conduit_fill_and_the_egc_sizes(imported):
     row = _ac_row()
     derate_circuit(row, cfg, thhn, conduit)
     assert row["egc_required_mm2"] == 5.5 and row["egc_provided_mm2"] == 8.0 and row["checks"]["egc_ok"] is True
-    row = _pv_row(15.48, 25.28, 32)
+    row = _pv_row(20.22, 25.28, 32)
     derate_circuit(row, cfg, imported.catalog.get("BC-WIR-001"), None)
     assert row["egc_required_mm2"] == 5.5 and row["checks"]["egc_ok"] is True
-    row = _pv_row(15.48, 25.28, 32, egc=3.5)
+    row = _pv_row(20.22, 25.28, 32, egc=3.5)
     out = derate_circuit(row, cfg, imported.catalog.get("BC-WIR-001"), None)
     assert row["checks"]["egc_ok"] is False and row["status"] == "fail"
     assert [(w["code"], w["hard"], w.get("blocks_documents")) for w in out["warnings"]] == [("egc_undersized", True, None)] and "array bonding conductor is 3.5 mm²" in out["warnings"][0]["message"]
@@ -387,7 +388,26 @@ def test_the_sheet_prints_not_checked_with_the_reason_on_the_seed_then_passes_wi
     res = client.post(f"/api/assessments/{aid}/compute", json=doc).json()["results"]
     pr = res["pricing"]
     rows = {c["id"]: c for c in pr["choices"]["circuits"]}
-    assert pr["design_blocked"] == [] and "derating_not_checked" not in {w["code"] for w in pr["warnings"]}
+    # the review's finding 1: the 40 A breaker's 6 kA interrupting rating is below the DU's 10 kA at the service: a hard warning
+    # that holds the customer documents and the plans (409), named on the sheet's short-circuit note
+    assert pr["design_blocked"] == ["aic_below_fault"] and pr["choices"]["design_analysis"]["blocking"] == ["aic_below_fault"]
+    w = next(w for w in pr["warnings"] if w["code"] == "aic_below_fault")
+    assert w["hard"] is True and w["blocks_documents"] is True and "BOM item roles" in w["message"] and "verify the DU's figure" in w["message"]
+    assert w["message"].startswith("IAN-PRT-027: interrupting rating 6 kA is below the DU's 10 kA at the service")
+    assert "IAN-PRT-027 6 kA below the DU's figure: does NOT hold (aic_below_fault" in pr["choices"]["design_analysis"]["short_circuit"]["aic_text"]
+    r = client.get(f"/api/assessments/{aid}/plans.pdf")
+    assert r.status_code == 409 and "aic_below_fault" in r.json()["detail"]
+    assert client.get(f"/api/assessments/{aid}/report.pdf").status_code == 409
+    # the review's finding 2: the PV string's continuous current is the PV article's 1.25 × Isc = 16.91 A (Isc 13.53 A), its
+    # design current 1.25 × that = 21.14 A, so the next-size-up test compares the derated ampacity with 16.91 A, not Imp
+    assert rows["C1"]["i_continuous_a"] == pytest.approx(16.91, abs=0.01) and rows["C1"]["i_design_a"] == pytest.approx(21.14, abs=0.01)
+    assert any("1.25 × Isc 13.53 A = 16.91 A, the PV article's circuit current" in n for n in rows["C1"]["notes"])
+    # a 10 kA breaker holds: nothing blocks, every applicable row passes
+    assert client.put("/api/pricing/items/IAN-PRT-027", json={"aic_ka": 10}).status_code == 200
+    res = client.post(f"/api/assessments/{aid}/compute", json=doc).json()["results"]
+    pr = res["pricing"]
+    rows = {c["id"]: c for c in pr["choices"]["circuits"]}
+    assert pr["design_blocked"] == [] and "derating_not_checked" not in {w["code"] for w in pr["warnings"]} and "aic_below_fault" not in {w["code"] for w in pr["warnings"]}
     assert rows["C1"]["status"] == "pass" and rows["C1"]["ocpd_a"] == 25 and rows["C1"]["ampacity_derated_a"] == pytest.approx(38.3, abs=0.05)
     assert rows["C4"]["status"] == "pass" and rows["C4"]["fill_pct"] == pytest.approx(10.72, abs=0.01) and rows["C4"]["checks"]["fill_ok"] is True
     da = pr["choices"]["design_analysis"]
@@ -397,7 +417,8 @@ def test_the_sheet_prints_not_checked_with_the_reason_on_the_seed_then_passes_wi
     flat = _flat(sheet)
     assert "10.7 % / 40 %" in flat and "pass (ambient assumed 30 °C; THHN columns: verify; EGC table: verify)" in flat and "pass (ambient assumed 35 °C" in flat
     assert "10 kA at the service, as the office typed from FLECO (verify)" in flat and "45 A (FS-INV-008: maximum output fault current on the item)" in flat
-    assert "IAN-PRT-027 6 kA below the DU's figure: does NOT hold" in flat and "IAN-PRT-009 BLANK" in flat
+    assert "IAN-PRT-027 10 kA at or above the DU's figure: holds" in flat and "IAN-PRT-009 BLANK" in flat and "16.91 A" in flat and "21.14 A" in flat
+    assert "C1: 1.25 × 1.25 × Isc)" in flat   # the column head "Design A (× 1.25; C1: 1.25 × 1.25 × Isc)", wrapped in its cell
     assert "Design analysis: rows not checked" not in _flat(pages[-1])
     # a table ticked confirmed prints so
     cfg = client.get("/api/pricing/config").json()

@@ -2179,9 +2179,10 @@ assumptions print as assumptions); the DU's fault level from the service block t
   to verify ("pass (ambient assumed 30 °C; THHN columns: verify; EGC table: verify)"), so a pass never stands on an
   assumption alone. A table or role the app does not hold at all (the cable's 75 °C column, the battery-rack EGC) is a
   "verify" qualifier, not a "not checked": the brief's hand-worked PV and battery rows pass.
-- The warnings and their severity (2.4, the coordinator's decision a): `conductor_derated` and `terminal_ampacity` are
-  hard and block the customer documents like the round-3 AC coordination (the breaker does not protect the conductor at
-  temperature; the terminals are rated below the load); `conduit_fill` and `egc_undersized` are hard and print without
+- The warnings and their severity (2.4, the coordinator's decision a): `conductor_derated`, `terminal_ampacity` and
+  `aic_below_fault` (the review's finding 1: a breaker whose typed interrupting rating is below the DU's typed fault level
+  cannot clear the fault at the service) are hard and block the customer documents like the round-3 AC coordination (the
+  breaker does not protect the conductor at temperature; the terminals are rated below the load); `conduit_fill` and `egc_undersized` are hard and print without
   blocking (the fix is a larger conduit or a role change, pesos); `derating_not_checked` (one per job, naming the rows
   and the figures to type) and `fault_level_unknown` (until the DU's figure and the AIC are typed) are ordinary.
 - The settings (Pricing settings › Design analysis, and the two THHN columns under Wiring rules), every value a cited

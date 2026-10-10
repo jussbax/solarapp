@@ -252,6 +252,8 @@ rod (verify)".
 - `conductor_derated` — **hard, blocks**: the OCPD is above the derated ampacity and no next-size-up applies;
   the breaker does not protect the conductor at temperature (the same class as the round-3 `ac_circuit`).
 - `terminal_ampacity` — **hard, blocks**: the 75 °C column is below the design current.
+- `aic_below_fault` — **hard, blocks**: a breaker's typed interrupting rating (AIC) is below the typed fault level at the
+  service; the breaker cannot clear the fault (added by the round-13 review, finding 1).
 - `conduit_fill` — **hard, not blocking**: over the limit; the fix is a larger conduit (a BOM line, pesos).
 - `egc_undersized` — **hard, not blocking**: the provided EGC is below the table; the fix is a role change.
 - `derating_not_checked` — **ordinary**: a figure missing (the item's area, the conduit's diameter, the cable's

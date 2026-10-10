@@ -22,11 +22,12 @@ The computation (2.3):
     fill % = Σ A_conductor / (π/4 × d_inner²) against 53 / 31 / 40 %        NEC Chapter 9 Table 1; PEC Chapter 10 verify
     EGC required by the OCPD rating                                          NEC 250.122; PEC Table 2.50.1.122 verify
 
-Severity (the coordinator's decision): a conductor the breaker does not protect at temperature (`conductor_derated`)
-and a terminal-ampacity failure (`terminal_ampacity`) are hard and block the customer documents, as the round-3 AC
-coordination does; the conduit fill (`conduit_fill`) and an undersized EGC (`egc_undersized`) are hard and print
-without blocking; a figure missing (`derating_not_checked`) and the fault level unknown (`fault_level_unknown`) are
-ordinary.
+Severity (the coordinator's decision): a conductor the breaker does not protect at temperature (`conductor_derated`),
+a terminal-ampacity failure (`terminal_ampacity`) and a breaker whose interrupting rating is below the DU's fault level
+at the service (`aic_below_fault`, the round-13 review's finding 1) are hard and block the customer documents, as the
+round-3 AC coordination does; the conduit fill (`conduit_fill`) and an undersized EGC (`egc_undersized`) are hard and
+print without blocking; a figure missing (`derating_not_checked`) and the fault level unknown (`fault_level_unknown`)
+are ordinary.
 """
 from __future__ import annotations
 
@@ -473,7 +474,8 @@ def short_circuit_note(service: dict, inverter: Optional[Item], battery: Optiona
             if a["aic_ka"] is None:
                 parts.append(f"{a['code']} BLANK")
             else:
-                parts.append(f"{a['code']} {a['aic_ka']:g} kA" + ("" if a["ok"] is None else (" at or above the DU's figure: holds" if a["ok"] else " below the DU's figure: does NOT hold")))
+                parts.append(f"{a['code']} {a['aic_ka']:g} kA" + ("" if a["ok"] is None else (" at or above the DU's figure: holds" if a["ok"]
+                                                                                                else " below the DU's figure: does NOT hold (aic_below_fault, holds the customer documents)")))
         out["aic_text"] = "breaker interrupting ratings (AIC) against the fault level at the service: " + "; ".join(parts) + ("; the DU's figure is blank, so nothing is compared" if utility is None else "") + " (verify)"
     return out
 
@@ -537,6 +539,13 @@ def analyse_design(choices: dict, lines: list, catalog: Catalog, cfg: PricingCon
     service = service or {}
     breakers = [b for b in (item_of("dc_breaker"), item_of("ac_breaker"), item_of("battery_breaker")) if b is not None]
     sc = short_circuit_note(service, inverter, battery, units, choices.get("ac_current_a"), breakers, cfg)
+    # round 13 review, finding 1: a breaker whose typed interrupting rating is below the typed fault level cannot clear the
+    # fault at the service; the comparison on the sheet is not enough, so it is hard and holds the customer documents
+    for a in sc["aic"]:
+        if a["ok"] is False:
+            warnings.append({"code": "aic_below_fault", "hard": True, "blocks_documents": True, "message": (
+                f"{a['code']}: interrupting rating {float(a['aic_ka']):g} kA is below the DU's {float(sc['utility_ka']):g} kA at the service: change the breaker role under "
+                "Pricing settings › BOM item roles (verify the DU's figure). The proposal, roof check, card and plans are held.")})
     if sc["unknown"]:
         warnings.append({"code": "fault_level_unknown", "message": (
             "Design analysis, the short-circuit note: not on file — " + "; ".join(sc["unknown"]) + ". The sheet prints the figure as a blank line with "
