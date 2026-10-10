@@ -144,6 +144,9 @@ class PricingJob(BaseModel):
     battery_code: Optional[str] = None
     strings_override: Optional[int] = Field(default=None, ge=1)
     max_panels_per_string: Optional[int] = Field(default=None, ge=1)
+    # round 12: the string design's temperatures for this project (blank = the settings; the project's TMY extremes still widen them)
+    design_cold_c: Optional[float] = Field(default=None, ge=-20, le=40)
+    design_hot_cell_c: Optional[float] = Field(default=None, ge=30, le=110)
     roof_factor: Optional[float] = Field(default=None, gt=0, le=1.5)
     roof_closed_days: Optional[int] = Field(default=None, ge=1)   # at least a day; 0 reads as 1 (see below)
     max_days: Optional[int] = Field(default=None, ge=1)

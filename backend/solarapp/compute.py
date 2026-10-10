@@ -15,6 +15,7 @@ from .core.sizing import BatterySpec, InverterRules, OffGridRules, plan_from_fac
 from .core.simulation import FaceSpec, ThermalModel, prepare_sky, simulate, typical_air_temperature
 from .pricing.catalog import Catalog
 from .pricing.config import PricingConfig
+from .pricing.design_checks import design_temperatures, faiman_rise_c_per_kw
 from .pricing.job import PricingContext, price_assessment
 from .pricing.economics import build_economics
 from .pricing.program import build_program
@@ -172,6 +173,17 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         thermal = ThermalModel("site_rise", sr.rise_per_kw)
     else:
         thermal = ThermalModel()
+    # round 12: the string design's temperatures at this cell: T_cold from the typical year's air minimum (floored, less the
+    # margin) against the setting, T_hot from its maximum plus the module's rise at 1 kW/m² (the site's measured rise when the
+    # k readings have a plausible one, else the Faiman model at the year's mean wind); the project's own figures stand in for
+    # the settings. The pricing reads results["site"]; the website estimate has no project and uses the settings alone.
+    if thermal.kind == "site_rise" and thermal.rise_c_per_kw is not None:
+        rise, rise_source = float(thermal.rise_c_per_kw), "site"
+    else:
+        rise, rise_source = faiman_rise_c_per_kw(thermal.u0, thermal.u1, float(tmy["wind_speed"].mean()) if "wind_speed" in tmy else 0.0), "faiman"
+    site_block = design_temperatures(cfg.string_design, doc.pricing.design_cold_c, doc.pricing.design_hot_cell_c,
+                                     float(tmy["temp_air"].min()), float(tmy["temp_air"].max()), rise)
+    site_block["rise_source"] = rise_source
     if sr.low_confidence:
         warnings.append(_warn("low_confidence_k", f"The reading set used for the site ('{sr.label}') is low confidence. Open it under Roof readings to see why, or retake it in steady sun."))
 
@@ -269,6 +281,7 @@ def compute_results(doc: AssessmentDoc, pvgis: PvgisDataset, nasa: NasaReference
         "nasa_reference": nasa_block,
         "audit": audit_block,
         "sizing": sizing_block,
+        "site": site_block,
         "pricing": None,
         "program": None,
         "economics": None,

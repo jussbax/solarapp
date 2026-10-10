@@ -204,6 +204,30 @@ class WiringRules(BaseModel):
     ac_conductors_per_circuit: int = 2      # line and neutral per circuit; the ground is the grounding run
 
 
+class StringDesign(BaseModel):
+    """The string design's temperatures and the coefficients a panel without its own takes (round 12, brief section 3).
+    Every default here is an ASSUMPTION the owner replaces with a measured or a maker's figure; the job's warnings say
+    when one was used. The design temperatures are per project the lower (cold) and the higher (hot) of the setting
+    and the project's own TMY extremes (compute.py puts them in results["site"])."""
+    # ASSUMPTION: the PVGIS typical-year minima of the Laguna and Batangas cells are 19.3–21.9 °C air; a typical year is not a
+    # record, so the lowest is floored and the margin below taken: 14 °C. Replace with the PAGASA record low of the station nearest
+    # the job when in hand (verify).
+    design_cold_c: float = 14
+    cold_margin_c: float = 5           # ASSUMPTION: the gap between a typical-year minimum and a record low
+    # ASSUMPTION: the TMY maxima (30.5–34.1 °C) plus the module's rise at 1 kW/m² give roughly 60–65 °C; 70 is the conservative envelope
+    design_hot_cell_c: float = 70
+    # ASSUMPTION (brief 6.5): a conservative envelope for the crystalline-silicon families on the sheet; more negative is
+    # conservative at both ends (a higher cold Voc, a lower hot Vmp). The maker's figure on the item replaces it and the warning
+    # temp_coeff_default says a default was used.
+    temp_coeff_voc_default_pct: float = -0.30
+    temp_coeff_pmax_default_pct: float = -0.35   # used for Vmp
+    temp_coeff_isc_default_pct: float = 0.05     # informational only (3.3): never stacked on the 1.25 irradiance factor
+    # the PV-circuit sizing rule of the PEC's solar PV article (the NEC 690.8 equivalent: verify the clause in the current edition)
+    isc_irradiance_factor: float = 1.25
+    # the standard DC MCB ratings the suppliers list (verify against the price lists; like wiring.ac_breaker_sizes_a)
+    dc_breaker_sizes_a: list[float] = Field(default_factory=lambda: [16, 20, 25, 32, 40, 50, 63])
+
+
 class BoqRoles(BaseModel):
     """Default item codes per role, resolved from the DB at import; editable."""
     rail: str = "BC-MNT-001"
@@ -220,6 +244,7 @@ class BoqRoles(BaseModel):
     mc4_pair: str = "IAN-WIR-026"
     mc4_pairs_per_string: int = 2
     dc_breaker: str = "IAN-PRT-009"
+    dc_breaker_pattern: str = "DC BREAKER"    # round 12 (3.2): when the role item's rating is below the string's 1.56 × Isc, the smallest item whose name matches and covers it
     dc_spd: str = "IAN-PRT-018"
     battery_breaker_pattern: str = "BATTERY BREAKER"
     battery_breaker_fallback: str = "IAN-PRT-003"
@@ -415,6 +440,7 @@ class PricingConfig(BaseModel):
     sizing: SizingRules = Field(default_factory=SizingRules)
     quick: QuickConfig = Field(default_factory=QuickConfig)
     wiring: WiringRules = Field(default_factory=WiringRules)
+    string_design: StringDesign = Field(default_factory=StringDesign)
     roles: BoqRoles = Field(default_factory=BoqRoles)
     imported_from: Optional[str] = None
     imported_at: Optional[str] = None

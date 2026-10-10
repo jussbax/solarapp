@@ -338,6 +338,9 @@ export interface PricingJob {
   battery_code: string | null
   strings_override: number | null
   max_panels_per_string: number | null
+  /** Round 12: the string design's temperatures for this project; blank = the settings (the project's TMY extremes still widen them). */
+  design_cold_c?: number | null
+  design_hot_cell_c?: number | null
   roof_factor: number | null
   roof_closed_days: number | null
   max_days: number | null
@@ -355,7 +358,7 @@ export interface PricingJob {
 
 export function emptyPricingJob(): PricingJob {
   return {
-    inverter_code: null, battery_code: null, strings_override: null, max_panels_per_string: null, roof_factor: null, roof_closed_days: null,
+    inverter_code: null, battery_code: null, strings_override: null, max_panels_per_string: null, design_cold_c: null, design_hot_cell_c: null, roof_factor: null, roof_closed_days: null,
     max_days: null, max_pairs: null, owner_days: null, extra_km: null, extra_toll: null, pv_run_m: null, ac_run_m: null, grounding_run_m: null,
     conduit_m: null, bom_edits: [], bom_extra: [],
   }
@@ -774,6 +777,8 @@ export interface Results {
   audit: AuditBlock | null
   sizing: SizingBlock | null
   pricing: PricingBlock | null
+  /** Round 12: the typical-year air extremes at this project's cell and the string design's temperatures made from them. */
+  site?: SiteBlock | null
   program: ProgramBlock | null
   economics: EconomicsBlock | null
   nasa_reference: {
@@ -786,6 +791,22 @@ export interface Results {
     annual_diff_pct: number | null
   } | null
   warnings: Warning[]
+}
+
+export interface SiteBlock {
+  tmy_min_air_c: number | null
+  tmy_max_air_c: number | null
+  rise_c_per_kw: number | null
+  rise_source?: string
+  t_cold_c: number
+  t_hot_c: number
+  cold_source: 'setting' | 'project' | 'tmy'
+  hot_source: 'setting' | 'project' | 'tmy'
+  cold_setting_c: number
+  hot_setting_c: number
+  cold_margin_c: number
+  tmy_cold_c: number | null
+  tmy_hot_cell_c: number | null
 }
 
 export interface AssessmentOut {

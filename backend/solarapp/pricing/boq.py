@@ -68,6 +68,9 @@ class BoqRequest:
     grounding_run_m: Optional[float] = None
     conduit_m: Optional[float] = None
     peak_load_kw: Optional[float] = None           # the house peak, for the pass-through check on a net-metering job
+    # round 12: the string design's temperatures for this job (compute.py's results["site"]); None = the settings alone (the website estimate)
+    t_cold_c: Optional[float] = None
+    t_hot_c: Optional[float] = None
 
 
 @dataclass
@@ -410,7 +413,11 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     if splices > 0:
         lines.append(BomLine(r.splice, splices, "splice", "1 per rail joint"))
 
-    # strings and PV cable
+    # strings and PV cable; the design temperatures are the job's (compute.py's results["site"]) or the settings alone (round 12)
+    sd = cfg.string_design
+    t_cold = float(req.t_cold_c) if req.t_cold_c is not None else float(sd.design_cold_c)
+    t_hot = float(req.t_hot_c) if req.t_hot_c is not None else float(sd.design_hot_cell_c)
+    choices["string_design"] = {"t_cold_c": t_cold, "t_hot_c": t_hot, "temperatures_from": "project" if req.t_cold_c is not None else "settings"}
     strings = req.strings_override or int(math.ceil(req.panel_count / max(r.max_panels_per_string, 1) - 1e-9))
     strings = max(strings, 1)
     per_string = int(math.ceil(req.panel_count / strings))

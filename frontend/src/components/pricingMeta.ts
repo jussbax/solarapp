@@ -14,7 +14,7 @@ export const OTHER_GROUP = { id: 'other', label: 'Other settings', lead: 'Sectio
 export const SECTION_LABELS: Record<string, string> = {
   company_base: 'Company base', truck: 'Truck', handling: 'Handling at base', route: 'Route', categories: 'Markup and wastage by category',
   labor: 'Labor day rates', roof: 'Roof work', ground: 'Ground work', hauling: 'Hauling', mobdemob: 'Crew transport', tools: 'Tools', job: 'Fees, markups and VAT',
-  job_defaults: 'Job defaults', wiring: 'Wiring rules', roles: 'Items the generator uses', program: 'Program of works', economics: 'Customer savings',
+  job_defaults: 'Job defaults', wiring: 'Wiring rules', string_design: 'String design', roles: 'Items the generator uses', program: 'Program of works', economics: 'Customer savings',
   system_losses: 'Losses after the panels', sizing: 'Panel and battery autonomy', quick: 'Estimate page',
 }
 export const SKIP = new Set(['imported_from', 'imported_at', 'datasheets_imported_from', 'datasheets_imported_at'])
@@ -135,6 +135,15 @@ export const META: Record<string, SettingMeta> = {
   'wiring.pv_cable_ampacity': { label: 'PV cable ampacity', unit: 'A' },
   'wiring.ac_breaker_sizes_a': { label: 'Standard AC breaker sizes', unit: 'A', help: 'Next size at or above 1.25 × the circuit current', about: 'Each AC circuit gets the next size at or above 1.25 × its current; the conductor is then sized from the breaker.' },
   'wiring.ac_conductors_per_circuit': { label: 'Conductors per AC circuit', unit: 'pcs', help: 'Line and neutral', about: 'Line and neutral (2); the ground is the grounding run. Multiplies the AC run per circuit.' },
+  // the string design (round 12): the temperatures and the coefficients a panel without its own takes; every default is an assumption
+  'string_design.design_cold_c': { label: 'Design cold temperature', unit: '°C', decimals: 0, help: 'Assumption; verify (PAGASA record low)', about: "An assumption: the typical-year (PVGIS) air minima of the Laguna and Batangas cells are 19 to 22 °C; a typical year is not a record, so the lowest is floored and the margin below taken. Replace it with the PAGASA record low of the station nearest the job when in hand. Per project the engine takes the lower of this and the project cell's own typical-year minimum less the margin; the strings are counted from Voc at this temperature." },
+  'string_design.cold_margin_c': { label: 'Cold margin', unit: '°C', decimals: 0, help: 'Assumption: typical year to record low', about: "An assumption: the gap between a typical-year minimum and a record low, taken below the project cell's typical-year minimum." },
+  'string_design.design_hot_cell_c': { label: 'Design hot cell temperature', unit: '°C', decimals: 0, help: 'Assumption; the conservative envelope', about: "An assumption: the typical-year maxima (30 to 34 °C) plus the module's rise at 1 kW/m² give roughly 60 to 65 °C; 70 is the conservative envelope. Per project the engine takes the higher of this and the project cell's maximum plus the measured or modelled rise; Vmp at this temperature is checked against the MPPT window's low end." },
+  'string_design.temp_coeff_voc_default_pct': { label: 'Default Voc coefficient', unit: '%/°C', decimals: 2, help: "Assumption; the panel's own figure replaces it", about: 'An assumption: a conservative envelope for the crystalline-silicon families on the datasheet (more negative is conservative: a higher cold Voc). Used only for a panel with no coefficient on the Materials page; every string design made with it carries the warning temp_coeff_default.' },
+  'string_design.temp_coeff_pmax_default_pct': { label: 'Default Pmax coefficient', unit: '%/°C', decimals: 2, help: 'Assumption; used for Vmp', about: "An assumption, used for Vmp at the hot cell temperature (a lower hot Vmp is the conservative side). The maker's figure replaces it once typed." },
+  'string_design.temp_coeff_isc_default_pct': { label: 'Default Isc coefficient', unit: '%/°C', decimals: 2, help: 'Assumption; informational only', about: 'An assumption, printed beside Isc for information. Never stacked on the 1.25 irradiance factor: the code method is irradiance × continuous, and stacking would double-count.' },
+  'string_design.isc_irradiance_factor': { label: 'PV circuit current factor', unit: '×', decimals: 2, help: '1.25 × Isc; verify the PEC clause', about: "The PV-circuit sizing rule of the PEC's solar PV article (the NEC 690.8 equivalent): the circuit current is Isc × this factor, and the conductor and the DC breaker are sized at 1.25 × that again (1.56 × Isc in all). Verify the clause in the current edition." },
+  'string_design.dc_breaker_sizes_a': { label: 'Standard DC breaker sizes', unit: 'A', help: 'Next size at or above 1.56 × Isc', about: "The standard DC MCB ratings the suppliers list; the string's breaker is the next size at or above 1.25 × 1.25 × Isc. Verify against the price lists." },
   // the items the generator uses: plain names; the key itself is shown in small print under the label
   'roles.rail': { label: 'Mounting rail', help: 'Two lines per row' },
   'roles.rail_length_m': { label: 'Rail length', unit: 'm' },
@@ -150,6 +159,7 @@ export const META: Record<string, SettingMeta> = {
   'roles.mc4_pair': { label: 'MC4 connector pair' },
   'roles.mc4_pairs_per_string': { label: 'MC4 pairs per string', unit: 'pairs' },
   'roles.dc_breaker': { label: 'DC breaker', help: 'One per string' },
+  'roles.dc_breaker_pattern': { label: 'DC breaker: words in the item name', help: 'Picked by rating when the role item is too small', about: "When the panel's Isc is on file and the role item's rating is below 1.56 × Isc, the generator picks the smallest breaker whose name matches and whose amps cover it, and warns.", wide: true },
   'roles.dc_spd': { label: 'DC surge protector', help: 'One per MPPT in use', about: 'One per MPPT input in use (the MPPT count on the inverter item); one per inverter when the count is not on file.' },
   'roles.battery_breaker_pattern': { label: 'Battery breaker: words in the item name', help: 'Smallest match covering 1.25 × the battery current', about: 'The generator picks the smallest breaker whose name matches and whose amps cover 1.25 × the inverter battery current.', wide: true },
   'roles.battery_breaker_fallback': { label: 'Battery breaker: item when none matches' },
