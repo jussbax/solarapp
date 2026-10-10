@@ -15,6 +15,8 @@ A page may name its own share image with ``<!-- og_image: /static/photos/x.jpg -
 Every tag with ``data-profile-hide-if-empty`` starts with ``class="is-empty"`` (the build adds it), so a page
 never shows the punctuation around an empty profile field before the fetch answers, or when it fails.
 
+``<!-- include: proof -->`` pastes ``site/partials/proof.html`` (the proof strip the four marketing pages share).
+
 Blocks between ``<!-- placeholder:start -->`` and ``<!-- placeholder:end -->``
 are placeholders for photos that do not exist yet; the public build drops
 them so a visitor never reads "replace this card with a real photo".
@@ -52,11 +54,18 @@ def start_hidden(html: str) -> str:
 
 
 PLACEHOLDER = re.compile(r"[ \t]*<!--\s*placeholder:start\s*-->.*?<!--\s*placeholder:end\s*-->[ \t]*\n?", re.S)
+INCLUDE = re.compile(r"<!--\s*include:\s*([\w-]+)\s*-->")
+PARTIALS = HERE / "partials"
+
+
+def include_partials(body: str) -> str:
+    """``<!-- include: proof -->`` pastes site/partials/proof.html, so a block shared by several pages is written once."""
+    return INCLUDE.sub(lambda m: (PARTIALS / f"{m.group(1)}.html").read_text(encoding="utf-8").strip(), body)
 
 
 def render_page(layout: str, page: Path, base_url: str = "", with_placeholders: bool = False) -> str:
     """One page in the shared frame. ``base_url`` makes the share image and page address absolute."""
-    body = page.read_text(encoding="utf-8")
+    body = include_partials(page.read_text(encoding="utf-8"))   # before the meta pass, which would eat the include comment
     if not with_placeholders:
         body = PLACEHOLDER.sub("", body)   # before the meta pass, which would eat the marker comments
     meta = {k: v for k, v in META.findall(body) if k != "placeholder"}

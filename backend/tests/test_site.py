@@ -38,7 +38,11 @@ def test_public_build_drops_placeholders_and_keeps_them_on_request(build):
     # the public home page still has its real sections and the layout's frame
     home = build.render_page(layout, SITE / "pages" / "index.html")
     assert "What you get on paper" in home and "How it works" in home and "Solar engineering for homes" in home
-    assert "Our installations" in home and "/static/photos/rib-roof-eight-960.jpg" in home and "rib-roof-eight-angle-960.jpg" in home and "three-roofs-palms-960.jpg" in home   # the real photos stay
+    # the real photos stay: the hero is the parents' roof in its wide and phone crops, the three homes are the proof cards
+    assert "Our installations" in home and "/static/photos/rib-roof-eight-wide-1280.jpg" in home and "rib-roof-eight-tall-720.webp" in home
+    assert "rib-roof-eight-angle-960.jpg" in home and "three-roofs-palms-960.jpg" in home and "hip-roof-town-960.jpg" in home
+    # the proof strip (site/partials/proof.html) is pasted into the page, with the figures the facts allow
+    assert "<!-- include" not in home and 'data-count="33000"' in home and "₱33,000+" in home and "2023" in home
     assert "Contact details appear here" not in home
 
 
