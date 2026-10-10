@@ -18,6 +18,8 @@ const SMALL_BILL = 100
 
 const TIMES = ['Morning', 'Afternoon', 'Evening']
 
+const PATTERN_WORDS: Record<string, string> = { morning: 'mostly in the morning', balanced: 'spread through the day', evening: 'mostly in the evening' }
+
 /** The battery the price includes (the catalogue unit); anything under half a kWh is no battery at all. */
 const hasBattery = (v: Variant) => v.system.battery_kwh >= 0.5
 
@@ -299,10 +301,9 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
   }
 
   const telHref = profile?.phone ? `tel:${profile.phone.replace(/[^+\d]/g, '')}` : ''
+  const trustHead = profile ? (profile.company_name && profile.address ? `${profile.company_name}, ${profile.address}` : profile.company_name || '') : ''
   const trust = profile
     ? [
-        profile.company_name && profile.address ? `${profile.company_name}, ${profile.address}` : profile.company_name,
-        profile.service_area ? `Installs in ${profile.service_area}` : '',
         profile.pee_name || profile.pee_license ? 'Electrical plans signed and sealed by a Professional Electrical Engineer' : '',
         profile.brands,
         ...(status && status !== 'down' ? status.warranty ?? [] : []),
@@ -499,49 +500,25 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                 <div className="pld-privacy">{profile?.privacy_note || 'We use your name and number only to arrange your visit and send your estimate. We never pass them on.'}</div>
               </>
             )}
-            {embedded && trust.length > 0 && (
-              <ul className="pld-trust pld-trust-book">
-                {trust.map((t, i) => (
-                  <li key={i}>{t}</li>
-                ))}
-              </ul>
+            {embedded && (trustHead || trust.length > 0) && (
+              <div className="pld-trust-book">
+                {trustHead && <div className="pld-trust-head">{trustHead}</div>}
+                {trust.length > 0 && (
+                  <ul className="pld-trust">
+                    {trust.map((t, i) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
           </div>
 
-          <details className="pld-details">
-            <summary>How we worked this out</summary>
-            <div className="pld-breakdown">
-              <div>
-                <span>Materials</span>
-                <b>{php0(shown.price.materials)}</b>
-              </div>
-              <div>
-                <span>Installation and permits</span>
-                <b>{php0(shown.price.labor + shown.price.equipment)}</b>
-              </div>
-              <div>
-                <span>VAT (12%)</span>
-                <b>{php0(shown.price.tax)}</b>
-              </div>
-              {shown.price.battery_part > 0 && (
-                <div>
-                  <span>Of which the battery</span>
-                  <b>{php0(shown.price.battery_part)}</b>
-                </div>
-              )}
-            </div>
-            {e && (
-              <p>
-                Saved over {e.analysis_years} years: about {phpAbout(e.lifetime_net)}, after paying for the system, upkeep and replacement parts. About {e.co2_t_per_year.toFixed(1)} tonnes of CO₂ avoided a year.
-              </p>
-            )}
-            <ul>
-              {result.assumptions.map((a, i) => (
-                <li key={i}>{a}</li>
-              ))}
-            </ul>
-            <p className="pld-hint">This is an estimate from your answers, not a quotation. On the free on-site assessment we measure your roof and the sun on it, then give you an exact proposal.</p>
-          </details>
+          <p className="pld-hint pld-basis">
+            Sized for a house using about {n0(result.inputs.monthly_kwh)} kWh a month, {PATTERN_WORDS[result.inputs.pattern] ?? 'spread through the day'}, in {result.inputs.place}.
+            {e && ` About ${e.co2_t_per_year.toFixed(1)} tonnes of CO₂ avoided a year.`}
+            {' '}This is an estimate from your answers, not a quotation. On the free on-site assessment we measure your roof and the sun on it, then give you an exact proposal.
+          </p>
         </section>
       )}
 

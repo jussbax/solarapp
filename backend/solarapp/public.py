@@ -64,6 +64,8 @@ def create_public_app(settings: Optional[Settings] = None, transport: Optional[h
         response = await call_next(request)
         response.headers.setdefault("Content-Security-Policy", CSP)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        if request.url.path.startswith("/widget/"):
+            response.headers.setdefault("Cache-Control", "no-cache")   # the estimate widget: revalidate, so a redeploy shows at once
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("Permissions-Policy", "geolocation=(self), camera=(), microphone=(), payment=()")
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")

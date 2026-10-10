@@ -1760,3 +1760,23 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   kWh or the pesos; and the day-and-night loop (the sun's arc, then the moon, the windows and the aircon lit in the
   morning, all day or in the evening to match the pattern). Nothing in a cue claims a figure.
 - `estimateAnother` brings back card 1 with nothing pressed; the result and its day scene follow the last card.
+
+## The public estimate keeps the recipe to itself; the family voice on the pages
+
+- The owner (10 October), on the result's "How we worked this out": "it's like we are telling our competitors this
+  how you can beat our price since this is how we computed it … this was suppose to be free for the potential
+  customers but you've provided way more for potential competitors." The price split (materials, installation and
+  permits, VAT, the battery's share) and the assumptions (the sun records, the panel derating, the losses, the trip,
+  the tariff and its rise, the export rate, the battery's usable share) are gone from the website's result, and the
+  public API no longer sends them: `public_view` in the estimate route strips `assumptions`, every price figure but
+  the total, and the loss figures from `production` for a caller who is not signed in. The signed-in office sees
+  the full payload. The result's foot keeps one line: what the house uses and when, the CO₂ avoided, and that it is
+  an estimate, not a quotation, made exact on the on-site assessment.
+- The booking card's trust lines: "Installs in the Philippines" is gone ("super awkward"); the company name and
+  town are a plain head line, the ticks only on the engineer's seal, the brands, the warranties and the owner's
+  name and number once Settings carry them.
+- "The owner" left the pages ("owner of what is what I would ask if I am the customer"): the homes are "Our home",
+  "Our parents' house" and "Our family's house" in Quezon City, the credit is "on our own bill", About says "The
+  same people on every visit, an engineer on every plan."
+- The estimate widget's script now answers with `Cache-Control: no-cache` on both processes, so a redeploy shows on
+  the next load instead of after the browser's heuristic cache expires.

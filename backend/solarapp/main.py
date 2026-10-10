@@ -95,6 +95,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        if request.url.path.startswith("/widget/"):
+            response.headers.setdefault("Cache-Control", "no-cache")   # the estimate widget: revalidate, so a redeploy shows at once
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         path = request.url.path
         if path.startswith(EMBEDDABLE):

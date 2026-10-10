@@ -172,7 +172,7 @@ def quick_status(session: Session = Depends(get_session), settings: Settings = D
 
 
 @router.post("/estimate")
-def estimate(body: QuickRequest, request: Request, tasks: BackgroundTasks, session: Session = Depends(get_session), pvgis: PvgisDataset = Depends(get_pvgis)) -> dict:
+def estimate(body: QuickRequest, request: Request, tasks: BackgroundTasks, session: Session = Depends(get_session), pvgis: PvgisDataset = Depends(get_pvgis), user: str | None = Depends(current_user)) -> dict:
     ctx = _ctx(session)
     if not ctx.config.quick.enabled:
         raise HTTPException(status_code=404, detail=UNAVAILABLE)
@@ -193,7 +193,24 @@ def estimate(body: QuickRequest, request: Request, tasks: BackgroundTasks, sessi
         battery_kwh=float(out["system"]["battery_kwh"]), price=float(out["price"]["total"]), source=src.split("/")[0], campaign=src.split("/", 1)[1] if "/" in src else "",
         visitor=(request.headers.get("x-visitor") or "")[:64],
     ))
-    return out
+    return out if user else public_view(out)
+
+
+def public_view(out: dict) -> dict:
+    """What the website's visitor gets: the system, the price and the savings, never the recipe (the owner, 10 Oct:
+    the price split and the assumptions told competitors how the price is built). The signed-in office sees it all."""
+    def strip(v: dict) -> dict:
+        v = dict(v)
+        v["price"] = {"total": v["price"]["total"]}
+        v["production"] = {k: x for k, x in v["production"].items() if k not in ("loss_factor", "annual_kwh_at_panels")}
+        return v
+    pub = dict(out)
+    pub["assumptions"] = []
+    for key in ("price", "production"):
+        pub[key] = strip({"price": out["price"], "production": out["production"]})[key]
+    if pub.get("alternative"):
+        pub["alternative"] = strip(pub["alternative"])
+    return pub
 
 
 @router.post("/lead")

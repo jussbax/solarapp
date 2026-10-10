@@ -97,7 +97,7 @@ export interface Variant {
     production_vs_use_pct: number
     typical_day: TypicalHour[]   // 24 rows, hour 0-23, averaged over the twelve months' typical days (kW at the meter; soc in kWh)
   }
-  price: { total: number; materials: number; labor: number; equipment: number; tax: number; price_per_wp: number; battery_part: number }
+  price: { total: number; materials?: number; labor?: number; equipment?: number; tax?: number; price_per_wp?: number; battery_part?: number }   // the split only for signed-in users
   economics: {
     bill_before_monthly: number
     bill_after_monthly: number
