@@ -1627,3 +1627,31 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   another town. The third column with its hidden "Or" label is gone; the action is a link in the hint under the
   pickers ("At the house? Use my location and the town fills in."). If the lookup fails but the phone gave a
   location, the estimate still runs on the pin as before; outside the Philippines the hint asks for the town.
+
+## Round 6: the website's words sell the feeling
+
+- The owner (10 October): "I want the marketing and the copywriter to work together and instead of full solar
+  terms let's make it so that it will sell emotions, for example the battery = comfort is a good start." A
+  copywriter role joined the team (`.claude/agents/copywriter.md`); the round ran as brief → draft → review:
+  the marketing specialist's angle brief (`docs/audits/round-6/marketing-brief.md`), the copywriter's rewrite
+  (`copywriter.md`), the specialist's line-by-line review (`marketing-review.md`, five wording changes, applied
+  at the merge).
+- The register, now the rule for anything the customer reads: picture, fact, step, in that order. A feeling word
+  describes the customer's life (the fan at 2 a.m., the fridge, the homework, the bill that stops being dreaded),
+  never the product; the equipment is one plain sentence after the picture; the customer's words over the
+  engineer's (brownout, the bill, the meter, the roof, the papers; never kWp, MPPT, string, grid-tie or hybrid
+  except where a figure is asked for, as on an installation card); no exclamation marks, no superlatives without
+  a figure, no "hassle-free". The feeling that leads each page: Home relief, Brownouts comfort, Net metering
+  relief, About calm then pride, the estimate result control then relief, the thank-you calm.
+- The honesty lines are kept word for word and the review checked all 73 of them: the three system kinds' names,
+  every battery line ("for comfort, not savings, and we say so"; "adds little to the savings"), "It can come out
+  lower or higher than the estimate, and it shows you why.", the installation lead, the six FAQ facts, the
+  net-metering example and its small print, "An estimate, not a quotation". A battery sells comfort and backup;
+  the panels bring the bill down. Lines that overstated left: "A bill of thousands, down to a few hundred"
+  (the page's own example says about two thirds), "lowest price per kWp", "keeps producing for twenty more"
+  (no performance-warranty years entered), "the moment the grid drops" (no transfer time on file; now "by
+  itself").
+- Still waiting on the owner before the next tier of copy: the inverter's switch-over time; who answers after
+  switch-on and how fast; the mounting system's wind rating and the PEE's design zone; the installation-day
+  outage length; the panel performance warranty years; one agreed sentence from a photographed family; the
+  towns; the before-and-after bills of the two early-2026 homes.
