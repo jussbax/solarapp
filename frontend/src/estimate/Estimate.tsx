@@ -41,12 +41,14 @@ function doesLine(v: Variant, makesPct: number) {
   return `By day the panels run the house and fill the battery; the battery carries the evening; the extra goes to your electric company and comes back as credit at its generation rate, so what still comes is ${makesPct > 100 ? 'a small bill for the fixed charges and the hours the grid covers' : 'a smaller bill'}.`
 }
 
-/** The system in the forwarded summary: the panel count and the battery in words, the sizes left to the visit. */
+/** The system in the forwarded summary: the panel count and the battery in words, sized to a typical roof (and house) until the visit;
+ * the proposal, never the visit's readings, is what fits them to the reader's own. */
 function summarySystem(v: Variant) {
   const s = v.system
   const panels = `${s.panels} ${s.panels === 1 ? 'panel' : 'panels'}`
   const battery = hasBattery(v) ? ` and a battery${s.battery_note ? `, ${s.battery_note}` : ''}` : ', and a battery can be added later'
-  return `${panels}${battery}; the exact layout and sizes come from the free on-site assessment.`
+  const typical = hasBattery(v) ? 'a typical roof and a typical house' : 'a typical roof'
+  return `${panels}${battery}; sized to ${typical} until the free on-site assessment, and fitted to yours in the proposal.`
 }
 
 /** The other variant's bill inside a clause: "the bill about ₱1,252 a month", or "a small bill" under SMALL_BILL. */
@@ -438,17 +440,16 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
           )}
 
           <div className="pld-line pld-visit">
-            <h3 className="pld-h3">What the free visit settles</h3>
-            <p>This estimate comes from your answers and a typical roof. One free visit, with the test panel and meters on your roof and your bill on the table, settles:</p>
+            <h3 className="pld-h3">What you miss if you stop here</h3>
+            <p>Close this page and nothing changes. Next month's bill comes as it does today, and this estimate stays a typical roof's, not yours. What you are left with:</p>
             <ul>
-              <li>how many panels your roof really holds, and where they go: the sun and the shade read face by face</li>
-              <li>{hasBattery(shown) ? 'what your battery carries on a brownout night, from your own appliances rather than a typical house: the fridge, the fans, the Wi-Fi, the aircon if you size for it' : 'what a battery would carry on a brownout night, from your own appliances, if you want one'}</li>
-              <li>the exact price to your roof: every panel, rail, cable and breaker listed, and what is due when</li>
-              <li>your savings year by year, and what {e ? `${e.analysis_years} years` : 'the years'} add up to on your roof</li>
-              <li>{shown.goal === 'off_grid' ? 'the plans signed and sealed by a Professional Electrical Engineer and the permit, filed by us' : 'the plans signed and sealed by a Professional Electrical Engineer, the permit and the net metering papers, filed by us'}</li>
-              <li>{shown.goal === 'off_grid' ? 'the dates: permit, installation day by day and switch-on' : 'the dates: permit, installation day by day, switch-on and the two-way meter'}</li>
+              {e && e.savings_monthly > 0 && <li>about {php0(e.savings_monthly)} a month, by this estimate, paid to your electric company instead of kept in your pocket</li>}
+              <li>a roof nobody has measured for the panels it holds and the shade on it, so the exact price and the exact bill stay unknown</li>
+              <li>{hasBattery(shown) ? 'a battery sized to a typical house, not to your fridge, fans, Wi-Fi and aircon, until your appliances are on the table' : 'a battery, if you want the lights on in a brownout, sized to a typical house until your own fridge, fans, Wi-Fi and aircon are on the table'}</li>
+              <li>{shown.goal === 'off_grid' ? 'no plans signed and sealed, no permit, and nobody filing them' : 'no plans signed and sealed, no permit, no net metering papers, and nobody filing them'}</li>
+              <li>{shown.goal === 'off_grid' ? 'no dates on the calendar: not the permit, not the installation, not the switch-on' : 'no dates on the calendar: not the permit, not the installation, not the switch-on, not the two-way meter'}</li>
             </ul>
-            <p>Then your proposal, within two working days, every peso and every part on paper, and you decide with all of it in front of you.</p>
+            <p>The visit is free, and nothing is decided until you say so; book it below and every line above is answered in your proposal, within two working days.</p>
           </div>
 
           <div className="pld-book" id="pld-book" ref={bookRef}>
@@ -459,7 +460,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                   Thank you, {firstName(lead.name)}. {profile?.owner_name || 'We'} will message or call you {profile?.callback_promise || 'within one working day'} to set the day; visits are usually within the week. That is all for now. Keep a recent bill where you can find it; it goes on the table at the visit.
                 </p>
                 <p>
-                  What happens next: one free visit, with the test panel on the roof and your bill and appliances at the table; your roof check card the same evening; your proposal within two working days, valid {validDays} days. You decide with all of it in front of you.
+                  What happens next: one free visit, with the test panel on the roof and your bill and appliances at the table; then your proposal within two working days, valid {validDays} days. You decide with all of it in front of you.
                 </p>
                 <div className="pld-row">
                   {messengerHref && (
