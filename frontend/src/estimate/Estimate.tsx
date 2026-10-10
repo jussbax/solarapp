@@ -75,9 +75,11 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
   const [leadBusy, setLeadBusy] = useState(false)
   const [leadError, setLeadError] = useState<string | null>(null)
   const [leadSent, setLeadSent] = useState(false)
+  const [showForm, setShowForm] = useState(true)   // the form folds away once the estimate is on screen; "Estimate another one" brings a fresh one back
   const [copied, setCopied] = useState(false)
   const [bookInView, setBookInView] = useState(false)
   const resultRef = useRef<HTMLDivElement>(null)
+  const formRef = useRef<HTMLElement>(null)
   const bookRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -186,6 +188,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
       const r = await api.estimate(request())
       setResult(r)
       setWithBattery(hasBattery(r))
+      setShowForm(false)
       // a visit already booked stays booked: the thank-you keeps its place under a second or third estimate
       emit('estimate_shown', { goal: r.goal, panels: r.system.panels, price: r.price.total })
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
@@ -194,6 +197,25 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
     } finally {
       setBusy(false)
     }
+  }
+
+  const estimateAnother = () => {
+    setResult(null)
+    setShowForm(true)
+    setGoal('combination')
+    setProvince('')
+    setTownName('')
+    setPin(null)
+    setFound('')
+    setKwh('')
+    setPhp('')
+    setPattern('balanced')
+    setError(null)
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
+  const goBook = (ev: { preventDefault: () => void }) => {
+    ev.preventDefault()
+    document.getElementById('pld-book')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   // the variant on screen: the one asked for, or the battery alternative the visitor toggled to
@@ -312,7 +334,8 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
         </header>
       )}
 
-      <section className="pld-card">
+      {showForm && (
+      <section className="pld-card" ref={formRef}>
         <h1 className="pld-h1">What would your bill be with solar?</h1>
         <p className="pld-lead">
           Four questions, about a minute: your bill before and after, the price, and how many panels it takes. The only call you get is the free on-site assessment you book, and that one makes the figure exact.
@@ -412,6 +435,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
         </button>
         {!ready && <div className="pld-hint pld-center">{!hasPlace ? 'Pick your town and enter your monthly use first.' : 'Enter your monthly use first.'}</div>}
       </section>
+      )}
 
       {result && shown && prod && (
         <section className="pld-card" id="pld-result" ref={resultRef}>
@@ -460,6 +484,11 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                 <div className="pld-hero-sub">installed, with permits, VAT included</div>
               </div>
             )}
+          </div>
+
+          <div className="pld-actions">
+            <a className="pld-btn pld-primary" href="#pld-book" onClick={goBook}>Book my free on-site assessment</a>
+            <button type="button" className="pld-btn" onClick={estimateAnother}>Estimate another one</button>
           </div>
 
           <div className="pld-line">
@@ -611,7 +640,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
             <div className="pld-sticky-label">Estimated price</div>
             <div className="pld-sticky-price">{php0(shown.price.total)}</div>
           </div>
-          <a className="pld-btn pld-primary" href="#pld-book" onClick={(ev) => { ev.preventDefault(); document.getElementById('pld-book')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}>
+          <a className="pld-btn pld-primary" href="#pld-book" onClick={goBook}>
             Book my free on-site assessment
           </a>
         </div>

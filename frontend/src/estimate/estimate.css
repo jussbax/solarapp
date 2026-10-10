@@ -58,6 +58,8 @@
 .pld-alt { background: var(--pld-gold-bg); border-radius: 10px; padding: 10px 14px; }
 .pld-book { margin-top: 20px; padding-top: 16px; border-top: 2px solid var(--pld-gold); }
 .pld-book .pld-row { margin-top: 10px; }
+.pld-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 14px; }
+.pld-actions .pld-btn { width: auto; flex: 1 1 220px; }
 .pld-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .pld-chip { min-height: 44px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--pld-line); background: #fff; font: inherit; cursor: pointer; color: var(--pld-text); }
 .pld-chip.on { background: var(--pld-ink); color: #fff; border-color: var(--pld-ink); }
