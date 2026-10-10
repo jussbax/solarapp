@@ -3,7 +3,9 @@
 
 Sheets: 1 cover and general notes; 2 the vicinity map and the site plan (round 13, item 4: reports/plans_site.py); one
 array layout per roof face that holds panels, at the largest standard scale that fits the sheet; the equipment and
-circuit schedule; a last sheet that says what is not yet in the set and why,
+circuit schedule; the design analysis (round 13, item 2: the derated circuits with pass, fail or not checked, the
+short-circuit note, the grounding conductors, the tables used and the assumptions, from plans_analysis.py); a last
+sheet that says what is not yet in the set and why,
 with the energy audit's schedule of loads when the audit has appliances. Every page carries the title block
 (company; the owner, the project and the system; sheet name and number; the date, the revision line and the calculation
 stamp; the PEE's signature block from the company profile, round 13: name and PRC number with its validity, the PTR
@@ -27,13 +29,14 @@ from reportlab.lib.pagesizes import A3, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from reportlab.platypus import BaseDocTemplate, Flowable, Frame, PageBreak, PageTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import BaseDocTemplate, Flowable, Frame, KeepInFrame, PageBreak, PageTemplate, Paragraph, Spacer, Table, TableStyle
 
 from ..profile import PEE_KEYS, PROFILE_FIELDS
 from ..schemas import AssessmentDoc
 from . import brand
 from .drawings import fit_scale, plan_drawing
 from .plans_site import site_sheet
+from .plans_analysis import analysis_sheet
 
 PAGE_W, PAGE_H = landscape(A3)              # 1190.55 × 841.89 pt: 420 × 297 mm
 SHEET_SIZE = "A3 landscape, 420 × 297 mm"
@@ -488,7 +491,7 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         dc_rows.append(["PV circuit current", P(f"{_f(sdc.get('i_design_a'), 2, 'A')}<br/>{_f(sdc.get('i_cond_a'), 2, 'A')}"),
                         P(f"{_g(sdc.get('isc_factor'))} × Isc {elec(panel_item, 'isc_a', 'A', 2)} (the PV article's circuit current; verify the clause)<br/>"
                           f"conductor and OCPD at {_g(wiring.get('continuous_factor'))} × that ({_g(round(float(sdc.get('isc_factor') or 0) * float(wiring.get('continuous_factor') or 0), 4))} × Isc): "
-                          f"the ampacity before derating and the breaker's minimum; derating and conduit fill: {TO_COMPLETE}")])
+                          "the ampacity before derating and the breaker's minimum; derating and conduit fill: the design analysis sheet")])
     dc_rows += [
         ["PV cable (+)", _item_text(_line(by_role, "pv_cable_red")), P(f"{escape(str(choices.get('pv_gauge') or BLANK))} mm², {_g(pv_run, 'm')} home run per conductor per string; drop {_pct(choices.get('pv_drop'))} against the {_pct(wiring.get('dc_drop_limit'))} limit"
                                                                       + (f"; ampacity at or above {_f(sdc.get('i_cond_a'), 2, 'A')}" if from_ds else ""))],
@@ -549,7 +552,7 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         ["AC disconnect", _item_text(_line(by_role, "ac_disconnect")), P(escape(str((_line(by_role, "ac_disconnect") or {}).get("note") or "")))],
         ["AC SPD", _item_text(_line(by_role, "ac_spd")), P(escape(str((_line(by_role, "ac_spd") or {}).get("note") or "")))],
         ["Transfer switch", "built into the inverter" if ats == "built-in" else _item_text(_line(by_role, "ats")), P(escape(str((_line(by_role, "ats") or {}).get("note") or "")) if ats != "built-in" else "the inverter's own transfer switch, as its item says")],
-        ["Conduit and tray", f"{_item_text(_line(by_role, 'conduit'))}; {_item_text(_line(by_role, 'cable_tray'))}", P(f"conduit allowance {_g(conduit, 'm')}; conduit fill: {TO_COMPLETE}")],
+        ["Conduit and tray", f"{_item_text(_line(by_role, 'conduit'))}; {_item_text(_line(by_role, 'cable_tray'))}", P(f"conduit allowance {_g(conduit, 'm')}; conduit fill: the design analysis sheet")],
     ]
     ac_t = table(["AC side", "Item or count", "Figures"], ac_rows, [32 * mm, 54 * mm, 104 * mm])
 
@@ -584,10 +587,10 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     bat_t = table(["Battery circuit", "Item or figure", "Notes"], bat_rows, [32 * mm, 64 * mm, 94 * mm]) if bat_rows else None
 
     gnd_rows = [
-        ["Ground rod", _item_text(gnd_rod), P("electrode; the grounding electrode conductor size: " + TO_COMPLETE)],
+        ["Ground rod", _item_text(gnd_rod), P("electrode; the grounding electrode conductor size: the design analysis sheet")],
         ["Array bonding", _item_text(bonding), P(escape(str((bonding or {}).get("note") or "")))],
         ["Earth lugs", _item_text(lugs), P(escape(str((lugs or {}).get("note") or "")))],
-        ["Grounding run", f"{_g(gnd_run, 'm')} per inverter", P(f"on the {escape(str(choices.get('ac_gauge') or BLANK))} mm² THHN line of the AC circuits (the BOM's conductor); the equipment grounding conductor size: {TO_COMPLETE}")],
+        ["Grounding run", f"{_g(gnd_run, 'm')} per inverter", P(f"on the {escape(str(choices.get('ac_gauge') or BLANK))} mm² THHN line of the AC circuits (the BOM's conductor); the equipment grounding conductor size per circuit: the design analysis sheet")],
     ]
     gnd_t = table(["Grounding", "Item", "Notes"], gnd_rows, [32 * mm, 64 * mm, 94 * mm])
     drop_rows = [
@@ -650,8 +653,11 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
 
     # ---------------- sheet 1: cover and general notes
     sched_names = ["Equipment and circuit schedule"] + (["Equipment and circuit schedule (continued)"] if len(sched_pages) > 1 else [])
-    sheet_names = ["Cover and general notes", site_name] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels] + sched_names + ["Not yet in this set; schedule of loads"]
+    # round 13 (item 2): the design analysis sheet after the schedule sheets and before the last sheet (reports/plans_analysis.py)
+    analysis_name, analysis_flows = analysis_sheet(doc, results, items)
+    sheet_names = ["Cover and general notes", site_name] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels] + sched_names + [analysis_name] + ["Not yet in this set; schedule of loads"]
     story: list = [SheetMarker(sheet_names[0])]
+    cover_start = len(story)   # the head's flowables, measured below so the bottom block fits the room they leave
     story.append(Paragraph(f"PV system plans: {escape(doc.customer_name or BLANK)}", h1))
     story.append(Paragraph(f"{escape(doc.address or BLANK)} · pin {doc.lat:.5f}, {doc.lon:.5f} · {escape(KIND_LABEL.get(kind, 'solar PV system'))}", body))
 
@@ -737,7 +743,8 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         f"(bare copper where the LGU asks; the gauge to be verified by the signing engineer). Earth lugs: {_item_text(lugs)}. Grounding run: {_g(gnd_run, 'm')} per inverter on the "
         f"{escape(str(choices.get('ac_gauge') or BLANK))} mm² THHN of the AC circuits. The equipment and electrode grounding conductor sizes: {TO_COMPLETE}.",
         f"<b>6. Conductors and protection.</b> Breakers and conductors as the circuit schedule sheet lists them, from the wiring rules on file (THHN ampacity table, {', '.join(f'{k} mm² {v:g} A' for k, v in thhn_amp.items())}; "
-        f"verify the table edition). Derating, conduit fill and the short-circuit note: {TO_COMPLETE}.",
+        f"verify the table edition). Derating, the breaker against the derated ampacity, conduit fill, the grounding conductor sizes and the short-circuit note: the design analysis sheet "
+        "(pass, fail or not checked per circuit, with the tables used, their sources and the assumptions).",
         f"<b>7. Labels and placards.</b> PV system labels and placards at the service, the disconnect, the inverter and the DC box are miscellaneous supplies, not a BOM line; "
         f"what the LGU and the DU ask for: {TO_COMPLETE}.",
         f"<b>8. Code references.</b> No clause is cited by the office system; the articles that apply to the array, the storage battery and the mounting: {TO_COMPLETE}.",
@@ -757,7 +764,12 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     notes_right = [Paragraph("&nbsp;", h2)] + [Paragraph(n, note) for n in notes[4:]] + [index_block]
     bottom = Table([[notes_left, notes_right]], colWidths=[196 * mm, 194 * mm], hAlign="LEFT")
     bottom.setStyle(two_col)
-    story.append(bottom)
+    # The cover is one sheet whatever the set's length: the sheet index grows with every sheet the set gains (the site
+    # plan, the analysis, the diagram, the schedule of loads, the mounting detail, a continued schedule), so the notes
+    # and the index shrink to the room left under the head rather than spill onto a second page the index does not name.
+    avail_w = FRAME_W - 8 * mm
+    used = sum(f.wrap(avail_w, FRAME_H)[1] for f in story[cover_start:])
+    story.append(KeepInFrame(avail_w, max(FRAME_H - 5 * mm - used, 40 * mm), [bottom], mode="shrink", hAlign="LEFT"))
 
     # ---------------- the vicinity map and the site plan, after the cover
     story.append(PageBreak())
@@ -838,6 +850,11 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         sched.setStyle(two_col)
         story.append(sched)
 
+    # ---------------- the design analysis sheet (round 13, item 2)
+    story.append(PageBreak())
+    story.append(SheetMarker(analysis_name))
+    story += analysis_flows
+
     # ---------------- the last sheet: what is not here, and the audit's schedule of loads
     story.append(PageBreak())
     story.append(SheetMarker("Not yet in this set; schedule of loads"))
@@ -860,7 +877,15 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     missing += [
         ("Schedule of loads in the permit's format, with the PV system as a source and the point of interconnection",
          "The energy audit's figures are tabled on this sheet; the format, the circuit grouping and the point of interconnection are the signing engineer's."),
-        ("Design analysis: conductor derating, OCPD per circuit beyond the breakers listed, conduit fill, the short-circuit note", TO_COMPLETE + "; the breakers, conductors and drops the BOQ computed are on the circuit schedule sheet."),
+    ]
+    # the design analysis (round 13, item 2) is in the set: the entry stays only for the rows it could not check, naming the figures to type
+    da = choices.get("design_analysis") or {}
+    if not da:
+        missing.append(("Design analysis: conductor derating, OCPD per circuit, conduit fill, the short-circuit note", "The design analysis sheet needs a calculation made since it was built: calculate again."))
+    elif da.get("not_checked"):
+        missing.append(("Design analysis: rows not checked", "The design analysis sheet carries the rows; these are still \"not checked\" for a figure the app does not hold: "
+                        + escape("; ".join(f"{n.get('id')}: " + ", ".join(n.get("reasons") or []) for n in da["not_checked"])) + "."))
+    missing += [
         ("Mounting detail (rail, foot, fastener, penetration seal) and the roof construction", "Not drawn. The mounting items and their counts are on the cover's general notes; the roof construction, purlin spacing and uplift check are not in the app yet."),
         ("Wind zone for the mounting", "Not in the app; " + TO_COMPLETE + "."),
     ]

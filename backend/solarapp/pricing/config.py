@@ -196,6 +196,15 @@ class WiringRules(BaseModel):
     copper_resistivity: float = 0.0172  # ohm mm2 / m
     continuous_factor: float = 1.25
     thhn_ampacity: dict[str, float] = Field(default_factory=lambda: {"3.5": 20, "5.5": 30, "8.0": 40, "14": 55, "22": 70, "30": 85})  # PEC 60 C column (3.5 mm2 = 20 A, round 3; verify the table edition)
+    # Round 13 (docs/audits/round-13/engineer-brief.md, 2.3): the 75 and 90 °C columns the design analysis derates from (the
+    # 75 °C column is the terminal rule's), keyed by the same sizes as the 60 °C table. CITED STAND-INS, never values the app
+    # ships as fact: the NEC 2014 Table 310.15(B)(16) copper columns on the size mapping the 60 °C table follows (3.5 mm² = 12
+    # AWG, 5.5 = 10, 8.0 = 8, 14 = 6, 22 = 4, 30 = 2); verify against PEC 2017 Table 3.10.1.16. The source line prints on the
+    # design analysis sheet with "verify" until the owner or the PEE ticks the table confirmed.
+    thhn_ampacity_75c: dict[str, float] = Field(default_factory=lambda: {"3.5": 25, "5.5": 35, "8.0": 50, "14": 65, "22": 85, "30": 115})
+    thhn_ampacity_90c: dict[str, float] = Field(default_factory=lambda: {"3.5": 30, "5.5": 40, "8.0": 55, "14": 75, "22": 95, "30": 130})
+    thhn_ampacity_source: str = "NEC 2014 Table 310.15(B)(16), copper, 60/75/90 °C columns on the mapping 3.5 mm² = 12 AWG, 5.5 = 10, 8.0 = 8, 14 = 6, 22 = 4, 30 = 2; the PEC 2017 equivalent: Table 3.10.1.16"
+    thhn_ampacity_verified: bool = False
     battery_cable_ampacity: dict[str, float] = Field(default_factory=lambda: {"16": 100, "25": 140, "35": 170, "50": 210, "70": 270})
     pv_cable_ampacity: dict[str, float] = Field(default_factory=lambda: {"4": 40, "6": 55})
     # AC circuits (round 3, E-04): one breaker per circuit at 1.25 x the circuit current rounded up to the next standard
@@ -226,6 +235,64 @@ class StringDesign(BaseModel):
     isc_irradiance_factor: float = 1.25
     # the standard DC MCB ratings the suppliers list (verify against the price lists; like wiring.ac_breaker_sizes_a)
     dc_breaker_sizes_a: list[float] = Field(default_factory=lambda: [16, 20, 25, 32, 40, 50, 63])
+
+
+class DeratingRules(BaseModel):
+    """The design analysis sheet's derating (round 13, docs/audits/round-13/engineer-brief.md, 2.3). Every table here is a
+    CITED STAND-IN from the NEC edition the PEC follows, never a value the app ships as fact: each carries its source line
+    and a `_verified` flag the owner or the PEE ticks once the table is checked against the PEC 2017; the sheet prints the
+    source with "verify" until then. Every default temperature is an ASSUMPTION and prints as one."""
+    # ASSUMPTION: the PVGIS typical-year air maxima of the Laguna and Batangas cells are 30.5–34.1 °C (round 12); per project the
+    # outdoor runs take the higher of this and the project cell's own maximum, ceiled
+    ambient_outdoor_c: float = 35
+    ambient_indoor_c: float = 30            # ASSUMPTION: the NEC tables' 30 °C base, indoors
+    conduit_height_above_roof_mm: float = 25   # ASSUMPTION: a conduit on the rails; picks the rooftop adder band below
+    # the rooftop adder bands by height above the roof, °C added to the ambient for a raceway on the roof: the band is the largest
+    # key at or below the height in mm. NEC 2014 Table 310.15(B)(3)(c); the NEC 2017 kept only +33 °C for raceways under 22 mm
+    # above the roof; verify which the PEC 2017 adopted (brief 6.3 asks which band table the PEE applies)
+    rooftop_adder_c: dict[str, float] = Field(default_factory=lambda: {"0": 33, "13": 22, "90": 17, "300": 14, "900": 8})
+    rooftop_adder_source: str = "NEC 2014 Table 310.15(B)(3)(c) by height above the roof (0–13 mm +33, 13–90 +22, 90–300 +17, 300–900 +14, above 900 +8 °C); the NEC 2017 keeps only +33 °C under 22 mm; which the PEC 2017 adopted is the open question"
+    rooftop_adder_verified: bool = False
+    # the temperature correction by the formula the NEC permits in place of its table: F = sqrt((T_insul − T_amb) / (T_insul − 30))
+    temperature_correction_source: str = "NEC 310.15(B)(2) formula F = sqrt((T_insulation − T_ambient) / (T_insulation − 30)) in place of Table 310.15(B)(2)(a); the PEC 2017 equivalent clause"
+    temperature_correction_verified: bool = False
+    # the bundling (adjustment) factor by the count of current-carrying conductors, in percent: the band is the largest key at or
+    # below the count. NEC 310.15(B)(3)(a); PEC verify. The neutral of a 2-wire 230 V circuit counts; the EGC does not.
+    bundling_factor_pct: dict[str, float] = Field(default_factory=lambda: {"1": 100, "4": 80, "7": 70, "10": 50, "21": 45, "31": 40, "41": 35})
+    bundling_factor_source: str = "NEC 310.15(B)(3)(a): 1–3 current-carrying conductors 100 %, 4–6 80 %, 7–9 70 %, 10–20 50 %, 21–30 45 %, 31–40 40 %, 41 and more 35 %; the PEC 2017 equivalent table"
+    bundling_factor_verified: bool = False
+    # the conduit fill limit in percent by the count of conductors in the raceway: 1 → 53 %, 2 → 31 %, 3 and more → 40 %
+    conduit_fill_limit_pct: dict[str, float] = Field(default_factory=lambda: {"1": 53, "2": 31, "3": 40})
+    conduit_fill_source: str = "NEC Chapter 9 Table 1 (one conductor 53 %, two 31 %, three or more 40 % of the raceway's inside area); the PEC 2017 equivalent in Chapter 10"
+    conduit_fill_verified: bool = False
+    # the next-size-up rule: a breaker above the derated ampacity may be the next standard size above it when the rating is at or
+    # below this and the circuit is not a multi-outlet branch circuit, and the conductor still carries the load
+    next_size_up_max_a: float = 800
+    next_size_up_source: str = "NEC 240.4(B): the next standard overcurrent device above the conductor's ampacity, up to 800 A, not on a multi-outlet branch circuit; the PEC 2017 equivalent in Article 2.40"
+    next_size_up_verified: bool = False
+    # the terminal rule: the conductor's ampacity in the terminal's column (75 °C), uncorrected, covers the design current and the breaker
+    terminal_rating_c: float = 75
+    terminal_rule_source: str = "NEC 110.14(C): the conductor's ampacity in the 75 °C column, uncorrected, at or above the design current and the breaker; the PEC 2017 equivalent in Article 1.10"
+    terminal_rule_verified: bool = False
+    # ASSUMPTION for a wire item whose insulation rating is not typed on it: THHN and PV wire are 90 °C types (verify the items)
+    default_insulation_c: float = 90
+    # ASSUMPTION for an inverter without a fault-current figure on its item: a grid-interactive inverter is current-limited to
+    # about 1.5 × its rated output current for one cycle (verify on the datasheet)
+    inverter_fault_factor: float = 1.5
+
+
+class GroundingRules(BaseModel):
+    """The grounding conductor sizes the design analysis checks (round 13, brief 2.3). Cited stand-ins with a source and a
+    `_verified` flag, like the derating tables."""
+    # the equipment grounding conductor by the circuit's overcurrent device rating: the row is the smallest key at or above the
+    # OCPD; mm² on the PEC's metric series for the NEC's 14/12/10/8/6/4/3 AWG
+    egc_by_ocpd: dict[str, float] = Field(default_factory=lambda: {"15": 2.0, "20": 3.5, "30": 5.5, "40": 5.5, "60": 5.5, "100": 8.0, "200": 14, "300": 22, "400": 30})
+    egc_source: str = "NEC 250.122 Table (copper: 15 A 14 AWG, 20 A 12, 30–60 A 10, 100 A 8, 200 A 6, 300 A 4, 400 A 3) on the PEC's metric series; the PEC 2017 equivalent: Table 2.50.1.122"
+    egc_verified: bool = False
+    # the grounding electrode conductor to a rod electrode need not be larger than this
+    gec_rod_max_mm2: float = 14
+    gec_source: str = "NEC 250.66(A): the grounding electrode conductor to a rod electrode need not exceed 6 AWG (= 14 mm²) copper; the PEC 2017 equivalent in Article 2.50"
+    gec_verified: bool = False
 
 
 class BoqRoles(BaseModel):
@@ -441,6 +508,9 @@ class PricingConfig(BaseModel):
     quick: QuickConfig = Field(default_factory=QuickConfig)
     wiring: WiringRules = Field(default_factory=WiringRules)
     string_design: StringDesign = Field(default_factory=StringDesign)
+    # round 13: the design analysis sheet's derating tables and the grounding conductor sizes (Settings › Design analysis)
+    derating: DeratingRules = Field(default_factory=DeratingRules)
+    grounding: GroundingRules = Field(default_factory=GroundingRules)
     roles: BoqRoles = Field(default_factory=BoqRoles)
     imported_from: Optional[str] = None
     imported_at: Optional[str] = None

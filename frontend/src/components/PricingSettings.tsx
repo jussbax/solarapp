@@ -274,12 +274,17 @@ function ChipsEditor({ values, unit, numeric, label, onChange }: { values: (stri
   )
 }
 
-/** A size → value table ("3.5 mm²" → 20 A, or → an item code), sorted by size, with Add size and Remove. */
-function SizeTableEditor({ value, unit, code, label, onChange }: { value: Record<string, string | number>; unit?: string; code: boolean; label: string; onChange: (v: Record<string, string | number>) => void }) {
+/** A size → value table ("3.5 mm²" → 20 A, or → an item code), sorted by size, with Add size and Remove. A table keyed by
+ * something other than a wire size (round 13: the derating bands by height, by conductor count, by breaker rating) names its
+ * key column and the key's unit through `keyLabel` and `keyUnit`; `decimals` shows the values as the setting says. */
+function SizeTableEditor({ value, unit, code, label, onChange, keyLabel, keyUnit, decimals }: {
+  value: Record<string, string | number>; unit?: string; code: boolean; label: string; onChange: (v: Record<string, string | number>) => void; keyLabel?: string; keyUnit?: string; decimals?: number
+}) {
   const [size, setSize] = useState('')
   const keys = sortedSizes(Object.keys(value))
   const sizes = keys.every(numericKey)
   const numeric = Object.values(value).every((x) => typeof x === 'number')
+  const unitOfKey = keyUnit ?? 'mm²'
   const add = () => {
     const k = size.trim().replace(/\s*mm².*$/, '')
     if (!k || k in value) return
@@ -291,7 +296,7 @@ function SizeTableEditor({ value, unit, code, label, onChange }: { value: Record
       <table className="kv sizes">
         <thead>
           <tr>
-            <th>{sizes ? 'Size' : 'Task'}</th>
+            <th>{sizes ? (keyLabel ?? 'Size') : 'Task'}</th>
             <th>{unit ?? (numeric ? 'Value' : 'Code')}</th>
             <th></th>
           </tr>
@@ -299,13 +304,13 @@ function SizeTableEditor({ value, unit, code, label, onChange }: { value: Record
         <tbody>
           {keys.map((k) => {
             const x = value[k]
-            const name = sizes ? `${k} mm²` : (TASK_LABELS[k] ?? titleCase(k))
+            const name = sizes ? `${k}${unitOfKey ? ` ${unitOfKey}` : ''}` : (TASK_LABELS[k] ?? titleCase(k))
             return (
               <tr key={k}>
                 <th scope="row">{name}</th>
                 <td>
                   {typeof x === 'number' ? (
-                    <NumberInput value={x} decimals={0} min={0} ariaLabel={`${label} ${name}`} onChange={(v) => onChange({ ...value, [k]: v ?? 0 })} />
+                    <NumberInput value={x} decimals={decimals ?? 0} min={0} ariaLabel={`${label} ${name}`} onChange={(v) => onChange({ ...value, [k]: v ?? 0 })} />
                   ) : (
                     <input value={x} aria-label={`${label} ${name}`} className={code ? 'code' : undefined} onChange={(e) => onChange({ ...value, [k]: e.target.value })} />
                   )}
@@ -333,8 +338,8 @@ function SizeTableEditor({ value, unit, code, label, onChange }: { value: Record
           <input
             value={size}
             inputMode="decimal"
-            aria-label={`Add size to ${label}`}
-            placeholder="Add size, mm²"
+            aria-label={`Add ${keyLabel ? keyLabel.toLowerCase() : 'size'} to ${label}`}
+            placeholder={keyLabel ? `Add ${keyLabel.toLowerCase()}${unitOfKey ? `, ${unitOfKey}` : ''}` : 'Add size, mm²'}
             onChange={(e) => setSize(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -634,7 +639,7 @@ function SettingCell({ section, k, v }: { section: string; k: string; v: unknown
       <Field {...common} className="wide own-line">
         {(fid) => (
           <div id={fid}>
-            <SizeTableEditor value={v} unit={meta?.unit} code={KEYED_SECTIONS.has(section)} label={label} onChange={(d) => setField(section, k, d)} />
+            <SizeTableEditor value={v} unit={meta?.unit} code={KEYED_SECTIONS.has(section)} label={label} onChange={(d) => setField(section, k, d)} keyLabel={meta?.keyLabel} keyUnit={meta?.keyUnit} decimals={meta?.decimals} />
           </div>
         )}
       </Field>

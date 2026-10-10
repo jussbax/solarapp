@@ -15,7 +15,7 @@ export const SECTION_LABELS: Record<string, string> = {
   company_base: 'Company base', truck: 'Truck', handling: 'Handling at base', route: 'Route', categories: 'Markup and wastage by category',
   labor: 'Labor day rates', roof: 'Roof work', ground: 'Ground work', hauling: 'Hauling', mobdemob: 'Crew transport', tools: 'Tools', job: 'Fees, markups and VAT',
   job_defaults: 'Job defaults', wiring: 'Wiring rules', string_design: 'String design', roles: 'Items the generator uses', program: 'Program of works', economics: 'Customer savings',
-  system_losses: 'Losses after the panels', sizing: 'Panel and battery autonomy', quick: 'Estimate page',
+  system_losses: 'Losses after the panels', sizing: 'Panel and battery autonomy', quick: 'Estimate page', derating: 'Derating', grounding: 'Grounding conductors',
 }
 export const SKIP = new Set(['imported_from', 'imported_at', 'datasheets_imported_from', 'datasheets_imported_at'])
 /** Percentages are stored as fractions (0.12) and edited as percent (12). */
@@ -42,6 +42,9 @@ export interface SettingMeta {
   readOnly?: boolean
   /** Two columns wide (long codes and names). */
   wide?: boolean
+  /** A size-table whose keys are not mm² sizes: the key column's heading and the unit printed after each key (round 13: the band tables). */
+  keyLabel?: string
+  keyUnit?: string
 }
 
 export const VAT_ABOUT = 'The proposal prints "VAT (12%)" from this figure, worked out on the rounded contract (VAT = total × rate ÷ (1 + rate)), so the before-VAT price, the VAT and the total agree to the peso.'
@@ -131,6 +134,11 @@ export const META: Record<string, SettingMeta> = {
   'wiring.copper_resistivity': { label: 'Copper resistivity', unit: 'Ω·mm²/m', decimals: 4, readOnly: true, about: 'A physical constant: the resistance of a copper conductor per metre and per mm² of section. Set by the developer; the voltage drop check uses it.' },
   'wiring.continuous_factor': { label: 'Continuous-current factor', unit: '×', help: '1.25 per the code' },
   'wiring.thhn_ampacity': { label: 'THHN ampacity', unit: 'A', help: 'PEC 60 °C column' },
+  // round 13: the 75 and 90 °C columns the design analysis derates from; cited stand-ins with their source and a verify flag
+  'wiring.thhn_ampacity_75c': { label: 'THHN ampacity, 75 °C column', unit: 'A', help: 'The terminal rule; verify', about: "A cited stand-in: the NEC 2014 Table 310.15(B)(16) copper 75 °C column on the size mapping the 60 °C table follows (3.5 mm² = 12 AWG, 5.5 = 10, 8.0 = 8, 14 = 6, 22 = 4, 30 = 2). The design analysis's terminal rule reads it uncorrected. Verify against PEC 2017 Table 3.10.1.16 and tick the columns confirmed below." },
+  'wiring.thhn_ampacity_90c': { label: 'THHN ampacity, 90 °C column', unit: 'A', help: 'The derating base; verify', about: 'A cited stand-in: the NEC 2014 Table 310.15(B)(16) copper 90 °C column on the same size mapping. The design analysis derates from it for a THHN item whose insulation rating is 90 °C (the default assumption). Verify against PEC 2017 Table 3.10.1.16 and tick the columns confirmed below.' },
+  'wiring.thhn_ampacity_source': { label: 'THHN columns: source', help: 'Printed on the design analysis sheet', wide: true },
+  'wiring.thhn_ampacity_verified': { label: 'THHN columns confirmed', help: 'Tick once checked against the PEC', about: 'Off: the design analysis sheet prints the source with "verify". On: it prints "confirmed in Settings". Tick it only once the owner or the PEE has checked the three columns against the PEC 2017 table.' },
   'wiring.battery_cable_ampacity': { label: 'Battery cable ampacity', unit: 'A' },
   'wiring.pv_cable_ampacity': { label: 'PV cable ampacity', unit: 'A' },
   'wiring.ac_breaker_sizes_a': { label: 'Standard AC breaker sizes', unit: 'A', help: 'Next size at or above 1.25 × the circuit current', about: 'Each AC circuit gets the next size at or above 1.25 × its current; the conductor is then sized from the breaker.' },
@@ -144,6 +152,37 @@ export const META: Record<string, SettingMeta> = {
   'string_design.temp_coeff_isc_default_pct': { label: 'Default Isc coefficient', unit: '%/°C', decimals: 2, help: 'Assumption; informational only', about: 'An assumption, printed beside Isc for information. Never stacked on the 1.25 irradiance factor: the code method is irradiance × continuous, and stacking would double-count.' },
   'string_design.isc_irradiance_factor': { label: 'PV circuit current factor', unit: '×', decimals: 2, help: '1.25 × Isc; verify the PEC clause', about: "The PV-circuit sizing rule of the PEC's solar PV article (the NEC 690.8 equivalent): the circuit current is Isc × this factor, and the conductor and the DC breaker are sized at 1.25 × that again (1.56 × Isc in all). Verify the clause in the current edition." },
   'string_design.dc_breaker_sizes_a': { label: 'Standard DC breaker sizes', unit: 'A', help: 'Next size at or above 1.56 × Isc', about: "The standard DC MCB ratings the suppliers list; the string's breaker is the next size at or above 1.25 × 1.25 × Isc. Verify against the price lists." },
+  // round 13: the design analysis sheet's derating (docs/audits/round-13/engineer-brief.md, 2.3); every default temperature an assumption,
+  // every table a cited stand-in with its source and a verify flag the sheet prints
+  'derating.ambient_outdoor_c': { label: 'Outdoor ambient', unit: '°C', decimals: 0, help: 'Assumption; the project cell may raise it', about: "An assumption: the PVGIS typical-year air maxima of the Laguna and Batangas cells are 30.5 to 34.1 °C. Per project the outdoor runs (the string home runs, a rooftop raceway) take the higher of this and the project cell's own typical-year maximum, ceiled; the sheet says which was used." },
+  'derating.ambient_indoor_c': { label: 'Indoor ambient', unit: '°C', decimals: 0, help: 'Assumption', about: "An assumption: the NEC tables' 30 °C base, for the circuits indoors (the AC circuits in the BOM's conduit, the battery cables). The sheet prints every pass computed on it as \"pass (ambient assumed 30 °C)\"." },
+  'derating.conduit_height_above_roof_mm': { label: 'Raceway height above the roof', unit: 'mm', decimals: 0, help: 'Assumption: a conduit on the rails', about: 'An assumption that picks the rooftop adder band for a raceway on the roof (25 mm: a conduit on the rails). The string home runs are in free air under the array until the BOM carries a rooftop conduit, so no row takes the adder today.' },
+  'derating.rooftop_adder_c': { label: 'Rooftop adder bands', unit: '°C added', keyLabel: 'Height from', keyUnit: 'mm', help: 'By height above the roof; verify', about: "°C added to the ambient for a raceway on the roof, by the band of height above the roof (the band is the largest height at or below the raceway's). A cited stand-in: the NEC 2014 Table 310.15(B)(3)(c) bands; the NEC 2017 keeps only +33 °C for raceways under 22 mm above the roof. Verify which the PEC 2017 adopted (the brief's question to the PEE) and set the bands the PEE applies; a single band \"0: 33\" is the 2017-style adder for every height." },
+  'derating.rooftop_adder_source': { label: 'Rooftop adder: source', help: 'Printed on the design analysis sheet', wide: true },
+  'derating.rooftop_adder_verified': { label: 'Rooftop adder confirmed', help: 'Tick once checked against the PEC' },
+  'derating.temperature_correction_source': { label: 'Temperature correction: source', help: 'The formula; printed on the sheet', wide: true, about: 'F_temp = sqrt((T_insulation − T_ambient) / (T_insulation − 30)), the formula the NEC permits in place of its table (310.15(B)(2)). The figures it gives are checked against the table in the tests, not in the code. Verify the PEC 2017 equivalent clause.' },
+  'derating.temperature_correction_verified': { label: 'Temperature correction confirmed', help: 'Tick once checked against the PEC' },
+  'derating.bundling_factor_pct': { label: 'Bundling factors', unit: '%', keyLabel: 'Conductors from', keyUnit: '', decimals: 0, help: 'By current-carrying conductors; verify', about: 'The adjustment factor in percent by the count of current-carrying conductors bundled or in one raceway (the band is the largest count at or below the circuit\'s). A cited stand-in: NEC 310.15(B)(3)(a): 1 to 3 conductors 100 %, 4 to 6 80 %, 7 to 9 70 %, 10 to 20 50 %, 21 to 30 45 %, 31 to 40 40 %, 41 and more 35 %. The neutral of a 2-wire 230 V circuit counts; the EGC does not. Verify the PEC 2017 equivalent.' },
+  'derating.bundling_factor_source': { label: 'Bundling factors: source', help: 'Printed on the design analysis sheet', wide: true },
+  'derating.bundling_factor_verified': { label: 'Bundling factors confirmed', help: 'Tick once checked against the PEC' },
+  'derating.conduit_fill_limit_pct': { label: 'Conduit fill limits', unit: '%', keyLabel: 'Conductors', keyUnit: '', decimals: 0, help: 'Of the inside area; verify', about: "The share of a raceway's inside area the conductors may fill, by the count in it (the band is the largest count at or below the circuit's): one conductor 53 %, two 31 %, three or more 40 %. A cited stand-in: NEC Chapter 9 Table 1; verify the PEC 2017 equivalent in Chapter 10. The fill needs the conductor's overall area and the conduit's inside diameter on the items (Materials page)." },
+  'derating.conduit_fill_source': { label: 'Conduit fill: source', help: 'Printed on the design analysis sheet', wide: true },
+  'derating.conduit_fill_verified': { label: 'Conduit fill confirmed', help: 'Tick once checked against the PEC' },
+  'derating.next_size_up_max_a': { label: 'Next size up allowed up to', unit: 'A', decimals: 0, help: 'NEC 240.4(B); verify', about: "A breaker above the derated ampacity may be the next standard size above it when its rating is at or below this, the circuit is not a multi-outlet branch circuit and the conductor still carries the continuous current; the sheet prints \"next size up\" beside the pass. A cited stand-in: NEC 240.4(B)'s 800 A; verify the PEC 2017 equivalent in Article 2.40." },
+  'derating.next_size_up_source': { label: 'Next size up: source', help: 'Printed on the design analysis sheet', wide: true },
+  'derating.next_size_up_verified': { label: 'Next size up confirmed', help: 'Tick once checked against the PEC' },
+  'derating.terminal_rating_c': { label: 'Terminal rating', unit: '°C', decimals: 0, help: 'The column the terminal rule reads', about: "The terminals' temperature rating: the conductor's ampacity in this column of the THHN table, uncorrected, must cover the design current and the breaker (NEC 110.14(C); verify the PEC 2017 equivalent). 75 °C for the breakers in use; the app holds 60, 75 and 90 °C columns for THHN and none for the PV and battery cables, whose rows say so." },
+  'derating.terminal_rule_source': { label: 'Terminal rule: source', help: 'Printed on the design analysis sheet', wide: true },
+  'derating.terminal_rule_verified': { label: 'Terminal rule confirmed', help: 'Tick once checked against the PEC' },
+  'derating.default_insulation_c': { label: 'Insulation rating when not on the item', unit: '°C', decimals: 0, help: 'Assumption: THHN and PV wire are 90 °C', about: 'An assumption for a wire item without an insulation rating typed on it (Materials page): THHN and PV wire are 90 °C types. The sheet prints "insulation assumed 90 °C" beside every pass that used it; verify the items and type their ratings.' },
+  'derating.inverter_fault_factor': { label: 'Inverter fault contribution', unit: '× rated A', decimals: 1, help: 'Assumption; one cycle', about: "An assumption for an inverter without a maximum output fault current on its item: a grid-interactive inverter is current-limited to about this many times its rated output current for one cycle. The short-circuit note prints it as an assumption until the maker's figure is typed (Materials page)." },
+  // round 13: the grounding conductor sizes the design analysis checks
+  'grounding.egc_by_ocpd': { label: 'EGC by breaker rating', unit: 'mm²', keyLabel: 'Breaker up to', keyUnit: 'A', decimals: 1, help: 'The smallest rating at or above the breaker; verify', about: "The equipment grounding conductor size by the circuit's overcurrent device rating: the row is the smallest rating at or above the breaker. A cited stand-in: the NEC 250.122 table (copper: 15 A 14 AWG, 20 A 12, 30 to 60 A 10, 100 A 8, 200 A 6, 300 A 4, 400 A 3) on the PEC's metric series. Verify against PEC 2017 Table 2.50.1.122." },
+  'grounding.egc_source': { label: 'EGC table: source', help: 'Printed on the design analysis sheet', wide: true },
+  'grounding.egc_verified': { label: 'EGC table confirmed', help: 'Tick once checked against the PEC' },
+  'grounding.gec_rod_max_mm2': { label: 'GEC to a rod, at most', unit: 'mm²', decimals: 0, help: 'NEC 250.66(A); verify', about: 'The grounding electrode conductor to a rod electrode need not be larger than this (NEC 250.66(A): 6 AWG, 14 mm² on the metric series). A cited stand-in; verify the PEC 2017 equivalent in Article 2.50. The sheet prints the grounding run\'s gauge beside it.' },
+  'grounding.gec_source': { label: 'GEC rule: source', help: 'Printed on the design analysis sheet', wide: true },
+  'grounding.gec_verified': { label: 'GEC rule confirmed', help: 'Tick once checked against the PEC' },
   // the items the generator uses: plain names; the key itself is shown in small print under the label
   'roles.rail': { label: 'Mounting rail', help: 'Two lines per row' },
   'roles.rail_length_m': { label: 'Rail length', unit: 'm' },
@@ -256,6 +295,8 @@ export const SECTION_NOTES: Record<string, string> = {
   roles: 'Each role names the materials-list code the generator uses for that item; change a code to swap the item. The size tables map a wire size in mm² to its code. Counts and patterns are the rules beside them.',
   categories: 'The markup tier and the wastage allowance for every item in a category, by the category name on the Materials page. A category that is not listed takes 30% markup and no wastage.',
   system_losses: 'The share of energy that gets through each stage after the panels; the four multiply.',
+  derating: 'The design analysis sheet derates every circuit from these: ampacity = the insulation rating\'s column × the temperature factor × the bundling factor, the breaker against it, the terminal rule, the conduit fill. Every table is a cited stand-in from the NEC edition the PEC follows; its source prints on the sheet with "verify" until you tick it confirmed. The temperatures and the raceway height are assumptions and print as such.',
+  grounding: 'The equipment grounding conductor each circuit needs by its breaker rating, and the most a grounding electrode conductor to a rod need be; cited stand-ins with their source and a verify flag, like the derating tables.',
 }
 /** A section printed as several blocks with their own headings, each holding the keys named; the rest follow unheaded. */
 export const SUBBLOCKS: Record<string, { title: string; keys: string[]; headed?: boolean }[]> = {

@@ -2132,3 +2132,79 @@ plans for the PEE, "Vicinity map and site plan" (`docs/audits/round-13/site.md` 
   step)". The sheet's scale is stated in the title block.
 - Nothing invented: no map is drawn that was not fetched or uploaded, no outline or position that was not typed; the
   Leaflet draw tools for the outlines stay a later step (the corners are typed on the Site plan card).
+## The design analysis sheet
+
+Round 13, 10 October 2026, item 2 of `docs/audits/round-13/engineer-brief.md` (section 2), built on step 1's circuits
+contract; `docs/audits/round-13/analysis.md` has what was built, the tables with their citations, every departure and
+the test count. The coordinator's three decisions govern it: the severities of 2.4 as the brief recommends; nothing
+invented (every NEC or PEC table value the brief marks "verify" is a settings table with its citation and a verify flag,
+printed with the flag; a check that needs a figure not on file reads "not checked" with the reason; the labelled
+assumptions print as assumptions); the DU's fault level from the service block the office types.
+
+- Where it runs. `pricing/design_analysis.analyse_design`, called by `job.price_assessment` right after `generate_boq`,
+  derates the seven `pricing.choices.circuits` records in place and writes `pricing.choices.design_analysis` (the
+  ambient and its source, the assumptions, the tables used with their sources and flags, the short-circuit note, the
+  GEC line, the rows not checked, the blocking codes). It runs on a project only: the website estimate has no plan set
+  and its BOQ is as generated, so `core/quick.py` is untouched and its pins hold. The BOM's lines and totals do not move.
+- The computation (brief 2.3). The ambient: outdoors (the string runs, a rooftop raceway) the higher of the setting
+  (35 °C, an assumption) and the project cell's typical-year air maximum ceiled, said which; indoors the setting (30 °C,
+  an assumption). The rooftop adder for a raceway on the roof from the band table at the settings' raceway height (25 mm,
+  an assumption: a conduit on the rails); the string home runs stay in free air under the array by the rule's placement,
+  so no row takes the adder today. F_temp = sqrt((T_insul − T_cond) / (T_insul − 30)), the formula the NEC permits in place
+  of its table (the table's figures sit in the test, within 0.01 of the formula at each band's top). F_fill from the
+  bundling bands by current-carrying conductors (the neutral counts, the EGC does not), applied on every row (1–3
+  conductors give 1.00). The base ampacity: THHN from the column of the item's insulation rating (60, 75 or 90 °C
+  tables; blank reads as the settings' 90 °C, said as an assumption); PV wire and battery cable from the maker's
+  ampacity typed on the item, else the wiring rules' cable table as the base at 90 °C with "the cable's rating: verify".
+  The breaker against the derated figure, else the next standard size above it (the DC list for the strings, the AC list
+  for the AC circuits; no list for the battery breaker, which is picked from the catalogue's ratings, so the rule is not
+  applied there) when the rating is at or below 800 A and the conductor still carries the continuous current: "next size
+  up", still a pass. The terminal rule: the THHN 75 °C column, uncorrected, against the design current and the breaker;
+  the app holds no 75 °C column for the PV and battery cables, so their rows carry "verify the terminal rating" as a
+  qualifier rather than a check. The conduit fill from the new item fields `overall_area_mm2` (the wire) and
+  `inner_diameter_mm` (the raceway): each AC circuit's line, neutral and the grounding run in its own raceway by the
+  rule's placement, against 53 / 31 / 40 %; either field blank → "not checked" with the item named. The EGC per circuit by
+  the breaker rating (the smallest table rating at or above it) against the provided conductor (the grounding run on the
+  THHN line for the AC circuits, the array bonding item for the strings); the battery has no rack-EGC role, so its row
+  says "verify"; C7 carries the largest EGC the AC circuits need against the grounding run's gauge. The GEC line: the
+  grounding run's gauge to the rod against the rod maximum (14 mm²).
+- The short-circuit note. The utility's fault current from `service.fault_level_ka` ("BLANK kA (from {DU}; verify)" when
+  blank); the inverter's contribution from the new item field `fault_current_a`, else the labelled assumption 1.5 × the
+  rated output current for one cycle; the battery's from its `fault_current_a`, else "the BMS's short-circuit trip; verify
+  with the maker"; the breakers' interrupting ratings from `aic_ka` on the protective devices, compared with the DU's
+  figure when both are typed, "BLANK — the AIC is not on the breaker items; verify" until then.
+- The status of a row. "fail" when a check fails (the breaker check passes by the next size up); "not checked" when a
+  figure the office can type is missing (the conductor's area, the conduit's inside diameter, the panel's Isc for the
+  string breaker), with the reason naming the item; else "pass", qualified by every assumption used and every table still
+  to verify ("pass (ambient assumed 30 °C; THHN columns: verify; EGC table: verify)"), so a pass never stands on an
+  assumption alone. A table or role the app does not hold at all (the cable's 75 °C column, the battery-rack EGC) is a
+  "verify" qualifier, not a "not checked": the brief's hand-worked PV and battery rows pass.
+- The warnings and their severity (2.4, the coordinator's decision a): `conductor_derated` and `terminal_ampacity` are
+  hard and block the customer documents like the round-3 AC coordination (the breaker does not protect the conductor at
+  temperature; the terminals are rated below the load); `conduit_fill` and `egc_undersized` are hard and print without
+  blocking (the fix is a larger conduit or a role change, pesos); `derating_not_checked` (one per job, naming the rows
+  and the figures to type) and `fault_level_unknown` (until the DU's figure and the AIC are typed) are ordinary.
+- The settings (Pricing settings › Design analysis, and the two THHN columns under Wiring rules), every value a cited
+  stand-in from the NEC edition the PEC follows: `wiring.thhn_ampacity_75c` and `_90c` (NEC 2014 Table 310.15(B)(16)
+  copper on the 60 °C table's size mapping; PEC 2017 Table 3.10.1.16), `derating.rooftop_adder_c` (Table 310.15(B)(3)(c)
+  by height; the 2017 edition keeps only +33 °C under 22 mm, and 6.3 asks the PEE which the PEC adopted: a single band
+  "0: 33" is the 2017-style adder), the temperature-correction formula's citation (310.15(B)(2)), `bundling_factor_pct`
+  (310.15(B)(3)(a)), `conduit_fill_limit_pct` (Chapter 9 Table 1; PEC Chapter 10), `next_size_up_max_a` (240.4(B); PEC
+  2.40), `terminal_rating_c` (110.14(C)), `grounding.egc_by_ocpd` (250.122 on the PEC's metric series; PEC Table
+  2.50.1.122), `grounding.gec_rod_max_mm2` (250.66(A); PEC 2.50). Each carries a `_source` line and a `_verified` flag,
+  off by default; the sheet prints the source with "VERIFY" until the owner or the PEE ticks it, then "confirmed in
+  Settings". The assumptions beside them: the two ambients, the raceway height, the 90 °C default insulation, the 1.5 ×
+  inverter fault factor. Every value is in `settings_version`, so a change flags the quoted jobs.
+- The item fields (the Materials page, beside the electrical ones; kept on a materials re-import; added to an older
+  database at start-up): `overall_area_mm2`, `insulation_c` and `ampacity_a` on the wires, `inner_diameter_mm` on the
+  raceways, `fault_current_a` on inverters and batteries, `aic_ka` on the protective devices. All optional; a blank
+  prints "not checked" with the reason or the labelled assumption, never a silent default.
+- The sheet (`reports/plans_analysis.py`, one hook in `plans_pdf.py` after the schedule sheets and before the last
+  sheet): one table, a row per circuit, the columns of 2.2 (the conductors with their insulation and item, the run, the
+  currents, the base ampacity and its column, the ambient with the adder and the placement, the two factors, the derated
+  and terminal figures, the breaker, the breaker check with the next-size-up answer, the drop, the conduit with its
+  inside diameter, the fill against its limit, the EGC required and provided, Pass); under it the short-circuit note and
+  the GEC, the tables used with their sources, values and flags, the assumptions, and how to read Pass. A figure the app
+  does not hold is a blank line with its reason. The schedule's four "to be completed" placeholders for derating,
+  conduit fill, the EGC and the GEC now point to the sheet; the cover's note 6 likewise; the last sheet keeps a
+  "Design analysis: rows not checked" entry naming the figures to type and drops it when every row is checked.

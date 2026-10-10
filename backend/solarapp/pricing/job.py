@@ -9,6 +9,7 @@ from ..schemas import AssessmentDoc, CandidatePanel
 from .boq import NO_ITEM_PREFIX, BoqRequest, RoofRow, generate_boq
 from .catalog import Catalog, Item
 from .config import PricingConfig
+from .design_analysis import analyse_design
 from .engine import BomLine, JobInputs, landed_cost, price_job
 
 
@@ -148,6 +149,13 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
     )
     boq = generate_boq(req, catalog, cfg_job)
     warnings += boq.warnings
+    # round 13 (item 2): the design analysis derates the circuit records in place, writes choices["design_analysis"] and adds
+    # its warnings (conductor_derated and terminal_ampacity block the documents below). A project only: the website estimate
+    # has no plan set and keeps its BOQ as generated.
+    analysis = analyse_design(boq.choices, boq.lines, catalog, cfg_job,
+                              inverter=catalog.get(str(boq.choices.get("inverter_code") or "")), battery=catalog.get(str(boq.choices.get("battery_code") or "")),
+                              units=int(boq.choices.get("inverter_units") or 1), tmy_max_air_c=site.get("tmy_max_air_c"), service=doc.service.model_dump())
+    warnings += analysis["warnings"]
     generated = [{"code": l.code, "qty": l.qty, "role": l.role, "note": l.note} for l in boq.lines]
     lines, edit_warnings = apply_edits(boq.lines, doc, catalog)
     warnings += edit_warnings

@@ -640,6 +640,13 @@ class MaterialItemIn(BaseModel):
     nominal_v: Optional[float] = Field(default=None, gt=0)
     capacity_ah: Optional[float] = Field(default=None, gt=0)
     discharge_a_recommended: Optional[float] = Field(default=None, gt=0)
+    # round 13: the design analysis's item figures (brief 2.3); every one optional, blank = not checked or the labelled assumption
+    overall_area_mm2: Optional[float] = Field(default=None, gt=0)
+    inner_diameter_mm: Optional[float] = Field(default=None, gt=0)
+    insulation_c: Optional[float] = Field(default=None, gt=0)
+    ampacity_a: Optional[float] = Field(default=None, gt=0)
+    fault_current_a: Optional[float] = Field(default=None, gt=0)
+    aic_ka: Optional[float] = Field(default=None, gt=0)
 
 
 class MaterialItemPatch(BaseModel):
@@ -689,6 +696,12 @@ class MaterialItemPatch(BaseModel):
     nominal_v: Optional[float] = Field(default=None, gt=0)
     capacity_ah: Optional[float] = Field(default=None, gt=0)
     discharge_a_recommended: Optional[float] = Field(default=None, gt=0)
+    overall_area_mm2: Optional[float] = Field(default=None, gt=0)
+    inner_diameter_mm: Optional[float] = Field(default=None, gt=0)
+    insulation_c: Optional[float] = Field(default=None, gt=0)
+    ampacity_a: Optional[float] = Field(default=None, gt=0)
+    fault_current_a: Optional[float] = Field(default=None, gt=0)
+    aic_ka: Optional[float] = Field(default=None, gt=0)
 
 
 class DatasheetLink(BaseModel):

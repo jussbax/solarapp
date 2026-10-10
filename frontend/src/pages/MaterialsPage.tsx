@@ -15,6 +15,7 @@ function blankItem(): ItemDraft {
     battery_max_a: null, has_transfer_switch: null, continuous_a: null, voc_v: null, vmp_v: null, isc_a: null, imp_a: null, temp_coeff_voc_pct: null, temp_coeff_isc_pct: null,
     max_system_voltage_v: null, inverter_type: '', phase: null, battery_class: '', charge_v_max: null, charge_a_max: null, mppt_currents_a: '', battery_inputs: null,
     nominal_v: null, capacity_ah: null, discharge_a_recommended: null,
+    overall_area_mm2: null, inner_diameter_mm: null, insulation_c: null, ampacity_a: null, fault_current_a: null, aic_ka: null,
   }
 }
 
@@ -132,6 +133,7 @@ function ElectricalFields({ it, set, info }: { it: ItemDraft; set: (p: Partial<I
         {num('battery_max_a', 'Battery discharge', 'A', 0, 140)}
         {num('charge_a_max', 'Max charge current', 'A', 0, 150)}
         {choice('battery_inputs', 'Battery inputs', [['', 'One'], ['1', 'One'], ['2', 'Two']], 120)}
+        {num('fault_current_a', 'Max output fault current', 'A', 1, 170)}
         <Field label="Grid-interactive" width={200}>
           <select
             value={it.grid_interactive === true ? 'yes' : it.grid_interactive === false ? 'no' : ''}
@@ -173,9 +175,48 @@ function ElectricalFields({ it, set, info }: { it: ItemDraft; set: (p: Partial<I
         {num('discharge_a_recommended', 'Recommended discharge', 'A', 0, 170)}
         {num('charge_a_max', 'Max charge current', 'A', 0, 150)}
         {num('charge_v_max', 'Max charge voltage', 'V', 1, 150)}
+        {num('fault_current_a', 'Short-circuit trip (BMS)', 'A', 0, 160)}
         <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>
           The maximum discharge is the BMS limit the hard bank check reads against the inverter's battery current; the recommended rate is a soft check; the charge
           current says what to set on the inverter; the class and the ceiling are matched against the inverter's port; V × Ah is checked against the kWh rating.
+          The BMS's short-circuit trip is the battery's fault contribution on the plans' short-circuit note (blank = "verify with the maker").
+        </div>
+      </div>
+    )
+  }
+  // round 13 (docs/audits/round-13/engineer-brief.md, 2.3): the figures the plans' design analysis sheet reads from the wires, the raceways and the breakers;
+  // a blank prints "not checked" with the reason on the sheet, never a silent default
+  if (it.category === 'Wires and Terminations') {
+    return (
+      <div className="row" style={{ marginTop: 6 }}>
+        {num('overall_area_mm2', 'Overall area (insulated)', 'mm²', 2, 170)}
+        {num('insulation_c', 'Insulation rating', '°C', 0, 140)}
+        {num('ampacity_a', "Maker's ampacity", 'A', 0, 140)}
+        <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>
+          For the design analysis sheet: the insulated conductor's cross-section (the PEC table or the maker's sheet) gives the conduit fill; the insulation rating
+          picks the ampacity column (blank reads as the settings' 90 °C, said as an assumption); the maker's ampacity replaces the wiring rules' table figure for a
+          PV or battery cable (blank prints "verify the cable's rating").
+        </div>
+      </div>
+    )
+  }
+  if (it.category === 'Enclosures and Raceways') {
+    return (
+      <div className="row" style={{ marginTop: 6 }}>
+        {num('inner_diameter_mm', 'Inside diameter (conduit)', 'mm', 1, 180)}
+        <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>
+          For a conduit: the inside diameter the design analysis sheet fills against the conductors' areas; blank prints "fill: not checked".
+        </div>
+      </div>
+    )
+  }
+  if (it.category === 'Protective Devices') {
+    return (
+      <div className="row" style={{ marginTop: 6 }}>
+        {num('aic_ka', 'Interrupting rating (AIC)', 'kA', 1, 170)}
+        <div className="muted" style={{ flexBasis: '100%', fontSize: 12 }}>
+          The breaker's interrupting rating; the design analysis sheet compares it with the DU's available fault current typed on the Site step (blank prints a
+          blank line with "verify").
         </div>
       </div>
     )
@@ -258,6 +299,16 @@ function electricalSummary(it: MaterialItem, info?: DatasheetItemInfo | null): R
         {over}
       </>
     )
+  }
+  // round 13: the design analysis's figures on the wires, the raceways and the breakers
+  if (it.category === 'Wires and Terminations' || it.category === 'Enclosures and Raceways' || it.category === 'Protective Devices') {
+    const parts = []
+    if (it.overall_area_mm2) parts.push(`${it.overall_area_mm2} mm² overall`)
+    if (it.insulation_c) parts.push(`${it.insulation_c} °C`)
+    if (it.ampacity_a) parts.push(`${it.ampacity_a} A`)
+    if (it.inner_diameter_mm) parts.push(`inside Ø ${it.inner_diameter_mm} mm`)
+    if (it.aic_ka) parts.push(`${it.aic_ka} kA AIC`)
+    return parts.length ? <span className="muted" style={{ fontSize: 11 }}>{parts.join(' · ')}</span> : null
   }
   return it.category === 'All-in-one System' ? badge : ''
 }

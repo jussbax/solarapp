@@ -95,11 +95,18 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    inverter, battery, POI and meter points; `SOLARAPP_MAP_TILES_URL` swaps
    the tile provider), one array layout per roof face at a
    stated standard scale with dimension lines, strings and a north arrow,
-   the equipment and circuit schedule from the BOM, and a last sheet that
+   the equipment and circuit schedule from the BOM, the design analysis
+   (each circuit derated for its ambient, a rooftop raceway and bundling,
+   the breaker against the derated ampacity with the next-size-up rule,
+   the terminal rule, the conduit fill from the items' areas and inside
+   diameters, the grounding conductor sizes, the short-circuit note: pass,
+   fail or "not checked" with the reason, every assumption named beside a
+   pass, every table a cited stand-in with its source and a verify flag
+   under Settings › Design analysis), and a last sheet that
    says what still waits on the datasheets (the single-line diagram, the
    string table) with the audit's schedule of loads. The BOQ also writes
    the per-circuit records (`pricing.choices.circuits`) the single-line
-   diagram and the design analysis will read, and the Site step holds the
+   diagram and the design analysis read, and the Site step holds the
    survey record they need: the service entrance (the DU, the existing
    panelboard, its main breaker and busbar, the point of interconnection),
    the roof construction per face and the site plan's points and outlines
