@@ -21,6 +21,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .caching import cache_control_for
+
 from .config import Settings, get_settings
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -64,8 +66,9 @@ def create_public_app(settings: Optional[Settings] = None, transport: Optional[h
         response = await call_next(request)
         response.headers.setdefault("Content-Security-Policy", CSP)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        if request.url.path.startswith("/widget/"):
-            response.headers.setdefault("Cache-Control", "no-cache")   # the estimate widget: revalidate, so a redeploy shows at once
+        cache = cache_control_for(request.url.path, request.url.query)   # stamped assets kept, pages revalidated, so a redeploy shows at once
+        if cache:
+            response.headers["Cache-Control"] = cache
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("Permissions-Policy", "geolocation=(self), camera=(), microphone=(), payment=()")
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
@@ -144,10 +147,10 @@ def create_public_app(settings: Optional[Settings] = None, transport: Optional[h
             return FileResponse(candidate, media_type="text/html", headers={"Cache-Control": "no-cache"})
         asset = (site / clean).resolve() if clean else None
         if asset and asset.is_file() and site_root in asset.parents:
-            return FileResponse(asset)
+            return FileResponse(asset, headers={"Cache-Control": "no-cache"})
         not_found = site / "404.html"
         if not_found.is_file():
-            return FileResponse(not_found, status_code=404, media_type="text/html")
+            return FileResponse(not_found, status_code=404, media_type="text/html", headers={"Cache-Control": "no-cache"})
         return JSONResponse({"detail": "Not found"}, status_code=404)
 
     app.state.client = client

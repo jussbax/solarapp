@@ -101,7 +101,14 @@ it; a wrong answer counts as a failed login.
    requests per minute per IP, block for 10 minutes; `solar.pldevinc.com`
    path equals `/api/auth/login`, 10 per minute per IP.
 5. Redirect rule: `www.pldevinc.com/*` to `https://pldevinc.com/$1`, so one
-   hostname carries the visitor tokens and the ads.
+   hostname carries the visitor tokens and the ads. Both DNS records
+   (`pldevinc.com` and `www`) point at the website tunnel and are proxied
+   (the orange cloud); without the rule the two hostnames are two separate
+   caches and can show two versions of the site.
+5a. Caching: Browser Cache TTL "Respect Existing Headers"; no cache rule
+   that caches everything (the pages must stay uncached so a redeploy
+   shows at once; the origin's own headers keep the stamped assets). Purge
+   Everything once after the deploy that introduced the stamps.
 6. Access (optional, a second lock in front of the app's own two-factor
    login): Zero Trust › Access › Applications › add a self-hosted
    application for `solar.pldevinc.com`, policy "allow" with your e-mail

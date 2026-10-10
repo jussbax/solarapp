@@ -20,10 +20,16 @@ never shows the punctuation around an empty profile field before the fetch answe
 Blocks between ``<!-- placeholder:start -->`` and ``<!-- placeholder:end -->``
 are placeholders for photos that do not exist yet; the public build drops
 them so a visitor never reads "replace this card with a real photo".
+
+The stylesheet, the site script and the estimate widget's script are referenced with a content stamp
+(``/static/site.css?v=1a2b3c4d``): a new build changes the stamp, so a browser or a CDN that kept the old file
+fetches the new one under its new address, while the pages themselves are always revalidated (see
+``solarapp/caching.py``).
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import shutil
 from pathlib import Path
@@ -35,6 +41,25 @@ STATIC = HERE / "static"
 LAYOUT = HERE / "layout.html"
 BRAND = ROOT / "frontend" / "public" / "brand"
 ICONS = ROOT / "frontend" / "public"
+WIDGET = ROOT / "frontend" / "dist" / "widget"
+
+STAMPABLE = re.compile(r'\b(src|href)="(/static/[^"?#]+\.(?:css|js)|/widget/[^"?#]+\.js)"')
+
+
+def stamp(html: str, out: Path) -> str:
+    """Append ``?v=<content stamp>`` to the stylesheet, the site script and the widget script the page references.
+
+    The stamp is the first eight hex digits of the file's SHA-1, read from the built folder (``/static/...``) or from
+    the frontend build (``/widget/...``); a reference to a file that is not there (the widget before ``npm run build``)
+    is left as it is, and the server revalidates it on every visit instead."""
+    def fix(m: re.Match) -> str:
+        attr, url = m.group(1), m.group(2)
+        file = (out / url.lstrip("/")) if url.startswith("/static/") else (WIDGET / url[len("/widget/"):])
+        if not file.is_file():
+            return m.group(0)
+        digest = hashlib.sha1(file.read_bytes()).hexdigest()[:8]
+        return f'{attr}="{url}?v={digest}"'
+    return STAMPABLE.sub(fix, html)
 
 META = re.compile(r"<!--\s*(\w+):\s*(.*?)\s*-->")
 HIDE_IF_EMPTY = re.compile(r"<(\w+)([^>]*\bdata-profile-hide-if-empty\b[^>]*)>")
@@ -94,7 +119,7 @@ def build(out: Path, base_url: str = "", with_placeholders: bool = False) -> lis
             shutil.copy(ICONS / name, out / name)
     built = []
     for page in sorted(PAGES.glob("*.html")):
-        html = render_page(layout, page, base_url=base_url, with_placeholders=with_placeholders)
+        html = stamp(render_page(layout, page, base_url=base_url, with_placeholders=with_placeholders), out)
         target = out / ("index.html" if page.stem == "index" else f"{page.stem}.html")
         target.write_text(html, encoding="utf-8")
         built.append(target.name)

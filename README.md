@@ -118,7 +118,13 @@ profile, and gives the pages their motion: sections that come in as they
 scroll into view, the proof figures that count up, the phone's sticky
 call to action, all off under reduced motion and absent with JavaScript
 off). `python site/build.py` writes it to `site/dist/`; the Docker build
-does this. Build with `--base-url https://pldevinc.com` for absolute share-image and page addresses (Facebook needs them), and with `--with-placeholders` to keep the photo placeholder blocks, which the public build drops.
+does this. The build stamps the stylesheet, the site script and the
+widget script with their content (`/static/site.css?v=…`), and the public
+process sends the pages with `Cache-Control: no-cache` and stamped
+assets with a year's `immutable`, so a redeploy shows on the next visit
+on every phone and desktop, through Cloudflare included. After the first
+deploy that carries this, purge Cloudflare's cache once (Caching ›
+Configuration › Purge Everything); from then on nothing stale can stick. Build with `--base-url https://pldevinc.com` for absolute share-image and page addresses (Facebook needs them), and with `--with-placeholders` to keep the photo placeholder blocks, which the public build drops.
 Contact details, the owner, the
 PEE, warranties, brands and the service area are filled in at page load
 from the company profile under Settings, so the pages never need editing

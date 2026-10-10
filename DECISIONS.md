@@ -1802,3 +1802,26 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   flow runs. Under reduced motion the scene is one still frame at noon with the readout for that hour.
 - The hourly caption is no longer a live region: a screen reader announced it every second. The SVG's `role="img"`
   label describes the day once; the readout stays visible text.
+
+## A redeploy shows at once: stamped assets, revalidated pages
+
+- The owner (10 October): "check why even after updating the website, the old one still appears on a desktop or a
+  phone, we need to make sure that regardless if it is www.pldevinc.com or pldevinc.com we show only the latest
+  version of the website." The cause, in the code: the pages went out with `Cache-Control: no-cache`, but the
+  stylesheet, the site script, the photos, the fonts and the widget script went out with no cache instruction at
+  all, so a browser kept them by its own heuristic (a share of the time since the file's date, days for files that
+  rarely change) and Cloudflare kept them at its edge by file extension. A new page then rendered with the old
+  stylesheet and script, and the old estimate form kept appearing under a new page.
+- `site/build.py` now stamps the stylesheet, the site script and the widget script with their content
+  (`/static/site.css?v=77c6a36d`, the first eight hex digits of the file's SHA-1; the widget's stamp comes from
+  `frontend/dist/widget/quick.js`, which the Docker build has made by then). A new build changes the stamp, so a
+  kept copy is never asked for again. The fonts keep their plain address (the stylesheet names them without a
+  stamp, so the preload and the CSS agree).
+- `solarapp/caching.py` is the one policy for both processes: a stamped address under `/static/`, `/widget/` or
+  Vite's `/assets/` is kept for a year (`immutable`); fonts, photos and brand marks for a day; any other static
+  address is revalidated on every visit (`no-cache`, answered by a 304 when unchanged); the pages and the 404 are
+  always revalidated. The two security-header middlewares apply it.
+- The hostnames: the Cloudflare notes in `docs/security.md` already ask for the `www` → apex redirect rule; the
+  note now adds why (two proxied hostnames are two caches) and the caching settings (Browser Cache TTL "Respect
+  Existing Headers", no cache-everything rule, one Purge Everything after the deploy that introduces the stamps).
+  The live site could not be read from the sandbox, so the Cloudflare side is the owner's to check.
