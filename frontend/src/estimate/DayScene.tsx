@@ -1,37 +1,50 @@
 // The estimate's day scene: the house, its panels, the inverter, the battery and the grid, built up piece by piece,
-// then a typical day two seconds an hour (48 seconds a day, looping) with the sun's arc, the moon, and dots carrying
+// then a typical day one second an hour (24 seconds a day, looping) with the sun's arc, the moon, and dots carrying
 // the power between the panels, the house, the battery and the grid. Every figure is the variant's own typical_day
 // row; the captions follow the figures, not the clock. Nothing but React; the styles live in estimate.css under
-// "the day scene".
+// "the day scene". No controls: the animation runs on its own, pauses off-screen and in a hidden tab, and under
+// prefers-reduced-motion (or autoplay={false}) it is one still frame at noon.
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { TypicalHour, Variant } from './types'
 
 const GOLD = '#C9A227'
-const WHITE = '#ffffff'
 const HORIZON = 380            // the ground line, viewBox units
 const LIFT = 50                // the house and its ground sit this far below their drawing coordinates (one translated group)
 const START_HOUR = 6           // the day runs 06:00 to 05:59
-const HOUR_SECONDS = 2         // two seconds an hour, 48 seconds a day
-const SPEED = 130              // a dot's travel, viewBox units per second
+const HOUR_SECONDS = 1         // one second an hour, 24 seconds a day
+const SPEED = 140              // a dot's travel, viewBox units per second: one steady speed on every path
 const POOL = 60                // dots in the DOM at most; they are recycled
 const MIN_KW = 0.05            // under this a flow shows nothing
 const KW_PER_DOT = 0.4         // one dot a second per 0.4 kW ...
 const MAX_RATE = 8             // ... at most eight a second per path
 const PANELS_FROM = 1.1        // the build-up's clock, seconds
 const PANELS_TO = 3.5
+const SOURCE = { x: 290, y: 208 }   // where the solar stream starts: the middle of the array's bottom edge
 
 type Flow = 'prod' | 'house' | 'charge' | 'discharge' | 'export' | 'import'
 const FLOWS: Flow[] = ['prod', 'house', 'charge', 'discharge', 'export', 'import']
-/** The wiring: panels → inverter, inverter → house, inverter ↔ battery, inverter → meter → pole, pole → meter → inverter → house. */
+/** The wiring. Solar: from the array, along the wall under the eave, down into the inverter's top; from the inverter's
+ * side, down the wall beside the window and along it under the windows into the door. Battery: the inverter's bottom.
+ * Grid: the inverter's right side to the meter and up the service drop to the pole, and back the same way on through
+ * the inverter into the house. */
 const PATH_D: Record<Flow, string> = {
-  prod: 'M 330 208 H 417 V 236',
+  prod: `M ${SOURCE.x} ${SOURCE.y - 2} V 221 H 417 V 236`,
   house: 'M 417 272 H 388 V 302 H 270',
   charge: 'M 417 284 V 306 H 482',
   discharge: 'M 482 306 H 417 V 284',
   export: 'M 434 260 H 596 V 240 L 672 174',
   import: 'M 672 174 L 596 240 V 260 H 417 V 272 H 388 V 302 H 270',
 }
-const FLOW_COLOR: Record<Flow, string> = { prod: GOLD, house: GOLD, charge: GOLD, discharge: GOLD, export: WHITE, import: WHITE }
+/** The dots: the sun's power large and bright gold, the battery's gold, the grid's white. */
+const FLOW_DOT: Record<Flow, { cls: string; r: number }> = {
+  prod: { cls: 'pld-scene-dot-sun', r: 5.5 },
+  house: { cls: 'pld-scene-dot-sun', r: 5.5 },
+  charge: { cls: 'pld-scene-dot-gold', r: 4 },
+  discharge: { cls: 'pld-scene-dot-gold', r: 4 },
+  export: { cls: 'pld-scene-dot-grid', r: 4 },
+  import: { cls: 'pld-scene-dot-grid', r: 4 },
+}
+const DASH_COLOR: Record<Flow, string> = { prod: '#ffd54f', house: '#ffd54f', charge: GOLD, discharge: GOLD, export: '#ffffff', import: '#ffffff' }
 
 const ZERO: TypicalHour = { hour: 0, load_kw: 0, production_kw: 0, direct_kw: 0, charge_kw: 0, discharge_kw: 0, soc_kwh: 0, export_kw: 0, import_kw: 0 }
 const STARS: [number, number, number][] = [
@@ -47,7 +60,8 @@ const mix = (a: RGB, b: RGB, w: number): RGB => [a[0] + (b[0] - a[0]) * w, a[1] 
 const lerp = (a: number, b: number, w: number) => a + (b - a) * w
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 
-/** The sky by the sun's height k: -1 deep night, 0 the horizon (dawn and dusk), 1 noon. Interpolated, so nothing is sudden. */
+/** The sky by the sun's height k: -1 deep night, 0 the horizon (dawn and dusk), 1 noon. k is a continuous function of the
+ * time, and the colours are interpolated between these stops, so the sky eases through every hour and never steps. */
 const SKY: { k: number; top: RGB; bot: RGB; ground: RGB }[] = [
   { k: -1, top: rgb('#070b16'), bot: rgb('#141a2b'), ground: rgb('#121210') },
   { k: -0.35, top: rgb('#141a33'), bot: rgb('#3b3452'), ground: rgb('#151512') },
@@ -189,7 +203,7 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
 
   const [reduced, setReduced] = useState(prefersReduced)
   const isStatic = reduced || !autoplay
-  const [playing, setPlaying] = useState(!isStatic)
+  const running = !isStatic   // the loop runs on its own; a still noon frame otherwise
   const [phase, setPhase] = useState<Phase>(isStatic ? 'day' : 'build')
   const [step, setStep] = useState(isStatic ? 6 : 0)
   const [panelsShown, setPanelsShown] = useState(isStatic ? sys.panels : 0)
@@ -230,7 +244,7 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
       dotsRef.current[i].flow = -1
       dotEls.current[i]?.setAttribute('opacity', '0')
     }
-    accRef.current.fill(0.9)   // nearly due, so an active flow shows its first dot right after a start or a jump
+    accRef.current.fill(0.9)   // nearly due, so an active flow shows its first dot right after a start
   }
 
   /** Paints the sky, the sun or the moon, the battery's level and (while running) the dots for the time T, in hours from 6 to 30. */
@@ -257,10 +271,11 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
     if (sunU >= 0) {
       const p = arc(sunU)
       const warm = clamp01(Math.sin(Math.PI * sunU) * 2.2)
+      const show = clamp01(Math.min(sunU, 1 - sunU) / 0.04)   // eased in and out at the horizon, so it never pops
       for (const el of [sunGlow.current, sunDisc.current]) {
         el?.setAttribute('cx', p.x.toFixed(1))
         el?.setAttribute('cy', p.y.toFixed(1))
-        el?.setAttribute('opacity', '1')
+        el?.setAttribute('opacity', show.toFixed(2))
       }
       sunDisc.current?.setAttribute('fill', css(mix(SUN_LOW, SUN_HIGH, warm)))
     } else {
@@ -288,7 +303,7 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
       battFill.current.setAttribute('height', hgt.toFixed(1))
     }
     if (!withDots || dt <= 0) return
-    // the flows at T: the row's figure sits at the middle of its hour, interpolated to the neighbours
+    // the flows at T: the row's figure sits at the middle of its hour and eases to the neighbours, so the stream never jumps
     const h = Math.floor(t24) % 24, frac = t24 - Math.floor(t24)
     const a = frac < 0.5 ? day[(h + 23) % 24] : day[h]
     const b = frac < 0.5 ? day[h] : day[(h + 1) % 24]
@@ -313,7 +328,9 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
         }
         dots[free].flow = f
         dots[free].s = 0
-        dotEls.current[free]?.setAttribute('fill', FLOW_COLOR[FLOWS[f]])
+        const look = FLOW_DOT[FLOWS[f]]
+        dotEls.current[free]?.setAttribute('class', look.cls)
+        dotEls.current[free]?.setAttribute('r', String(look.r))
       }
     }
     for (let i = 0; i < POOL; i++) {
@@ -339,7 +356,7 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
     return s
   }
   const panelsAt = (t: number, s: number) => (s < 2 ? 0 : s > 2 ? sys.panels : Math.max(1, Math.min(sys.panels, 1 + Math.floor(((t - PANELS_FROM) / (PANELS_TO - PANELS_FROM)) * sys.panels))))
-  // the frame loop and the handlers read the latest of these through one ref, refreshed after every render
+  // the frame loop reads the latest of these through one ref, refreshed after every render
   const latest = useRef({ paint, marks, stepAt, panelsAt })
   useEffect(() => {
     latest.current = { paint, marks, stepAt, panelsAt }
@@ -354,9 +371,9 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
     return () => mq.removeEventListener?.('change', onChange)
   }, [])
 
-  // the animation loop: requestAnimationFrame only, off while paused, off-screen or in a hidden tab
+  // the animation loop: requestAnimationFrame only, off while off-screen or in a hidden tab, and on again after
   useEffect(() => {
-    if (!playing) return
+    if (!running) return
     const root = rootRef.current
     let raf = 0
     let visible = true
@@ -428,44 +445,14 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
       io?.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [playing, variant])
+  }, [running, variant])
 
-  // paused or static: the scene still shows its hour, and follows a change of variant
+  // the still frame: noon, every piece drawn, and it follows a change of variant
   useEffect(() => {
-    if (playing) return
+    if (running) return
     clearDots()
     latest.current.paint(timeRef.current, 0, 0, false)
-  }, [playing, variant, hour])
-
-  const jumpTo = (h: number) => {
-    const T = h < START_HOUR ? h + 24 : h
-    timeRef.current = T
-    phaseRef.current = 'day'
-    setPhase('day')
-    stepRef.current = 6
-    setStep(6)
-    panelsRef.current = sys.panels
-    setPanelsShown(sys.panels)
-    hourRef.current = h
-    setHour(h)
-    setPlaying(false)
-    clearDots()
-    latest.current.paint(T, 0, 0, false)
-  }
-  const replay = () => {
-    phaseRef.current = 'build'
-    setPhase('build')
-    buildTRef.current = 0
-    stepRef.current = 0
-    setStep(0)
-    panelsRef.current = 0
-    setPanelsShown(0)
-    timeRef.current = START_HOUR
-    hourRef.current = START_HOUR
-    setHour(START_HOUR)
-    clearDots()
-    setPlaying(true)
-  }
+  }, [running, variant])
 
   const row = day[hour]
   const parts = readout(row)
@@ -480,10 +467,13 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
     `${sys.panels} panels (${trim(sys.kwp)} kWp) on the roof, a ${trim(sys.inverter_kw)} kW inverter` +
     (hasBattery ? `, a ${trim(sys.battery_kwh)} kWh battery` : '') +
     ` and the meter with ${gridLabel}: a typical day, the sun up from ${clock(sun.rise)} to ${clock(sun.set % 24)}, the power flowing between the panels, the house${hasBattery ? ', the battery' : ''} and the grid.`
+  const live = (f: Flow) => !building && flowOf(row, f) >= MIN_KW
   const dashOpacity = (f: Flow) => {
     const v = flowOf(row, f)
     return v < MIN_KW ? 0 : 0.35 + 0.65 * clamp01(v / 3)
   }
+  const sunOn = live('prod')
+  const pulseLevel = 0.55 + 0.45 * clamp01(row.production_kw / 3)
   const on = (yes: boolean) => (yes ? ' on' : '')
 
   return (
@@ -550,7 +540,7 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
             <rect x="160" y="244" width="56" height="44" fill="#3a3a40" stroke="#5b4a33" strokeWidth="1.5" />
             <rect x="318" y="244" width="56" height="44" fill="#3a3a40" stroke="#5b4a33" strokeWidth="1.5" />
           </g>
-          <g className="pld-scene-panels">
+          <g className={'pld-scene-panels' + on(sunOn)}>
             {polys.map((pts, i) => (
               <g key={i} className={'pld-scene-panel' + on(i < panelsShown)}>
                 <polygon points={pts} />
@@ -558,10 +548,10 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
             ))}
           </g>
 
-          {/* the inverter on the wall, the battery beside the house */}
+          {/* the inverter on the wall with the solar conduits, the battery beside the house */}
           <g className={'pld-scene-piece' + on(step >= 3)}>
-            <path d={PATH_D.prod} className="pld-scene-wire" />
-            <path d={PATH_D.house} className="pld-scene-wire" />
+            <path d={PATH_D.prod} className="pld-scene-duct" />
+            <path d={PATH_D.house} className="pld-scene-duct" />
             <rect x="400" y="236" width="34" height="48" rx="3" fill="#2a2a2e" stroke="#9a9a92" strokeWidth="1" />
             <rect x="407" y="244" width="20" height="10" rx="1" fill="#44484f" />
             <line x1="407" y1="260" x2="427" y2="260" stroke="#55555c" strokeWidth="1" />
@@ -590,22 +580,30 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
             <path d="M 188 245 V 287 M 161 266 H 215 M 346 245 V 287 M 319 266 H 373" stroke="#5b4a33" strokeWidth="1.5" fill="none" />
           </g>
 
+          {/* the source: a soft gold pulse where the solar stream leaves the array, while the panels produce */}
+          <circle className={'pld-scene-pulse' + on(sunOn)} cx={SOURCE.x} cy={SOURCE.y} r="22" fill={`url(#${glowId})`} style={{ opacity: sunOn ? pulseLevel : 0 }} />
+
           {/* the wiring measured for the dots (the two reversed runs are invisible), the still dashes, the dots */}
           <g opacity="0">
             {FLOWS.map((f, i) => (
               <path key={f} d={PATH_D[f]} fill="none" stroke="none" ref={(el) => { pathEls.current[i] = el }} />
             ))}
           </g>
-          <g className={'pld-scene-dashes' + on(!playing && step >= 6)}>
+          <g className={'pld-scene-dashes' + on(!running && step >= 6)}>
             {FLOWS.map((f) => (
-              <path key={f} d={PATH_D[f]} className="pld-scene-dash" stroke={FLOW_COLOR[f]} style={{ opacity: dashOpacity(f) }} />
+              <path key={f} d={PATH_D[f]} className="pld-scene-dash" stroke={DASH_COLOR[f]} style={{ opacity: dashOpacity(f) }} />
             ))}
           </g>
-          <g className={'pld-scene-dots' + on(playing)}>
+          <g className={'pld-scene-dots' + on(running)}>
             {Array.from({ length: POOL }, (_, i) => (
-              <circle key={i} r="4" opacity="0" fill={GOLD} ref={(el) => { dotEls.current[i] = el }} />
+              <circle key={i} r="4" opacity="0" ref={(el) => { dotEls.current[i] = el }} />
             ))}
           </g>
+
+          {/* the flow's words at the path ends, fading with the flow (the readout carries them on a phone) */}
+          <text className={'pld-scene-flow' + on(sunOn)} x={SOURCE.x} y="237" textAnchor="middle" fill="#3a3028">from the panels</text>
+          <text className={'pld-scene-flow' + on(live('house') || live('import'))} x="238" y="318" textAnchor="end" fill="#3a3028">to the house</text>
+          <text className={'pld-scene-flow' + on(live('export') || live('import'))} x="650" y="374" textAnchor="middle" fill="#d8d8d2">{live('import') && !live('export') ? 'from the grid' : 'to the grid'}</text>
 
           {/* labels (the chips under the scene carry them on a phone) */}
           <g className={'pld-scene-counter' + on(building && step >= 2)}>
@@ -649,31 +647,6 @@ export default function DayScene({ variant, autoplay = true }: { variant: Varian
         <span className={'pld-scene-chip' + on(step >= 3)}><b>{trim(sys.inverter_kw)} kW</b> inverter</span>
         {hasBattery && <span className={'pld-scene-chip' + on(step >= 4)}><b>{trim(sys.battery_kwh)} kWh</b> battery</span>}
         <span className={'pld-scene-chip' + on(step >= 5)}>{gridLabel}</span>
-      </div>
-      <div className="pld-scene-ctl">
-        <button type="button" className="pld-scene-btn" onClick={() => setPlaying((p) => !p)} aria-label={playing ? 'Pause the day' : 'Play the day'} aria-pressed={playing}>
-          {playing ? (
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2" width="4" height="12" rx="1" fill="currentColor" /><rect x="9.5" y="2" width="4" height="12" rx="1" fill="currentColor" /></svg>
-          ) : (
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M 4 2.5 L 13.5 8 L 4 13.5 Z" fill="currentColor" /></svg>
-          )}
-        </button>
-        <input
-          type="range"
-          className="pld-scene-range"
-          min={0}
-          max={23}
-          step={1}
-          value={hour}
-          onChange={(ev) => jumpTo(Number(ev.target.value))}
-          aria-label="Hour of the day"
-          aria-valuetext={clock(hour)}
-        />
-        {!isStatic && (
-          <button type="button" className="pld-scene-btn pld-scene-replay" onClick={replay} aria-label="Replay the build-up">
-            Replay
-          </button>
-        )}
       </div>
     </div>
   )

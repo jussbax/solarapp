@@ -92,15 +92,20 @@
 
 /* the day scene */
 /* The dark panel matches the result hero. Text on it: #b8b8b2 labels, #d8d8d2 text, white figures, gold chips; all 4.5:1 or better.
-   Motion: the build-up's arrivals are CSS animations keyed off an "on" class; the sun, the sky and the dots run on requestAnimationFrame
-   inside the component. Under prefers-reduced-motion nothing animates, and the component shows a still hour. */
+   Motion: the build-up's arrivals, the source's pulse and the panels' sunlit sheen are CSS animations keyed off an "on" class; the sun,
+   the sky and the dots run on requestAnimationFrame inside the component, one second an hour, with no controls. Under
+   prefers-reduced-motion nothing animates, and the component shows one still frame at noon. */
 .pld-scene { background: var(--pld-ink); color: #d8d8d2; border-radius: 14px; padding: 14px; margin: 6px 0 14px; }
 .pld-scene-svg { display: block; width: 100%; max-width: 818px; aspect-ratio: 800 / 450; height: auto; margin: 0 auto; border-radius: 10px; overflow: hidden; background: #2c2f55; font-family: inherit; }
 .pld-scene-wire { fill: none; stroke: rgba(255,255,255,0.24); stroke-width: 1.5; }
+.pld-scene-duct { fill: none; stroke: #8a8378; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .pld-scene-panel polygon { fill: #1c2a44; stroke: #a9b7cc; stroke-width: 1; }
 .pld-scene-panel { opacity: 0; }
 .pld-scene-panel.on { opacity: 1; animation: pld-scene-pop .45s ease-out; }
 .pld-scene-panel.on polygon { animation: pld-scene-flash-stroke .8s ease-out; }
+.pld-scene-panels.on .pld-scene-panel.on polygon { stroke: #e2bd4e; animation: pld-scene-sunlit 2.4s ease-in-out infinite; }
+.pld-scene-pulse { opacity: 0; transition: opacity .6s ease; transform-box: fill-box; transform-origin: center; }
+.pld-scene-pulse.on { animation: pld-scene-pulse 1.6s ease-in-out infinite; }
 .pld-scene-piece { opacity: 0; }
 .pld-scene-piece.on { opacity: 1; animation: pld-scene-arrive .5s ease-out backwards; }
 .pld-scene-flash { fill: none; stroke: var(--pld-gold); stroke-width: 1; opacity: 0; }
@@ -111,15 +116,20 @@
 .pld-scene-house.on { opacity: 1; animation: pld-scene-fade .5s ease-out .65s backwards; }
 .pld-scene-lbl { font-size: 17px; font-weight: 600; fill: #d8d8d2; opacity: 0; }
 .pld-scene-lbl.on { opacity: 1; animation: pld-scene-settle .5s ease-out .2s backwards; }
+.pld-scene-flow { font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .6s ease; }
+.pld-scene-flow.on { opacity: 1; }
 .pld-scene-counter { opacity: 0; transition: opacity .5s ease; }
 .pld-scene-counter.on { opacity: 1; }
 .pld-scene-clock { opacity: 0; transition: opacity .6s ease; }
 .pld-scene-clock.on { opacity: 1; }
 .pld-scene-dash { fill: none; stroke-width: 3; stroke-dasharray: 5 9; stroke-linecap: round; }
-.pld-scene-dashes { opacity: 0; transition: opacity .3s ease; }
+.pld-scene-dashes { opacity: 0; }
 .pld-scene-dashes.on { opacity: 1; }
-.pld-scene-dots { opacity: 0; transition: opacity .3s ease; }
+.pld-scene-dots { opacity: 0; }
 .pld-scene-dots.on { opacity: 1; }
+.pld-scene-dot-sun { fill: #ffd54f; stroke: rgba(255,255,255,0.75); stroke-width: 1.2; }
+.pld-scene-dot-gold { fill: var(--pld-gold); }
+.pld-scene-dot-grid { fill: #fff; }
 .pld-scene-strip { margin-top: 12px; min-height: 52px; }
 .pld-scene-read { font-size: 14.5px; color: #d8d8d2; line-height: 1.4; }
 .pld-scene-read b { color: #fff; font-weight: 700; }
@@ -129,16 +139,11 @@
 .pld-scene-chip { display: inline-block; padding: 5px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.2); font-size: 13.5px; color: #d8d8d2; opacity: 0; transform: translateY(6px); transition: opacity .4s ease, transform .4s ease; }
 .pld-scene-chip.on { opacity: 1; transform: none; }
 .pld-scene-chip b { color: var(--pld-gold); font-weight: 700; }
-.pld-scene-ctl { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-.pld-scene-btn { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.28); background: rgba(255,255,255,0.06); color: #fff; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
-.pld-scene-replay { width: auto; padding: 0 14px; }
-@media (hover: hover) { .pld-scene-btn:hover { border-color: var(--pld-gold); color: var(--pld-gold); } }
-.pld-scene-btn:focus-visible, .pld .pld-scene-range:focus-visible { outline: 2px solid var(--pld-gold); outline-offset: 2px; }
-.pld .pld-scene-range { flex: 1 1 auto; width: auto; min-width: 0; min-height: 0; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; accent-color: var(--pld-gold); cursor: pointer; }
-.pld .pld-scene-range:focus { outline: none; }
-@media (max-width: 560px) { .pld-scene { padding: 10px; } .pld-scene-lbl { display: none; } .pld-scene-read { font-size: 14.5px; } }
+@media (max-width: 560px) { .pld-scene { padding: 10px; } .pld-scene-lbl, .pld-scene-flow { display: none; } .pld-scene-read { font-size: 14.5px; } }
 @keyframes pld-scene-pop { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pld-scene-flash-stroke { 0% { stroke: #C9A227; stroke-width: 5; } 55% { stroke: #C9A227; stroke-width: 3; } 100% { stroke: #a9b7cc; stroke-width: 1; } }
+@keyframes pld-scene-sunlit { 0%, 100% { stroke: #c9ad5a; stroke-width: 1; } 50% { stroke: #ffd54f; stroke-width: 1.6; } }
+@keyframes pld-scene-pulse { 0%, 100% { transform: scale(0.8); } 50% { transform: scale(1.25); } }
 @keyframes pld-scene-arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pld-scene-flash { 0% { opacity: .95; stroke-width: 5; } 100% { opacity: 0; stroke-width: 1; } }
 @keyframes pld-scene-settle { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
