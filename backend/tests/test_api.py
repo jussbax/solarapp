@@ -675,7 +675,7 @@ def test_warranty_defaults_and_the_pricing_settings_version_rule(client):
     prof = client.get("/api/settings").json()
     assert (prof["warranty_panels_product_years"], prof["warranty_battery_years"], prof["warranty_inverter_years"], prof["warranty_workmanship_years"]) == ("12", "5", "5", "2")
     assert prof["warranty_panels_performance_years"] == "25"   # the owner (10 Oct): "standard 25 years"; verify on the panel datasheet
-    assert prof["after_sales"].startswith("After switch-on you are not on your own")
+    assert prof["after_sales"].startswith("We provide after-sales support")
     doc = dict(DOC)
     doc["panel_code"] = "BC-PNL-001"
     doc["audit"] = dict(TANAUAN_AUDIT, system={"kind": "combination"})

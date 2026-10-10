@@ -219,7 +219,7 @@ def quick_estimate(req: QuickRequest, pvgis: PvgisDataset, ctx: PricingContext) 
         except (ValueError, LookupError):
             alternative = None
     if main["system"]["roof_limited"]:
-        warnings.append(f"Your usage needs more than {q.max_panels} panels. We capped the estimate at {q.max_panels}. On the roof visit we'll see how many your roof can really take.")
+        warnings.append(f"Your house needs more than {q.max_panels} panels; we capped the estimate there, and on the roof visit we see how many your roof really takes.")
     if not where["in_area"]:
         warnings.append("This location is off the map of the Philippines, where we install. Check the pin, or pick your town instead.")
     facing = "south" if q.azimuth_deg == 180 else f"{q.azimuth_deg:g}°"
