@@ -1876,3 +1876,29 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   estimate and the proposal, the widget's thank-you goes from the visit to the proposal, and the result's closing
   block sells the proposal as what the visit leads to. The marketing kit's follow-up template for "the evening after
   the roof visit" is gone; the privacy page still lists the roof check among the records the company keeps.
+
+## Rounds 10 and 11: the result closes on what you miss; the home page gets its hook
+
+- The owner (10 October), on the result's closing block "What the free visit settles": "it should be what am I
+  missing if I don't go contact them? We sell FOMO here." The block is now "What you miss if you stop here": close
+  the page and nothing changes; next month's bill comes as it does today; about ₱N a month (the engine's own monthly
+  saving, printed only when it is positive) paid to your electric company instead of kept; a roof nobody has measured,
+  so the exact price and bill stay unknown; a battery sized to a typical house until your appliances are on the
+  table; no sealed plans, permit or net-metering papers and nobody filing them; no dates on the calendar. The safety
+  valve stays inside the block: the visit is free and nothing is decided until you say so. No scarcity, no deadline,
+  no price rise: the only urgency is the engine's figure and the record. The copied summary's system line says the
+  figures are a typical roof's until the free on-site assessment fits them to yours.
+- The owner: "I am not seeing any hook on the website, I need a solid hook." Marketing's round-11 brief weighed five
+  (the engine's example figure, the 2023 installation's credit, the dark street, the satellite-photo quote, the
+  typhoon seasons) and picked the number: a figure the visitor can disbelieve and then check on the same page in the
+  next minute. The home hero now reads "Home solar, sized to your bill" / "A ₱6,000 bill, down to about ₱1,900." /
+  "Our estimate for a house in Tanauan using about 500 kWh a month, panels only. Pays for itself in about four years.
+  Yours takes a minute." / "See my new bill". The brief had written ₱5,000 → ₱1,500 from an old peso-amount run; the
+  copywriter re-ran the engine (net metering, Tanauan, 500 kWh, evening, today's price list and tariff: ₱6,003 →
+  ₱1,893, 3.84 years) and the hook carries the engine's figures rounded to the hundred and the year.
+  `test_home_hero_figures_match_the_engine` pins the h1, the title, the description, the lead, the net-metering lead
+  and the ad line in `docs/marketing.md` to the same engine call, so a price or tariff change fails the build rather
+  than leaving a stale number on the front page. The sticky bar says "Your new bill / Free, in a minute."; the home
+  band "Your new bill is a minute away." with "Every month you wait is another month at the old bill"; the service
+  area moved from the lead to the band so the lead stays four lines on a phone. Brownouts keeps the dark street as
+  its own hook; About keeps the company's line.
