@@ -85,7 +85,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """No request body beyond what the back office needs; a write without a length is refused."""
         if request.method in ("POST", "PUT", "PATCH"):
             length = request.headers.get("content-length", "")
-            cap = MAX_UPLOAD_BODY if request.url.path == "/api/pricing/import" else MAX_BODY
+            cap = MAX_UPLOAD_BODY if request.url.path in ("/api/pricing/import", "/api/pricing/datasheets") else MAX_BODY
             if not length.isdigit():
                 return JSONResponse({"detail": "Length required"}, status_code=411)
             if int(length) > cap:

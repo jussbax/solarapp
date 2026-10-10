@@ -338,6 +338,9 @@ export interface PricingJob {
   battery_code: string | null
   strings_override: number | null
   max_panels_per_string: number | null
+  /** Round 12: the string design's temperatures for this project; blank = the settings (the project's TMY extremes still widen them). */
+  design_cold_c?: number | null
+  design_hot_cell_c?: number | null
   roof_factor: number | null
   roof_closed_days: number | null
   max_days: number | null
@@ -355,7 +358,7 @@ export interface PricingJob {
 
 export function emptyPricingJob(): PricingJob {
   return {
-    inverter_code: null, battery_code: null, strings_override: null, max_panels_per_string: null, roof_factor: null, roof_closed_days: null,
+    inverter_code: null, battery_code: null, strings_override: null, max_panels_per_string: null, design_cold_c: null, design_hot_cell_c: null, roof_factor: null, roof_closed_days: null,
     max_days: null, max_pairs: null, owner_days: null, extra_km: null, extra_toll: null, pv_run_m: null, ac_run_m: null, grounding_run_m: null,
     conduit_m: null, bom_edits: [], bom_extra: [],
   }
@@ -402,6 +405,9 @@ export interface PricingStatus {
   imported_from: string | null
   imported_at: string | null
   seed_available: boolean
+  /** Round 12: the datasheet workbooks last imported (file names) and when. */
+  datasheets_imported_from?: string | null
+  datasheets_imported_at?: string | null
 }
 
 export interface ImportReport {
@@ -409,6 +415,67 @@ export interface ImportReport {
   updated: number
   suppliers: number
   warnings: string[]
+}
+
+/** Round 12: one row of the maker's datasheet workbooks as the importer stored it (GET /api/pricing/datasheets). */
+export interface DatasheetRow {
+  id: number
+  category: string
+  brand: string
+  brand_in_model: string
+  model: string
+  fields: Record<string, string | number | boolean | null>
+  held_fields: Record<string, string | number | boolean | null>
+  notices: string[]
+  source_file: string
+  source_sheet: string
+  source_row: number
+  imported_at: string | null
+  last_seen_at: string | null
+  matched_code: string | null
+  match_tier: string
+  match_note: string
+  overridden_fields: string[]
+  held: boolean
+  /** When the owner said to apply the held figures; kept through every later run. */
+  held_applied_at: string | null
+}
+export type FieldSource = 'datasheet' | 'typed' | 'remarks'
+/** Per equipment item: where each electrical figure came from, and the datasheet row behind it when there is one. */
+export interface DatasheetItemInfo {
+  code: string
+  name: string
+  category: string
+  provenance: Record<string, FieldSource>
+  source: FieldSource | 'none'
+  datasheet: {
+    id: number
+    file: string
+    date: string | null
+    sheet: string
+    row: number
+    tier: string
+    fields: Record<string, string | number | boolean | null>
+    held_fields: Record<string, string | number | boolean | null>
+    held: boolean
+    held_applied_at: string | null
+    overridden: string[]
+    notices: string[]
+  } | null
+}
+export interface DatasheetPage {
+  rows: DatasheetRow[]
+  items: Record<string, DatasheetItemInfo>
+}
+/** The datasheet importer's report: one line per sheet row and the summary counts. */
+export interface DatasheetReport {
+  lines: string[]
+  counts: Record<string, number>
+  changed_codes: string[]
+  projects_using_changed: number[]
+  summary: string
+  dry_run: boolean
+  files: string[]
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -774,6 +841,8 @@ export interface Results {
   audit: AuditBlock | null
   sizing: SizingBlock | null
   pricing: PricingBlock | null
+  /** Round 12: the typical-year air extremes at this project's cell and the string design's temperatures made from them. */
+  site?: SiteBlock | null
   program: ProgramBlock | null
   economics: EconomicsBlock | null
   nasa_reference: {
@@ -786,6 +855,22 @@ export interface Results {
     annual_diff_pct: number | null
   } | null
   warnings: Warning[]
+}
+
+export interface SiteBlock {
+  tmy_min_air_c: number | null
+  tmy_max_air_c: number | null
+  rise_c_per_kw: number | null
+  rise_source?: string
+  t_cold_c: number
+  t_hot_c: number
+  cold_source: 'setting' | 'project' | 'tmy'
+  hot_source: 'setting' | 'project' | 'tmy'
+  cold_setting_c: number
+  hot_setting_c: number
+  cold_margin_c: number
+  tmy_cold_c: number | null
+  tmy_hot_cell_c: number | null
 }
 
 export interface AssessmentOut {
@@ -1025,6 +1110,18 @@ export interface MaterialItem {
   imp_a?: number | null
   temp_coeff_voc_pct?: number | null
   temp_coeff_isc_pct?: number | null
+  // round 12: the eleven datasheet fields (docs/audits/round-12/engineer-brief.md, section 1)
+  max_system_voltage_v?: number | null
+  inverter_type?: string
+  phase?: number | null
+  battery_class?: string
+  charge_v_max?: number | null
+  charge_a_max?: number | null
+  mppt_currents_a?: string
+  battery_inputs?: number | null
+  nominal_v?: number | null
+  capacity_ah?: number | null
+  discharge_a_recommended?: number | null
 }
 
 export interface FaceSimulation {

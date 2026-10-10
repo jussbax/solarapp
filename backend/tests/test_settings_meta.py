@@ -14,7 +14,7 @@ from solarapp.pricing.config import GroundRates, PricingConfig
 META_FILE = Path(__file__).resolve().parents[2] / "frontend" / "src" / "components" / "pricingMeta.ts"
 # keys the pages draw elsewhere (the base pin with the company base, the late finish row in the minutes table) or never show
 DRAWN_ELSEWHERE = {"route.base_lat", "route.base_lon"}
-STAMPS = {"imported_from", "imported_at"}
+STAMPS = {"imported_from", "imported_at", "datasheets_imported_from", "datasheets_imported_at"}
 SHORT_HELP = 60   # characters: one line in a two-column cell
 SHORT_UNIT = 13   # characters beside a control ("per rail line" is the longest the spec names)
 

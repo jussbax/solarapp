@@ -55,7 +55,20 @@ The design decisions behind every formula are in [DECISIONS.md](DECISIONS.md).
    line, and is priced exactly as the
    workbook does it: landed cost, freight run through the suppliers, labour
    crew and days, build-up with markups, commission and VAT, rounded up to
-   the hundred. The proposal PDF opens with the customer's situation and
+   the hundred. The maker's datasheet workbooks (panels, inverters,
+   batteries) are imported on top (`python -m solarapp.pricing.datasheets`,
+   or the upload on the Materials page): every sheet row is kept as a specs
+   row and matched to its item by model, the figures sit above the workbook
+   remarks and below what the owner types, and the page shows where each
+   electrical figure came from, the rows without a priced item and the held
+   rows that wait on the owner. With the figures on file the generator counts
+   the strings from Voc at the cold design temperature against the inverter's
+   maximum PV voltage, sizes the PV conductor and the DC breaker for
+   1.25 × 1.25 × Isc, lays the strings on the MPPT inputs, runs the battery
+   circuit on the larger of the inverter's discharge and charge currents and
+   checks the battery's voltage class, charge current and Ah against kWh;
+   the temperatures and the default coefficients are under Pricing settings ›
+   String design, every one an assumption the owner replaces. The proposal PDF opens with the customer's situation and
    the solution in plain words, then Materials, Installation and permits,
    Installation tools and VAT, with the price before and after VAT.
 8. Program of works: from the signing date, the schedule of permits, net
@@ -404,6 +417,7 @@ Run it under systemd or `nohup` to keep it alive.
 cd backend && . .venv/bin/activate && pip install -r requirements-dev.txt
 python -m pytest                                          # the whole suite, no network
 python -m solarapp.pricing ../path/to/PLD_Materials_DB.xlsx   # import a materials workbook (the Materials page does this too)
+python -m solarapp.pricing.datasheets ../path/to/ALL_SOLAR_PANEL_DATA_SHEET.xlsx ../path/to/ALL_INVERTER_DATA_SHEET.xlsx ../path/to/ALL_BATTERY_DATA_SHEET.xlsx   # the maker's datasheets onto the items (--dry-run, --report out.csv, --apply-held)
 python -m solarapp.data_download --out ../data --synthetic --bbox 14.25 14.75 120.75 121.25
 SOLARAPP_DATA_DIR=../data uvicorn solarapp.main:app --reload --port 8000
 # in another terminal
@@ -439,6 +453,9 @@ backend/solarapp/pricing/catalog.py   the materials list as the engine reads it 
 backend/solarapp/pricing/config.py    every pricing, program and economics setting with its default and its version
 backend/solarapp/pricing/job.py       prices an assessment: BOM, manual edits, extra km from the map pin
 backend/solarapp/pricing/store.py     materials tables and pricing settings in SQLite, workbook import
+backend/solarapp/pricing/datasheets.py  the maker's datasheet workbooks: the specs table, the three-tier match, the precedence, the report
+backend/solarapp/pricing/design_checks.py  the string design and the battery checks the datasheet figures unlock (round 12)
+backend/datasheets/                   the owner's three datasheet workbooks as received, for the importer and the fixture
 backend/solarapp/pricing/program.py   program of works: schedule, hourly installation plan; the cashflow engine the finance module will read
 backend/solarapp/pricing/economics.py customer economics: bill before and after, payback, NPV, IRR
 backend/data_seed/                    bundled materials workbook, loaded on first start

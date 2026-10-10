@@ -144,6 +144,9 @@ class PricingJob(BaseModel):
     battery_code: Optional[str] = None
     strings_override: Optional[int] = Field(default=None, ge=1)
     max_panels_per_string: Optional[int] = Field(default=None, ge=1)
+    # round 12: the string design's temperatures for this project (blank = the settings; the project's TMY extremes still widen them)
+    design_cold_c: Optional[float] = Field(default=None, ge=-20, le=40)
+    design_hot_cell_c: Optional[float] = Field(default=None, ge=30, le=110)
     roof_factor: Optional[float] = Field(default=None, gt=0, le=1.5)
     roof_closed_days: Optional[int] = Field(default=None, ge=1)   # at least a day; 0 reads as 1 (see below)
     max_days: Optional[int] = Field(default=None, ge=1)
@@ -431,6 +434,11 @@ class SettingsIn(BaseModel):
     company_contact: Optional[str] = None
 
 
+# round 12 (the review's finding 9): the datasheet's type words are enumerations on the API, as the page's selects are
+InverterType = Literal["", "grid_tie", "hybrid", "off_grid", "charge_controller", "ess_set"]
+BatteryClass = Literal["", "LV", "HV", "none"]
+
+
 class MaterialItemIn(BaseModel):
     code: str = Field(min_length=3, max_length=40)
     category: str
@@ -469,6 +477,18 @@ class MaterialItemIn(BaseModel):
     imp_a: Optional[float] = Field(default=None, gt=0)
     temp_coeff_voc_pct: Optional[float] = None
     temp_coeff_isc_pct: Optional[float] = None
+    # round 12: the datasheet fields (brief, section 1); every one optional
+    max_system_voltage_v: Optional[float] = Field(default=None, gt=0)
+    inverter_type: InverterType = ""
+    phase: Optional[int] = Field(default=None, ge=1, le=3)
+    battery_class: BatteryClass = ""
+    charge_v_max: Optional[float] = Field(default=None, gt=0)
+    charge_a_max: Optional[float] = Field(default=None, gt=0)
+    mppt_currents_a: str = ""
+    battery_inputs: Optional[int] = Field(default=None, ge=1)
+    nominal_v: Optional[float] = Field(default=None, gt=0)
+    capacity_ah: Optional[float] = Field(default=None, gt=0)
+    discharge_a_recommended: Optional[float] = Field(default=None, gt=0)
 
 
 class MaterialItemPatch(BaseModel):
@@ -507,6 +527,23 @@ class MaterialItemPatch(BaseModel):
     imp_a: Optional[float] = Field(default=None, gt=0)
     temp_coeff_voc_pct: Optional[float] = None
     temp_coeff_isc_pct: Optional[float] = None
+    max_system_voltage_v: Optional[float] = Field(default=None, gt=0)
+    inverter_type: Optional[InverterType] = None
+    phase: Optional[int] = Field(default=None, ge=1, le=3)
+    battery_class: Optional[BatteryClass] = None
+    charge_v_max: Optional[float] = Field(default=None, gt=0)
+    charge_a_max: Optional[float] = Field(default=None, gt=0)
+    mppt_currents_a: Optional[str] = None
+    battery_inputs: Optional[int] = Field(default=None, ge=1)
+    nominal_v: Optional[float] = Field(default=None, gt=0)
+    capacity_ah: Optional[float] = Field(default=None, gt=0)
+    discharge_a_recommended: Optional[float] = Field(default=None, gt=0)
+
+
+class DatasheetLink(BaseModel):
+    """A manual link from a datasheet row to a material item, or the code of the item to add from it (round 12)."""
+    code: str = Field(min_length=3, max_length=40)
+    supplier: Optional[str] = None
 
 
 class QuickRequest(BaseModel):

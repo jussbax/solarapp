@@ -137,12 +137,14 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
         cfg_job.roles.max_panels_per_string = pj.max_panels_per_string
     inv = sizing["inverter"]
     bat_kwh = float(sizing["battery"]["installed_kwh"]) if sizing["kind"] != "net_metering" else 0.0
+    site = results.get("site") or {}   # round 12: the design temperatures at this project's cell (compute.py)
     req = BoqRequest(
         panel_code=db_panel.code, panel_count=count, rows=rows, kind=str(sizing["kind"]),
         inverter_kw=float(inv["size_kw"]), inverter_units=int(inv["units"]), inverter_required_kw=float(inv.get("required_kw") or 0) or None, battery_kwh=bat_kwh,
         strings_override=pj.strings_override, inverter_code=pj.inverter_code, battery_code=pj.battery_code,
         pv_run_m=pj.pv_run_m, ac_run_m=pj.ac_run_m, grounding_run_m=pj.grounding_run_m, conduit_m=pj.conduit_m,
         peak_load_kw=float(inv.get("peak_load_kw") or 0) or None,
+        t_cold_c=site.get("t_cold_c"), t_hot_c=site.get("t_hot_c"),
     )
     boq = generate_boq(req, catalog, cfg_job)
     warnings += boq.warnings

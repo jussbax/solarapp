@@ -18,6 +18,7 @@ from ..core.dataset import NasaReference, PvgisDataset
 from ..db import get_session
 from ..models import Assessment, utcnow
 from ..pricing.config import settings_version
+from ..pricing.datasheets import datasheet_sources
 from ..pricing.job import PricingContext
 from ..pricing.store import load_catalog, load_config
 from ..reports.card import build_client_card
@@ -329,7 +330,7 @@ def plans_for_the_pee(
     catalog = load_catalog(session, include_inactive=True)
     items = {code: asdict(item) for code, item in catalog.items.items()}
     pdf = build_plans_pdf(AssessmentDoc.model_validate(a.doc), results, company, items=items, config=load_config(session).model_dump(mode="json"),
-                          project_no=f"P-{a.created_at.year}-{a.id:04d}")
+                          project_no=f"P-{a.created_at.year}-{a.id:04d}", datasheets=datasheet_sources(session))
     return Response(pdf, media_type="application/pdf", headers=_download_name("plans", a, "pdf"))
 
 

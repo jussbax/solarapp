@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 from ..models import AppSetting, MaterialItem, MaterialSupplier, utcnow
 from .catalog import ELECTRICAL_FIELDS, Catalog, Item, Supplier
 from .config import PricingConfig
+from .datasheets import reapply_datasheets
 from .importer import ImportResult, read_workbook
 
 CONFIG_KEY = "pricing_config"
@@ -73,7 +74,8 @@ def catalog_status(session: Session) -> dict:
     n = len(session.exec(select(MaterialItem.code)).all())
     cfg = load_config(session)
     return {"item_count": n, "supplier_count": len(session.exec(select(MaterialSupplier.name)).all()),
-            "imported_from": cfg.imported_from, "imported_at": cfg.imported_at, "seed_available": SEED_PATH.exists()}
+            "imported_from": cfg.imported_from, "imported_at": cfg.imported_at, "seed_available": SEED_PATH.exists(),
+            "datasheets_imported_from": cfg.datasheets_imported_from, "datasheets_imported_at": cfg.datasheets_imported_at}
 
 
 def persist_import(session: Session, result: ImportResult, replace_config: bool = True) -> dict:
@@ -106,13 +108,18 @@ def persist_import(session: Session, result: ImportResult, replace_config: bool 
                 setattr(row, k, v)
             session.add(row)
     session.commit()
+    # round 12: the workbook row wrote the remark inference back over every electrical field it produced; the
+    # datasheet figures sit above it in the precedence (brief 2.4), so they go back on at the end of every import
+    datasheets = reapply_datasheets(session)
     if replace_config:
+        old = load_config(session)
+        result.config.datasheets_imported_from, result.config.datasheets_imported_at = old.datasheets_imported_from, old.datasheets_imported_at
         save_config(session, result.config)
     else:
         cfg = load_config(session)
         cfg.imported_from, cfg.imported_at = result.config.imported_from, result.config.imported_at
         save_config(session, cfg)
-    return {"added": added, "updated": updated, "suppliers": result.supplier_count, "warnings": result.warnings}
+    return {"added": added, "updated": updated, "suppliers": result.supplier_count, "warnings": result.warnings, "datasheets": datasheets}
 
 
 def import_workbook(session: Session, path: str | Path, replace_config: bool = True) -> dict:

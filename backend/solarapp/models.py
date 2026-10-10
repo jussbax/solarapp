@@ -156,7 +156,51 @@ class MaterialItem(SQLModel, table=True):
     imp_a: Optional[float] = None               # panels: current at maximum power
     temp_coeff_voc_pct: Optional[float] = None  # panels: Voc temperature coefficient, % per degree C (negative)
     temp_coeff_isc_pct: Optional[float] = None  # panels: Isc temperature coefficient, % per degree C
+    # Round 12: the eleven fields the maker's datasheet workbooks fill (docs/audits/round-12/engineer-brief.md, section 1).
+    # Added to an older database at start-up by store.ensure_material_columns.
+    max_system_voltage_v: Optional[float] = None   # panels: maximum DC system voltage
+    inverter_type: str = ""                        # inverters: grid_tie, hybrid, off_grid, charge_controller, ess_set; blank = unknown
+    phase: Optional[int] = None                    # inverters: 1 or 3
+    battery_class: str = ""                        # LV, HV or none (no battery port); blank = unknown
+    charge_v_max: Optional[float] = None           # inverters: the battery port's maximum charge voltage; batteries: the pack's ceiling
+    charge_a_max: Optional[float] = None           # inverters: maximum charge current into the battery; batteries: the most the pack accepts
+    mppt_currents_a: str = ""                      # inverters: per-input MPPT currents as typed ("18/36/36")
+    battery_inputs: Optional[int] = None           # inverters: battery ports; blank reads as one
+    nominal_v: Optional[float] = None              # batteries: nominal voltage
+    capacity_ah: Optional[float] = None            # batteries: capacity
+    discharge_a_recommended: Optional[float] = None   # batteries: recommended continuous discharge current
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class DatasheetSpec(SQLModel, table=True):
+    """One row per row of the maker's datasheet workbooks (round 12), never deleted: the figures as parsed, every
+    cell as typed, the notices the parser raised, where the row came from, and the material item it matched.
+    Keyed by category, normalised model and brand, so a re-run upserts."""
+
+    __tablename__ = "datasheet_specs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    category: str = Field(index=True)                 # Solar Panel, Inverter, Battery, All-in-one System
+    brand: str = ""                                   # the sheet's brand column
+    brand_in_model: str = ""                          # the maker named in the model text when it differs (brief 6.1)
+    model: str = ""                                   # as typed
+    model_norm: str = Field(default="", index=True)   # upper case, letters and digits only
+    fields: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))        # the parsed figures applied to the item
+    held_fields: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))   # figures held back until the owner answers (1.5)
+    raw: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))           # every cell as typed, by header
+    notices: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    source_file: str = ""
+    source_sheet: str = ""
+    source_row: int = 0
+    file_sha256: str = ""
+    imported_at: datetime = Field(default_factory=utcnow)
+    last_seen_at: datetime = Field(default_factory=utcnow)
+    matched_code: Optional[str] = Field(default=None, index=True)
+    match_tier: str = ""                              # exact, contains, base, manual; blank = no item
+    match_note: str = ""
+    overridden_fields: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))   # typed over on the Materials page; left alone on a re-run
+    held: bool = False                                # battery figures on a grid-tie unit (brief 1.5, 6.4), or a battery maximum above 1 C (6.8)
+    held_applied_at: Optional[datetime] = None        # when the owner said to apply the held figures; kept through every later run (review finding 2)
 
 
 class User(SQLModel, table=True):

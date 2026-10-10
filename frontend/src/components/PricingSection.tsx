@@ -28,7 +28,7 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
     return job[key] == null && typeof used === 'number' ? used : undefined
   }
   const pinKm = pricing?.pin_distance?.extra_km
-  const changed = [job.max_panels_per_string, job.extra_toll, job.roof_factor, job.roof_closed_days, job.max_days, job.max_pairs, job.owner_days, job.pv_run_m, job.ac_run_m, job.grounding_run_m, job.conduit_m].filter((v) => v != null).length
+  const changed = [job.max_panels_per_string, job.design_cold_c, job.design_hot_cell_c, job.extra_toll, job.roof_factor, job.roof_closed_days, job.max_days, job.max_pairs, job.owner_days, job.pv_run_m, job.ac_run_m, job.grounding_run_m, job.conduit_m].filter((v) => v != null).length
   return (
     <div>
       <div className="lead">All values are the company defaults unless tagged; type over one to change it for this job only.</div>
@@ -85,7 +85,29 @@ export function PricingInputs({ job, pricing, onChange }: { job: PricingJob; pri
       </div>
       <AdjustFold changed={changed} testId="adjust-pricing">
         <div className="form-grid">
-          <DefaultNum label="Max panels per string" unit="panels" value={job.max_panels_per_string} fallback={typeof cfg?.roles?.max_panels_per_string === 'number' ? cfg.roles.max_panels_per_string : undefined} onChange={(v) => set({ max_panels_per_string: v })} min={1} decimals={0} />
+          <DefaultNum label="Max panels per string" unit="panels" value={job.max_panels_per_string} fallback={typeof cfg?.roles?.max_panels_per_string === 'number' ? cfg.roles.max_panels_per_string : undefined} onChange={(v) => set({ max_panels_per_string: v })} min={1} decimals={0} help="The owner's cap; the cold Voc rule may count fewer" />
+          <DefaultNum
+            label="Design cold temperature"
+            unit="°C"
+            value={job.design_cold_c ?? null}
+            fallback={typeof cfg?.string_design?.design_cold_c === 'number' ? cfg.string_design.design_cold_c : undefined}
+            onChange={(v) => set({ design_cold_c: v })}
+            min={-20}
+            decimals={0}
+            help="Assumption; the cell's typical-year low may lower it"
+            about="The air temperature the cold Voc is computed at. The setting is an assumption; per project the engine takes the lower of this figure and the project cell's typical-year minimum less the cold margin. Type the PAGASA record low of the nearest station when in hand."
+          />
+          <DefaultNum
+            label="Design hot cell temperature"
+            unit="°C"
+            value={job.design_hot_cell_c ?? null}
+            fallback={typeof cfg?.string_design?.design_hot_cell_c === 'number' ? cfg.string_design.design_hot_cell_c : undefined}
+            onChange={(v) => set({ design_hot_cell_c: v })}
+            min={30}
+            decimals={0}
+            help="Assumption; the cell's maximum plus the rise may raise it"
+            about="The cell temperature the hot Vmp is computed at. The setting is an assumption; per project the engine takes the higher of this figure and the project cell's typical-year maximum plus the measured or modelled module rise at 1 kW/m²."
+          />
           <DefaultNum label="Extra toll" unit="₱" value={job.extra_toll} fallback={def('extra_toll', jd.extra_toll)} onChange={(v) => set({ extra_toll: v })} min={0} decimals={0} />
           <DefaultNum label="Roof productivity factor" unit="%" value={pctIn(job.roof_factor)} fallback={pctIn(def('roof_factor', jd.roof_factor)) ?? undefined} onChange={(v) => set({ roof_factor: v == null ? null : v / 100 })} min={10} step={5} decimals={1} />
           <DefaultNum label="Days the roof is closed" unit="days" value={job.roof_closed_days} fallback={def('roof_closed_days', jd.roof_closed_days)} onChange={(v) => set({ roof_closed_days: v })} min={0} decimals={0} />

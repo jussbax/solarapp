@@ -239,6 +239,14 @@ export default function SystemDesign({
       ) : (
         <div className="banner warn">{pricing?.reason ?? 'Strings, cables and protection follow the bill of materials: link the panel to the materials list and Calculate.'}</div>
       )}
+      {results.site && (
+        <div className="muted" data-testid="site-extremes" style={{ fontSize: 12, marginTop: -6, marginBottom: 10 }}>
+          TMY extremes at this project's cell: air {results.site.tmy_min_air_c?.toFixed(1)} to {results.site.tmy_max_air_c?.toFixed(1)} °C, module rise{' '}
+          {results.site.rise_c_per_kw?.toFixed(1)} °C per kW/m² ({results.site.rise_source === 'site' ? 'measured on the roof' : 'the PVGIS model'}). String design at{' '}
+          {results.site.t_cold_c.toFixed(0)} °C cold ({results.site.cold_source === 'tmy' ? 'the cell' : results.site.cold_source === 'project' ? 'typed for this project' : 'the setting, an assumption'}) and{' '}
+          {results.site.t_hot_c.toFixed(0)} °C hot cell ({results.site.hot_source === 'tmy' ? 'the cell' : results.site.hot_source === 'project' ? 'typed for this project' : 'the setting, an assumption'}).
+        </div>
+      )}
 
       {protection.length > 0 && (
         <>

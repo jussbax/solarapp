@@ -13,6 +13,14 @@ battery breaker at 1.25 x the inverter's battery current with the battery cable'
 enclosure per inverter, no ATS on an inverter that carries its own transfer switch; array bonding, L-foot fasteners,
 a visible AC disconnect and (on net metering) an export limiter as roles. A role without an
 item in the materials list still puts its line on the BOM with the quantity and no price, and a warning says so.
+
+Round 12 (the datasheet figures, docs/audits/round-12/engineer-brief.md section 3): when the panel and the inverter
+carry them, the strings are counted from Voc at the cold design temperature against the inverter's maximum PV
+voltage (the owner's maximum per string becoming the cap), the string current is Imp, the PV conductor and the DC
+breaker are sized for 1.25 × 1.25 × Isc, the strings are laid on the MPPT inputs by their current ratings, the
+battery circuit runs on the larger of the inverter's discharge and charge figures, and the battery is checked for
+its voltage class, its charge current and its Ah against its kWh. Each check falls back to the rule above when a
+figure is absent, and says so.
 """
 from __future__ import annotations
 
@@ -23,6 +31,7 @@ from typing import Optional
 
 from .catalog import Catalog, Item
 from .config import PricingConfig
+from .design_checks import ah_kwh_check, battery_soft_checks, charge_check, inverter_battery_current, mppt_assignment, string_current, string_plan, voltage_class, voltage_match
 from .engine import BomLine, landed_cost
 
 NO_ITEM_PREFIX = "NO-ITEM-"   # the code of a BOM line whose role has no item in the materials list yet
@@ -68,6 +77,9 @@ class BoqRequest:
     grounding_run_m: Optional[float] = None
     conduit_m: Optional[float] = None
     peak_load_kw: Optional[float] = None           # the house peak, for the pass-through check on a net-metering job
+    # round 12: the string design's temperatures for this job (compute.py's results["site"]); None = the settings alone (the website estimate)
+    t_cold_c: Optional[float] = None
+    t_hot_c: Optional[float] = None
 
 
 @dataclass
@@ -106,10 +118,12 @@ def select_inverter(kw: float, catalog: Catalog, cfg: PricingConfig, kind: str =
     is marked yet (a database imported before the flag existed), the unmarked units are offered with the
     certificate note, so a job is never priced without an inverter."""
     grid = kind != "off_grid"
+    # the exclude words keep working on names; a datasheet's phase 3 or HV battery port is the second test (round 12, 1.4),
+    # so a unit whose name hides the phase is still kept off a residential job
     fits = [
         i for i in catalog.by_category("Inverter")
         if i.is_hybrid_inverter and (i.rating_unit or "").lower() == "kw" and i.rating and i.rating >= kw - 1e-9
-        and not _excluded(i, cfg.roles.inverter_exclude_words)
+        and not _excluded(i, cfg.roles.inverter_exclude_words) and i.phase != 3 and (i.battery_class or "").upper() != "HV"
     ]
     if grid:
         marked = [i for i in fits if i.grid_interactive is True]
@@ -129,21 +143,57 @@ def battery_current_ok(battery: Item, units: int, current_a: Optional[float]) ->
     return units * float(battery.continuous_a) >= current_a - 1e-9
 
 
-def select_battery(kwh: float, catalog: Catalog, cfg: PricingConfig, current_a: Optional[float] = None) -> list[tuple[Item, int, float]]:
+def _class_of(item: Optional[Item], text_field: str, voltage_field: str) -> tuple[str, Optional[object]]:
+    """A pack's or a port's class: the coarse LV/HV from the typed class (else from the voltage) and the fine
+    12/24/48/HV from the voltage (the battery's nominal, the inverter's maximum charge voltage); blank when unknown."""
+    if item is None:
+        return "", None
+    fine = voltage_class(getattr(item, voltage_field, None))
+    coarse = (getattr(item, text_field, "") or "").upper()
+    if coarse not in ("LV", "HV"):
+        coarse = "" if fine is None else ("HV" if fine == "HV" else "LV")
+    return coarse, fine
+
+
+def battery_class_mismatch(battery: Item, inverter: Optional[Item]) -> bool:
+    """Whether the pack is of another class than the inverter's battery port, when both are known (round 12 review,
+    finding 4): an LV pack is never offered on an HV port, nor the reverse, nor a 24 V pack on a 48 V port."""
+    bc, bf = _class_of(battery, "battery_class", "nominal_v")
+    pc, pf = _class_of(inverter, "battery_class", "charge_v_max")
+    if bf is not None and pf is not None:
+        return bf != pf
+    return bool(bc and pc and bc != pc)
+
+
+def recommended_rate_ok(battery: Item, units: int, current_a: Optional[float]) -> Optional[bool]:
+    """Whether `units` of the battery deliver the inverter's current at the recommended continuous rate; None when
+    the item has no recommended figure or no current is asked."""
+    if current_a is None or not battery.discharge_a_recommended:
+        return None
+    return units * float(battery.discharge_a_recommended) >= current_a - 1e-9
+
+
+def select_battery(kwh: float, catalog: Catalog, cfg: PricingConfig, current_a: Optional[float] = None, inverter: Optional[Item] = None) -> list[tuple[Item, int, float]]:
     """Batteries whose units cover the kWh, cheapest first. With the inverter's battery current given (round 3,
     E-03) the continuous rating comes first: the combinations that deliver it, then the ones whose rating is blank
-    (unknown), then the ones that fall short, each group cheapest first."""
+    (unknown), then the ones that fall short; within each, the owner's call of round 12 (the review's finding 3): a
+    pack that delivers the current at its recommended rate ranks above one whose recommended figure is unknown,
+    and that above one that passes only on its maximum, before cost; the maximum alone never promotes a pack. A
+    pack of another class than the inverter's port is never offered (finding 4)."""
     cands = [
         i for i in catalog.by_category("Battery")
         if (i.rating_unit or "").lower() == "kwh" and i.rating and i.rating >= 1.0 and not _excluded(i, cfg.roles.battery_exclude_words)
+        and not battery_class_mismatch(i, inverter)
     ]
     ranked = []
     for it, n, cost in _cheapest(cands, catalog, cfg, units_fn=lambda i: int(math.ceil(kwh / i.rating - 1e-9))):
         ok = battery_current_ok(it, n, current_a)
         rank = 0 if (current_a is None or ok) else (1 if ok is None else 2)
-        ranked.append((rank, cost, n, it))
-    ranked.sort(key=lambda x: (x[0], x[1], x[2]))
-    return [(it, n, cost) for rank, cost, n, it in ranked]
+        rec = recommended_rate_ok(it, n, current_a)
+        soft = 0 if (current_a is None or rec) else (1 if rec is None else 2)
+        ranked.append((rank, soft, cost, n, it))
+    ranked.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+    return [(it, n, cost) for rank, soft, cost, n, it in ranked]
 
 
 def pick_gauge(current_a: float, run_m: float, voltage: float, drop_limit: float, ampacity: dict[str, float], cfg: PricingConfig,
@@ -270,6 +320,12 @@ def pass_through_check(inverter: Optional[Item], units: int, peak_kw: Optional[f
     return block, warnings
 
 
+def _size_txt(b: Optional[float]) -> str:
+    """A breaker size as a BOM note prints it; None when no standard size covers the current (the hard ac_circuit
+    warning says so, and the note must not crash the pricing: round 12 review, finding 6)."""
+    return f"{b:g} A" if b is not None else "above the largest standard size"
+
+
 def _role_line(code: str, qty: float, role: str, note: str, warnings: list[dict], label: str) -> BomLine:
     """A BOM line for a role: the item's code when the role has one, else a NO-ITEM line with the quantity and no
     price plus the warning to add the item (never an invented price)."""
@@ -355,8 +411,10 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     choices["inverter_ac_input_a"] = inverter.ac_input_a if inverter else None
     choices["inverter_has_transfer_switch"] = inverter.has_transfer_switch if inverter else None
     inv_kw = float(inverter.rating) if inverter and inverter.rating else req.inverter_kw
-    i_bat = inv_kw * 1000.0 / w.battery_voltage            # per inverter, at rated output from the battery
-    i_bat_max = float(inverter.battery_max_a) if (inverter and inverter.battery_max_a) else i_bat   # the inverter's own limit when known
+    # the inverter's battery current (round 12, 3.5): the larger of its discharge and charge figures when the datasheet
+    # gave them, the remark's figure when only that is on file, else the rated output over the battery voltage
+    bat_cur = inverter_battery_current(inverter, inv_kw, w.battery_voltage)
+    i_bat_max = float(bat_cur["amps"])
 
     # the pass-through check on a net-metering job (no backup mode: the grid carries the house peak through the unit)
     if req.kind == "net_metering":
@@ -371,7 +429,7 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     bat_options: list[tuple[Item, int, float]] = []
     if req.battery_kwh > 0:
         bank_current = i_bat_max * units
-        bat_options = select_battery(req.battery_kwh, catalog, cfg, bank_current)
+        bat_options = select_battery(req.battery_kwh, catalog, cfg, bank_current, inverter)
         if req.battery_code:
             battery = catalog.get(req.battery_code)
             battery_units = int(math.ceil(req.battery_kwh / battery.rating - 1e-9)) if battery and battery.rating else 0
@@ -380,13 +438,31 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         if battery is None:
             warnings.append({"code": "no_battery", "message": "No battery in the materials list covers the required kWh. Add one with its kWh rating on the Materials page."})
         else:
+            if bat_cur["source"] == "rule" and battery.nominal_v:
+                # the kW fallback over the chosen battery's own nominal voltage when it carries one (3.5)
+                i_bat_max = inv_kw * 1000.0 / float(battery.nominal_v)
+                bat_cur = {"amps": i_bat_max, "source": "rule", "basis": f"{inv_kw:g} kW over the battery's {float(battery.nominal_v):g} V (no battery current on the inverter)"}
+                bank_current = i_bat_max * units
             battery_units, bat_warnings = battery_current_check(battery, battery_units, inverter, units, i_bat_max)
             warnings += bat_warnings
+            # the ordinary checks on the sheet's figures (3.5 to 3.8): the recommended rate, two inputs, the charge current, Ah against kWh
+            warnings += battery_soft_checks(battery, battery_units, inverter, units, i_bat_max)
+            # the voltage match (3.7): a pack of the wrong class holds the documents; a ceiling below the charge voltage is a setting to make
+            vm, vm_warnings = voltage_match(inverter, battery)
+            warnings += vm_warnings
+            choices["battery_voltage_match"] = vm
+            ch = charge_check(inverter, battery, battery_units)
+            if ch is not None:
+                choices["battery_charge"] = ch
+            ah = ah_kwh_check(battery)
+            if ah is not None:
+                choices["battery_ah_kwh"] = ah
             lines.append(BomLine(battery.code, battery_units, "battery", f"{battery_units} x {battery.rating:g} kWh = {battery_units * battery.rating:g} kWh"
                                  + (f", {battery_units * float(battery.continuous_a):g} A continuous against {bank_current:.0f} A from the inverter" if battery.continuous_a else "")))
         choices["battery_options"] = [
             {"code": i.code, "name": i.name, "rating_kwh": i.rating, "units": n, "total_kwh": n * i.rating, "supplier": i.supplier, "landed": c,
-             "continuous_a": i.continuous_a, "current_ok": battery_current_ok(i, n, bank_current)}
+             "continuous_a": i.continuous_a, "discharge_a_recommended": i.discharge_a_recommended, "nominal_v": i.nominal_v, "current_ok": battery_current_ok(i, n, bank_current),
+             "recommended_ok": recommended_rate_ok(i, n, bank_current)}
             for i, n, c in bat_options[:8]
         ]
         choices["battery_continuous_a"] = battery.continuous_a if battery else None
@@ -410,19 +486,31 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     if splices > 0:
         lines.append(BomLine(r.splice, splices, "splice", "1 per rail joint"))
 
-    # strings and PV cable
-    strings = req.strings_override or int(math.ceil(req.panel_count / max(r.max_panels_per_string, 1) - 1e-9))
-    strings = max(strings, 1)
-    per_string = int(math.ceil(req.panel_count / strings))
-    panel_w = float(panel.rating or 0) if (panel.rating_unit or "").upper() == "W" else 0.0
-    i_string = panel_w / w.panel_vmp_v if panel_w else 0.0
-    v_string = per_string * w.panel_vmp_v
+    # strings and PV cable; the design temperatures are the job's (compute.py's results["site"]) or the settings alone (round 12)
+    sd = cfg.string_design
+    t_cold = float(req.t_cold_c) if req.t_cold_c is not None else float(sd.design_cold_c)
+    t_hot = float(req.t_hot_c) if req.t_hot_c is not None else float(sd.design_hot_cell_c)
+    # the string count from the cold Voc against the inverter's maximum PV voltage (3.1) when both figures are on file,
+    # the owner's max_panels_per_string becoming the cap; else the fixed rule, said by string_rule_fallback
+    plan = string_plan(panel, inverter, sd, t_cold, t_hot, req.panel_count, req.strings_override, r.max_panels_per_string)
+    warnings += plan.warnings
+    strings, per_string = plan.strings, plan.per_string
+    # the string current from Imp, the string voltage from Vmp, the conductor's ampacity for 1.25 × 1.25 × Isc (3.2); the rule's figures when absent
+    sc = string_current(panel, per_string, cfg, t_hot)
+    i_string, v_string = float(sc["i_string_a"]), float(sc["v_string_v"])
     pv_run = req.pv_run_m if req.pv_run_m is not None else w.pv_run_m
-    pv_gauge, pv_drop, pv_ok = pick_gauge(i_string, pv_run, v_string, w.dc_drop_limit, w.pv_cable_ampacity, cfg)
+    pv_gauge, pv_drop, pv_ok = pick_gauge(i_string, pv_run, v_string, w.dc_drop_limit, w.pv_cable_ampacity, cfg, min_ampacity=float(sc["i_cond_a"] or 0.0))
     if not pv_ok:
         warnings.append({"code": "pv_cable", "message": f"PV cable: {pv_drop:.1%} drop at {pv_run:g} m even with {pv_gauge} mm²; shorten the run or use a larger cable."})
+    pv_note = (f" (Imp from the datasheet, ampacity for 1.56 × Isc {sc['isc_a']:g} A = {sc['i_cond_a']:.2f} A)" if sc["source"] == "datasheet"
+               else " (the rule's current: panel watts over the wiring rules' Vmp)")
+    per_mppt, mppt_warnings = mppt_assignment(inverter, strings, per_string, req.panel_count, sc["imp_a"], units)
+    warnings += mppt_warnings
+    sd_block = plan.to_dict()
+    sd_block.update({"temperatures_from": "project" if req.t_cold_c is not None else "settings", "per_mppt": per_mppt, "current": sc})
+    choices["string_design"] = sd_block
     lines += [
-        BomLine(r.pv_cable_red.get(pv_gauge, r.pv_cable_red["4"]), strings * pv_run, "pv_cable_red", f"{_plural(strings, 'string')} x {pv_run:g} m, {pv_gauge} mm2, {pv_drop:.1%} drop"),
+        BomLine(r.pv_cable_red.get(pv_gauge, r.pv_cable_red["4"]), strings * pv_run, "pv_cable_red", f"{_plural(strings, 'string')} x {pv_run:g} m, {pv_gauge} mm2, {pv_drop:.1%} drop" + pv_note),
         BomLine(r.pv_cable_black.get(pv_gauge, r.pv_cable_black["4"]), strings * pv_run, "pv_cable_black", f"{_plural(strings, 'string')} x {pv_run:g} m"),
         BomLine(r.mc4_pair, strings * r.mc4_pairs_per_string, "mc4_pair", f"{r.mc4_pairs_per_string} per string"),
     ]
@@ -470,12 +558,12 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
     if g_inv == g_grid:
         thhn_code = r.thhn.get(g_inv) or next(iter(r.thhn.values()))
         lines.append(BomLine(thhn_code, inv_m + grid_m + gnd_m, "thhn", (
-            f"{inv_txt} + {grid_txt} + {gnd_run:g} m grounding{per_inv}; {g_inv} mm2 ({amp_inv:g} A) for the {b_inv:g} A breakers, {max(drop_inv, drop_grid):.1%} drop")))
+            f"{inv_txt} + {grid_txt} + {gnd_run:g} m grounding{per_inv}; {g_inv} mm2 ({amp_inv:g} A) for the {_size_txt(b_inv)} breakers, {max(drop_inv, drop_grid):.1%} drop")))
     else:
         lines.append(BomLine(r.thhn.get(g_inv) or next(iter(r.thhn.values())), inv_m + gnd_m, "thhn",
-                             f"{inv_txt} + {gnd_run:g} m grounding{per_inv}; {g_inv} mm2 ({amp_inv:g} A) for the {b_inv:g} A breaker, {drop_inv:.1%} drop"))
+                             f"{inv_txt} + {gnd_run:g} m grounding{per_inv}; {g_inv} mm2 ({amp_inv:g} A) for the {_size_txt(b_inv)} breaker, {drop_inv:.1%} drop"))
         lines.append(BomLine(r.thhn.get(g_grid) or next(iter(r.thhn.values())), grid_m, "thhn_grid",
-                             f"{grid_txt}{per_inv}; {g_grid} mm2 ({amp_grid:g} A) for the {b_grid:g} A breakers, {drop_grid:.1%} drop"))
+                             f"{grid_txt}{per_inv}; {g_grid} mm2 ({amp_grid:g} A) for the {_size_txt(b_grid)} breakers, {drop_grid:.1%} drop"))
 
     # battery cable and breaker (E-03): the breaker at or above 1.25 x the inverter's battery current (its own
     # maximum when the item carries it, else the rated output over the battery voltage), the cable's ampacity at or
@@ -511,7 +599,33 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
 
     # protection: one DC breaker per string, one DC SPD per MPPT input in use, one AC SPD per board, the breakers
     # per circuit, the transfer switch unless the inverter carries its own, the visible AC disconnect for the DU
-    lines.append(BomLine(r.dc_breaker, strings, "dc_breaker", "1 per string"))
+    # the DC breaker (3.2): the role item at any rating when the panel has no Isc (as before); with Isc on file its rating must
+    # cover 1.56 × Isc, else the smallest "DC BREAKER" item that does is used and the ordinary warning says so
+    dc_item = catalog.get(r.dc_breaker)
+    dc_code, dc_note = r.dc_breaker, "1 per string"
+    dc_block: Optional[dict] = None
+    if sc["source"] == "datasheet" and sc["i_cond_a"]:
+        i_cond = float(sc["i_cond_a"])
+        role_rating = dc_item.amps_in_name() if dc_item else None
+        dc_block = {"code": dc_code, "role_code": r.dc_breaker, "role_rating_a": role_rating, "i_cond_a": i_cond, "ocpd_a": sc["ocpd_a"], "ok": None}
+        if role_rating is not None and role_rating < i_cond - 1e-9:
+            alt = _by_amps(r.dc_breaker_pattern, i_cond, catalog, cfg)
+            if alt is not None:
+                dc_code, dc_block["code"], dc_block["ok"] = alt.code, alt.code, True
+                warnings.append({"code": "dc_breaker_rating", "message": (
+                    f"The {role_rating:g} A DC breaker {r.dc_breaker} is below the {i_cond:.2f} A the string needs (1.25 × 1.25 × Isc {sc['isc_a']:g} A); "
+                    f"{alt.code} {alt.name} ({alt.amps_in_name():g} A) is used instead. Set it under Pricing settings › BOM item roles to keep it.")})
+            else:
+                dc_block["ok"] = False
+                warnings.append({"code": "dc_breaker_rating", "message": (
+                    f"The {role_rating:g} A DC breaker {r.dc_breaker} is below the {i_cond:.2f} A the string needs (1.25 × 1.25 × Isc {sc['isc_a']:g} A) and no "
+                    f"\"{r.dc_breaker_pattern}\" item in the list covers it. Add one on the Materials page.")})
+        elif role_rating is not None:
+            dc_block["ok"] = True
+        rating_txt = f"{catalog.get(dc_code).amps_in_name():g} A" if catalog.get(dc_code) and catalog.get(dc_code).amps_in_name() else "rating not in the name"
+        dc_note = f"1 per string; {rating_txt} for the {sc['ocpd_a']:g} A size the string needs (1.25 × 1.25 × Isc {sc['isc_a']:g} A = {i_cond:.2f} A, datasheet)"
+    choices["dc_breaker"] = dc_block
+    lines.append(BomLine(dc_code, strings, "dc_breaker", dc_note))
     mppt = int(inverter.mppt_count) if inverter and inverter.mppt_count else 0
     dc_spds = min(strings, units * mppt) if mppt else units
     lines.append(BomLine(r.dc_spd, dc_spds, "dc_spd", f"1 per MPPT input in use ({_plural(strings, 'string')} on {units * mppt} MPPT inputs)" if mppt else "1 per inverter (MPPT count not on the item; verify)"))
@@ -535,8 +649,8 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
             lines.append(BomLine(ats.code, units, "ats", f"transfer switch, {i_grid_req:.0f} A continuous (grid side)"))
     ac_breaker_item = catalog.get(r.ac_breaker)
     breakers = units * (inv_circuits + grid_circuits)
-    b_note = (f"{_plural(inv_circuits, 'inverter-output breaker')} at {b_inv:g} A (1.25 × {i_ac:.0f} A → next standard size); "
-              f"{_plural(grid_circuits, 'grid-side breaker')} at {b_grid:g} A (1.25 × {i_grid:.0f} A"
+    b_note = (f"{_plural(inv_circuits, 'inverter-output breaker')} at {_size_txt(b_inv)} (1.25 × {i_ac:.0f} A → next standard size); "
+              f"{_plural(grid_circuits, 'grid-side breaker')} at {_size_txt(b_grid)} (1.25 × {i_grid:.0f} A"
               + (", the inverter's AC input rating" if grid_known else ", the output current: AC input rating unknown") + ")" + per_inv)
     lines.append(BomLine(r.ac_breaker, breakers, "ac_breaker", b_note))
     if ac_breaker_item is not None:
@@ -589,6 +703,8 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         "inverter_code": inverter.code if inverter else None, "battery_code": battery.code if battery else None, "battery_units": battery_units,
         "rows": [{"panels": x.panels, "length_m": x.length_m} for x in req.rows],
         "kind": req.kind, "battery_current_a": i_bat_max, "battery_breaker_min_a": i_bat_max * w.continuous_factor, "battery_circuit": battery_circuit,
+        "battery_current_source": bat_cur["source"], "battery_current_basis": bat_cur["basis"],
         "dc_spds": dc_spds,
     })
+    choices.setdefault("battery_voltage_match", None)
     return BoqResult([l for l in lines if l.qty > 0], choices, warnings)
