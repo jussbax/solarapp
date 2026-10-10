@@ -85,8 +85,6 @@
 .pld-trust-book { margin: 14px 0 0; padding-top: 10px; border-top: 1px dashed var(--pld-line); font-size: 13px; color: var(--pld-muted); }
 .pld-trust-head { font-weight: 600; color: var(--pld-text); margin-bottom: 4px; }
 .pld-basis { margin-top: 16px; border-top: 1px solid var(--pld-line); padding-top: 10px; }
-.pld-warranty { display: block; }
-.pld-warranty li { margin: 2px 0; }
 .pld-contact { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-weight: 600; }
 .pld-contact a { color: var(--pld-gold-text); }
 

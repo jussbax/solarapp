@@ -12,6 +12,8 @@ const phpAbout = (v: number) => {
   return `${v < 0 ? '-' : ''}${text}`
 }
 const n0 = (v: number) => Math.round(v).toLocaleString()
+/** A kWh figure as the scene's chips print it: up to two decimals, trailing zeros dropped (11.7, 10.24, 15). */
+const kwh2 = (v: number) => Number(v.toFixed(2)).toString()
 const years = (v: number | null | undefined, horizon: number) => (v == null ? `more than ${horizon} years` : v < 1 ? 'under a year' : `${v.toFixed(1)} years`)
 /** A bill under this prints as "a small bill": the fixed charges never go away, and the grid still bills the hours it steps in. */
 const SMALL_BILL = 100
@@ -26,7 +28,7 @@ const hasBattery = (v: Variant) => v.system.battery_kwh >= 0.5
 function systemLine(v: Variant) {
   const s = v.system
   const parts = [`${s.panels} × ${Math.round(s.panel_wp)} W ${s.panels === 1 ? 'panel' : 'panels'} (${s.kwp.toFixed(2)} kWp)`, `${s.inverter_units > 1 ? `${s.inverter_units} × ` : ''}${s.inverter_kw} kW hybrid ${s.inverter_units > 1 ? 'inverters' : 'inverter'}`]
-  if (hasBattery(v)) parts.push(`${s.battery_kwh.toFixed(0)} kWh lithium battery${s.battery_note ? ` (${s.battery_note})` : ''}`)
+  if (hasBattery(v)) parts.push(`${kwh2(s.battery_kwh)} kWh lithium battery${s.battery_note ? ` (${s.battery_note})` : ''}`)
   return parts.join(', ')
 }
 
@@ -423,7 +425,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                 </>
               ) : (
                 <>
-                  <b>Add a battery for brownouts:</b> about {php0(other.price.total - shown.price.total)} more ({other.system.battery_kwh.toFixed(0)} kWh{other.system.battery_note ? `, ${other.system.battery_note}` : ''})
+                  <b>Add a battery for brownouts:</b> about {php0(other.price.total - shown.price.total)} more ({kwh2(other.system.battery_kwh)} kWh{other.system.battery_note ? `, ${other.system.battery_note}` : ''})
                   {other.economics && `, bill ${other.economics.bill_after_monthly < SMALL_BILL ? 'small' : `about ${php0(other.economics.bill_after_monthly)}`} a month, pays for itself in ${years(other.economics.payback_years, other.economics.analysis_years)}`}.{' '}
                   <button type="button" className="pld-link" onClick={() => setWithBattery(true)}>
                     Show with the battery
@@ -537,13 +539,6 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
             <ul className="pld-trust">
               {trust.map((t, i) => (
                 <li key={i}>{t}</li>
-              ))}
-            </ul>
-          )}
-          {status && status !== 'down' && status.warranty.length > 0 && (
-            <ul className="pld-trust pld-warranty">
-              {status.warranty.map((w, i) => (
-                <li key={i}>{w}</li>
               ))}
             </ul>
           )}
