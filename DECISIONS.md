@@ -1569,6 +1569,15 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   (6, 6 + 2, 2; the fourth face empty), C 37 (18 + 9 + 10). Every page shares the home roof until a page has a
   photo of its own (`<!-- og_image -->`).
 - No "Our work" page until there are six or more sites each with a town, a size, a month and the customer's yes.
+- The UX audit of the pages with photos (`docs/audits/round-5/ux.md`) found nothing that blocks a visitor and
+  nineteen things to tidy; all the one-hour ones are done: the header's gold button and the hero's eyebrow now pass
+  contrast; the full navigation waits until 860 px (the menu button serves tablets in portrait); anchors scroll
+  clear of the sticky header; every profile-dependent fragment starts hidden (the build adds `is-empty`), so no
+  page shows "PRC No. ." while the profile loads or when it fails; the fonts ship as WOFF2 (54 KB instead of
+  146) and are preloaded; the hero photo is capped at 560 px on tablets; captions, tap targets, the phone's small
+  text, the share card for X and Telegram, the About title, the estimate page's loading line, the menu's Escape
+  key and the focus ring follow the report. Left for later: a 720 px photo variant and a metric-matched fallback
+  font (both half a day for a small gain).
 - Open with the owner: per site the town, the kWp, battery or net metering, the month, whether the test-panel
   visit was done and the customer's go-ahead; who flew the drone; site A's orange cable and how the rails are
   fixed; whether site B's cables were tied under the panels and run in conduit after the photo (an "after" frame

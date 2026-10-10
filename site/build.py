@@ -1,4 +1,4 @@
-"""Build the company website: wrap each page in the shared layout, copy static files, fonts and brand marks.
+"""Build the company website: wrap each page in the shared layout, copy static files (fonts included) and brand marks.
 
     python site/build.py                                   -> site/dist/
     python site/build.py --base-url https://pldevinc.com   -> absolute og:image and an og:url per page
@@ -11,6 +11,9 @@ owner edits them in Settings, not here.
 
 A page may name its own share image with ``<!-- og_image: /static/photos/x.jpg -->`` and
 ``<!-- og_image_alt: ... -->``; the default is the home roof for every page.
+
+Every tag with ``data-profile-hide-if-empty`` starts with ``class="is-empty"`` (the build adds it), so a page
+never shows the punctuation around an empty profile field before the fetch answers, or when it fails.
 
 Blocks between ``<!-- placeholder:start -->`` and ``<!-- placeholder:end -->``
 are placeholders for photos that do not exist yet; the public build drops
@@ -28,11 +31,26 @@ ROOT = HERE.parent
 PAGES = HERE / "pages"
 STATIC = HERE / "static"
 LAYOUT = HERE / "layout.html"
-FONTS = ROOT / "backend" / "solarapp" / "reports" / "assets" / "fonts"
 BRAND = ROOT / "frontend" / "public" / "brand"
 ICONS = ROOT / "frontend" / "public"
 
 META = re.compile(r"<!--\s*(\w+):\s*(.*?)\s*-->")
+HIDE_IF_EMPTY = re.compile(r"<(\w+)([^>]*\bdata-profile-hide-if-empty\b[^>]*)>")
+
+
+def start_hidden(html: str) -> str:
+    """Give every profile-dependent tag ``is-empty`` from the first paint; site.js removes it when the profile has the field."""
+    def fix(m: re.Match) -> str:
+        tag, attrs = m.group(1), m.group(2)
+        cls = re.search(r'\bclass="([^"]*)"', attrs)
+        if cls is None:
+            return f'<{tag} class="is-empty"{attrs}>'
+        if "is-empty" in cls.group(1).split():
+            return m.group(0)
+        return f'<{tag}{attrs[:cls.start(1)]}is-empty {attrs[cls.start(1):]}>'
+    return HIDE_IF_EMPTY.sub(fix, html)
+
+
 PLACEHOLDER = re.compile(r"[ \t]*<!--\s*placeholder:start\s*-->.*?<!--\s*placeholder:end\s*-->[ \t]*\n?", re.S)
 
 
@@ -51,7 +69,7 @@ def render_page(layout: str, page: Path, base_url: str = "", with_placeholders: 
                          ("og_image", "/static/photos/og-home.jpg"), ("og_image_alt", "Eight solar panels in two rows on the rib-type roof of a home, seen from above")):
         html = html.replace("{{" + key + "}}", meta.get(key, default))
     html = html.replace("{{base_url}}", base)
-    return html.replace("{{body}}", body)
+    return start_hidden(html.replace("{{body}}", body))
 
 
 def build(out: Path, base_url: str = "", with_placeholders: bool = False) -> list[str]:
@@ -60,9 +78,6 @@ def build(out: Path, base_url: str = "", with_placeholders: bool = False) -> lis
         shutil.rmtree(out)
     out.mkdir(parents=True)
     shutil.copytree(STATIC, out / "static")
-    (out / "static" / "fonts").mkdir(exist_ok=True)
-    for f in FONTS.glob("Montserrat-*.ttf"):
-        shutil.copy(f, out / "static" / "fonts" / f.name)
     if BRAND.is_dir():
         shutil.copytree(BRAND, out / "brand")
     for name in ("favicon.png", "apple-touch-icon.png"):

@@ -1,5 +1,6 @@
 """The website side: the site build, the website address setting and the lead email."""
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -59,6 +60,12 @@ def test_build_writes_every_page(build, tmp_path):
     assert set(pages) >= {"index.html", "about.html", "estimate.html", "net-metering.html", "brownouts.html", "privacy.html", "404.html"}
     assert (out / "static" / "site.css").is_file() and (out / "static" / "site.js").is_file()
     assert (out / "static" / "photos" / "og-home.jpg").is_file() and (out / "static" / "photos" / "rib-roof-eight-480.webp").is_file()
+    assert (out / "static" / "fonts" / "Montserrat-400.woff2").is_file() and not list((out / "static" / "fonts").glob("*.ttf"))
+    for page in ("index.html", "about.html", "privacy.html"):
+        html = (out / page).read_text(encoding="utf-8")
+        # every profile-dependent fragment starts hidden: no dangling "PRC No. ." before the fetch answers
+        for m in re.finditer(r"<\w+[^>]*data-profile-hide-if-empty[^>]*>", html):
+            assert 'is-empty' in m.group(0), m.group(0)
     estimate = (out / "estimate.html").read_text(encoding="utf-8")
     assert 'data-embedded="true"' in estimate
     css = (out / "static" / "site.css").read_text(encoding="utf-8")
