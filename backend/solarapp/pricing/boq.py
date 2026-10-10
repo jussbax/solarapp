@@ -31,7 +31,8 @@ from typing import Optional
 
 from .catalog import Catalog, Item
 from .config import PricingConfig
-from .design_checks import ah_kwh_check, battery_soft_checks, charge_check, inverter_battery_current, mppt_assignment, string_current, string_plan, voltage_class, voltage_match
+from .design_checks import (ah_kwh_check, battery_soft_checks, charge_check, circuits_block, inverter_battery_current, mppt_assignment, string_current, string_plan,
+                            voltage_class, voltage_match)
 from .engine import BomLine, landed_cost
 
 NO_ITEM_PREFIX = "NO-ITEM-"   # the code of a BOM line whose role has no item in the materials list yet
@@ -705,6 +706,12 @@ def generate_boq(req: BoqRequest, catalog: Catalog, cfg: PricingConfig) -> BoqRe
         "kind": req.kind, "battery_current_a": i_bat_max, "battery_breaker_min_a": i_bat_max * w.continuous_factor, "battery_circuit": battery_circuit,
         "battery_current_source": bat_cur["source"], "battery_current_basis": bat_cur["basis"],
         "dc_spds": dc_spds,
+        # the runs the lines were priced on (the job's, else the wiring rules'), so the sheets need not re-derive them (round 13)
+        "pv_run_m": pv_run, "ac_run_m": ac_run, "grounding_run_m": gnd_run, "conduit_m": conduit,
     })
     choices.setdefault("battery_voltage_match", None)
-    return BoqResult([l for l in lines if l.qty > 0], choices, warnings)
+    kept = [l for l in lines if l.qty > 0]
+    # round 13 (brief 2.1): the circuit records the schedule, the single-line diagram and the design analysis read, from
+    # the figures above; nothing new is derived here
+    choices["circuits"] = circuits_block(choices, kept, catalog, cfg, inverter, battery, units)
+    return BoqResult(kept, choices, warnings)

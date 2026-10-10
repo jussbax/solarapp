@@ -1221,5 +1221,54 @@ export interface PricingChoicesExtra {
 }
 export type PricingChoices = NonNullable<PricingBlock['choices']> & PricingChoicesExtra
 
+/** Round 13 (docs/audits/round-13/engineer-brief.md, 2.1): one circuit of the job as pricing.choices.circuits carries it, C1 to C7
+ * in a fixed order; `applies` says whether the job has the circuit; a figure the generator has not computed is null with its
+ * reason in `notes`; `status` is "not checked" until the design analysis derates the row, "fail" where the BOQ's own
+ * coordination already fails. */
+export interface CircuitRecord {
+  id: string
+  name: string
+  kind: 'dc_pv' | 'dc_combined' | 'dc_battery' | 'ac_inverter_output' | 'ac_grid_feed' | 'ac_bypass' | 'egc'
+  applies: boolean
+  count: number
+  conductors: { n_total: number | null; n_current_carrying: number | null; size_mm2: number | null; insulation_c: number | null; type: 'THHN' | 'PV wire' | 'battery cable' | null }
+  run_m: number | null
+  voltage_v: number | null
+  i_continuous_a: number | null
+  i_design_a: number | null
+  ocpd_a: number | null
+  ocpd_code: string | null
+  placement: 'rooftop_conduit' | 'rooftop_free_air' | 'indoor_conduit' | 'indoor_free_air' | null
+  conduit_code: string | null
+  conduit_inner_diameter_mm: number | null
+  ambient_c: number | null
+  rooftop_adder_c: number | null
+  t_conductor_c: number | null
+  /** The wiring rules' table figure the BOQ sized the conductor on, and which table it is. */
+  ampacity_rule_a: number | null
+  ampacity_rule_column: string | null
+  ampacity_base_a: number | null
+  ampacity_terminal_a: number | null
+  f_temp: number | null
+  f_fill: number | null
+  ampacity_derated_a: number | null
+  fill_pct: number | null
+  fill_limit_pct: number | null
+  egc_required_mm2: number | null
+  egc_provided_mm2: number | null
+  egc_provided_code: string | null
+  drop_pct: number | null
+  checks: { design_le_ocpd: boolean | null; ampacity_ge_ocpd: boolean | null; ocpd_le_derated: boolean | null; terminal_ge_design: boolean | null; next_size_up_used: boolean | null; fill_ok: boolean | null; egc_ok: boolean | null }
+  status: 'pass' | 'fail' | 'not checked'
+  notes: string[]
+}
+export interface PricingChoicesExtra {
+  circuits?: CircuitRecord[]
+  pv_run_m?: number
+  ac_run_m?: number
+  grounding_run_m?: number
+  conduit_m?: number
+}
+
 /** The id under which an unsaved new project keeps its draft on the device (the record has no id until the first Save). */
 export const NEW_DRAFT_ID = 0
