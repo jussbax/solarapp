@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { emit, isUnavailable, makeApi, readSource } from './api'
 import DayScene from './DayScene'
 import type { EstimateResult, EstimateStatus, Goal, Pattern, Town, Variant } from './types'
+import Wizard from './Wizard'
 
 const php0 = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '-' : `${v < 0 ? '-' : ''}₱${Math.abs(Math.round(v)).toLocaleString()}`)
 /** A savings figure as a person says it: "₱1.03 million", "₱61,000", "₱3,800" (the price and the bill stay exact). */
@@ -15,16 +16,6 @@ const years = (v: number | null | undefined, horizon: number) => (v == null ? `m
 /** A bill under this prints as "a small bill": the fixed charges never go away, and the grid still bills the hours it steps in. */
 const SMALL_BILL = 100
 
-const GOALS: { id: Goal; title: string; text: string }[] = [
-  { id: 'net_metering', title: 'A lower bill', text: 'Solar runs the house by day. Extra power goes to your electric company as credit on your bill (net metering). A battery can be added later for brownouts.' },
-  { id: 'combination', title: 'A lower bill, and lights in a brownout', text: 'Solar by day, battery at night and during brownouts. Extra power still earns credit on your bill.' },
-  { id: 'off_grid', title: 'Battery first, nothing sold back', text: 'More panels and a battery carry the house day and night; the grid steps in only when both fall short, and nothing is sold back. For homes that would rather keep their own power than sell it, and for places where net metering is out of reach.' },
-]
-const PATTERNS: { id: Pattern; title: string; text: string }[] = [
-  { id: 'morning', title: 'Mostly morning', text: 'Cooking, laundry, the pump and aircon early in the day.' },
-  { id: 'balanced', title: 'All day', text: 'Someone is home most of the day.' },
-  { id: 'evening', title: 'Mostly evening', text: 'The house is busiest after dark: aircon, TV, cooking.' },
-]
 const TIMES = ['Morning', 'Afternoon', 'Evening']
 
 /** The battery the price includes (the catalogue unit); anything under half a kWh is no battery at all. */
@@ -341,100 +332,18 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
         <p className="pld-lead">
           Four questions, about a minute: your bill before and after, the price, and how many panels it takes. The only call you get is the free on-site assessment you book, and that one makes the figure exact.
         </p>
-        {(status === 'down' || (status && !status.enabled)) && <div className="pld-note pld-warn">{downNote}</div>}
-
-        <div className="pld-step">1. What do you want from solar?</div>
-        <div className="pld-choices">
-          {GOALS.map((g) => (
-            <button key={g.id} type="button" className={`pld-choice ${goal === g.id ? 'on' : ''}`} onClick={() => setGoal(g.id)} aria-pressed={goal === g.id}>
-              <b>{g.title}</b>
-              <small>{g.text}</small>
-            </button>
-          ))}
-        </div>
-
-        <div className="pld-step">2. Where is your house?</div>
-        <div className="pld-row">
-          <label className="pld-field">
-            <span>Province</span>
-            <select
-              value={province}
-              onChange={(ev) => {
-                setProvince(ev.target.value)
-                setTownName('')
-                setFound('')
-              }}
-            >
-              <option value="">Choose</option>
-              {provinces.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="pld-field">
-            <span>Town or city</span>
-            <select
-              value={townName}
-              disabled={!province}
-              onChange={(ev) => {
-                setTownName(ev.target.value)
-                if (ev.target.value) setPin(null)
-                if (ev.target.value !== townName) setFound('')
-              }}
-            >
-              <option value="">{province ? 'Choose' : 'Pick a province first'}</option>
-              {townsHere.map((t) => (
-                <option key={t.name} value={t.name}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {found && townName ? (
-          <div className="pld-hint">Your location points at {found}. Change it if that's not where the house is.</div>
-        ) : pin && !townName ? (
-          <div className="pld-hint">Location set from your phone. Pick a town instead if that's not where the house is.</div>
-        ) : (
-          <div className="pld-hint">
-            At the house?{' '}
-            <button type="button" className="pld-link" onClick={useGps} disabled={geoBusy}>
-              {geoBusy ? 'Finding your town…' : 'Use my location'}
-            </button>{' '}
-            and the town fills in. Not in the list? Message us.
-          </div>
-        )}
-
-        <div className="pld-step">3. How much electricity do you use in a month?</div>
-        <div className="pld-row">
-          <label className="pld-field">
-            <span>kWh on your latest bill</span>
-            <input inputMode="decimal" value={kwh} onChange={(ev) => setKwh(ev.target.value)} placeholder="e.g. 338" />
-          </label>
-          <label className="pld-field">
-            <span>or the amount you paid (₱)</span>
-            <input inputMode="decimal" value={php} onChange={(ev) => setPhp(ev.target.value)} placeholder="e.g. 4,000" />
-          </label>
-        </div>
-        <div className="pld-hint">The kWh is printed on the bill, usually near "consumption". Either one is fine.</div>
-
-        <div className="pld-step">4. When does your house use the most power?</div>
-        <div className="pld-choices">
-          {PATTERNS.map((p) => (
-            <button key={p.id} type="button" className={`pld-choice ${pattern === p.id ? 'on' : ''}`} onClick={() => setPattern(p.id)} aria-pressed={pattern === p.id}>
-              <b>{p.title}</b>
-              <small>{p.text}</small>
-            </button>
-          ))}
-        </div>
-
-        {error && <div className="pld-note pld-bad">{error}</div>}
-        <button type="button" className="pld-btn pld-primary pld-wide" onClick={run} disabled={!ready || busy || !enabled}>
-          {busy ? 'Working it out…' : 'Show my estimate'}
-        </button>
-        {!ready && <div className="pld-hint pld-center">{!hasPlace ? 'Pick your town and enter your monthly use first.' : 'Enter your monthly use first.'}</div>}
+        <Wizard
+          goal={goal} setGoal={setGoal}
+          province={province} setProvince={setProvince}
+          townName={townName} setTownName={setTownName}
+          provinces={provinces} townsHere={townsHere}
+          pin={pin} setPin={setPin} found={found} setFound={setFound}
+          useGps={useGps} geoBusy={geoBusy}
+          kwh={kwh} setKwh={setKwh} php={php} setPhp={setPhp}
+          pattern={pattern} setPattern={setPattern}
+          ready={ready} enabled={enabled} busy={busy} error={error} run={run}
+          downNote={downNote} status={status}
+        />
       </section>
       )}
 
