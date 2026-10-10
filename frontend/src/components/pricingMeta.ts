@@ -15,7 +15,7 @@ export const SECTION_LABELS: Record<string, string> = {
   company_base: 'Company base', truck: 'Truck', handling: 'Handling at base', route: 'Route', categories: 'Markup and wastage by category',
   labor: 'Labor day rates', roof: 'Roof work', ground: 'Ground work', hauling: 'Hauling', mobdemob: 'Crew transport', tools: 'Tools', job: 'Fees, markups and VAT',
   job_defaults: 'Job defaults', wiring: 'Wiring rules', string_design: 'String design', roles: 'Items the generator uses', program: 'Program of works', economics: 'Customer savings',
-  system_losses: 'Losses after the panels', sizing: 'Panel and battery autonomy', quick: 'Estimate page', derating: 'Derating', grounding: 'Grounding conductors',
+  system_losses: 'Losses after the panels', sizing: 'Panel and battery autonomy', quick: 'Estimate page', derating: 'Derating', grounding: 'Grounding conductors', mounting: 'Mounting and wind',
 }
 export const SKIP = new Set(['imported_from', 'imported_at', 'datasheets_imported_from', 'datasheets_imported_at'])
 /** Percentages are stored as fractions (0.12) and edited as percent (12). */
@@ -183,6 +183,20 @@ export const META: Record<string, SettingMeta> = {
   'grounding.gec_rod_max_mm2': { label: 'GEC to a rod, at most', unit: 'mm²', decimals: 0, help: 'NEC 250.66(A); verify', about: 'The grounding electrode conductor to a rod electrode need not be larger than this (NEC 250.66(A): 6 AWG, 14 mm² on the metric series). A cited stand-in; verify the PEC 2017 equivalent in Article 2.50. The sheet prints the grounding run\'s gauge beside it.' },
   'grounding.gec_source': { label: 'GEC rule: source', help: 'Printed on the design analysis sheet', wide: true },
   'grounding.gec_verified': { label: 'GEC rule confirmed', help: 'Tick once checked against the PEC' },
+  // the mounting and the wind (round 13, item 3): the fastener, the feet and the uplift check's inputs; the app ships no figure, each typed one carries its source
+  'mounting.screws_per_foot': { label: 'Screws per L-foot', unit: 'per foot', help: 'Assumption until the owner confirms', about: "The L-foot item's set says screw, rubber pad and bolt; two screws per foot is an assumption the sheet labels until the owner confirms the set. The uplift check divides each foot's share by this." },
+  'mounting.fastener_description': { label: 'Fastener', help: 'Size, length, washer', about: 'As the maker\'s sheet names it (size, length, the bonded EPDM washer); printed in the mounting detail\'s callout. Blank prints a blank line.', wide: true },
+  'mounting.fastener_pullout_kn': { label: 'Allowable withdrawal per screw', unit: 'kN', decimals: 2, help: 'Blank = not checked', about: "The screw maker's allowable withdrawal per screw in the purlin material and thickness the office types, from the maker's sheet. Blank leaves the uplift check \"not checked\"; a project may type its own on the roof construction." },
+  'mounting.fastener_pullout_source': { label: 'Withdrawal figure: source', help: "The maker's sheet it comes from", wide: true },
+  'mounting.foot_spacing_max_m': { label: 'Maximum foot span', unit: 'm', decimals: 2, help: "The rail maker's; blank = the BOQ rule's", about: "The rail maker's maximum span between feet (verify in the manual). Blank: the BOQ rule's spacing (the rail length over the feet per rail less one) caps the span, labelled an assumption on the sheet." },
+  'mounting.foot_spacing_max_source': { label: 'Maximum span: source', help: "The rail maker's manual", wide: true },
+  'mounting.rail_position_fraction': { label: 'Rail position', unit: '× panel', decimals: 2, help: 'Assumption: the quarter points', about: "Where the rail lines sit, as a share of the panel's dimension up the slope from each edge; 0.25 is the quarter points, an assumption until the maker's clamping zone is verified. The sheet prints the rail-to-rail spacing from it." },
+  'mounting.rail_kg_per_m': { label: 'Rail weight', unit: 'kg per m', decimals: 2, help: 'Blank = left out of the dead load', about: "The rail's weight per metre, for the dead load that holds the panel down. Blank leaves it out, which is the conservative side; the sheet says so." },
+  'mounting.kd': { label: 'Kd, directionality', unit: '×', decimals: 2, help: 'Blank = not checked', about: 'The wind directionality factor for components and cladding (NSCP 2015 Table 207A.6-1: verify), typed by the signing engineer. The app ships no figure.' },
+  'mounting.kd_source': { label: 'Kd: source', help: 'The table it was read from', wide: true },
+  'mounting.exposures': { label: 'Exposure categories: alpha and zg', help: 'B, C, D; blank = not checked', about: 'The velocity-pressure constants of each exposure category (NSCP 2015 Table 207A.9-1, which follows ASCE 7-10 Table 26.9-1: verify), typed by the signing engineer; Kz = 2.01 × (max(h, 4.6 m) / zg)^(2/alpha). The app ships no figure.' },
+  'mounting.exposure_source': { label: 'Exposure constants: source', help: 'The table they were read from', wide: true },
+  'mounting.wind_zones': { label: 'Wind zone and basic wind speed by province', help: 'Blank = not set', about: 'The zone and the 3-s gust basic wind speed at 10 m (Occupancy Category II) as the signing engineer reads them from NSCP 2015 Figure 207A.5-1A, by province, with the source line; a project in a province without a figure reads "not checked". The project may type its own figure.' },
   // the items the generator uses: plain names; the key itself is shown in small print under the label
   'roles.rail': { label: 'Mounting rail', help: 'Two lines per row' },
   'roles.rail_length_m': { label: 'Rail length', unit: 'm' },

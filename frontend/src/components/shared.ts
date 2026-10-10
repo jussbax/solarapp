@@ -27,6 +27,8 @@ export const SETTINGS_ENTRIES: SettingsEntry[] = [
   { id: 'system', route: '/settings/pricing/system', label: 'System design', lead: 'Losses after the panels and how many evenings the battery must carry.', owner: true, sections: ['system_losses', 'sizing'] },
   // round 13: the design analysis sheet's tables (every value a cited stand-in with its source and a verify flag) and its assumptions
   { id: 'analysis', route: '/settings/pricing/analysis', label: 'Design analysis', lead: "The derating tables and the grounding conductor sizes the plan set's design analysis sheet checks against: every value a cited stand-in with its source, ticked confirmed once the owner or the PEE has checked it; the ambient temperatures and the conduit height are assumptions.", owner: true, sections: ['derating', 'grounding'] },
+  // round 13, item 3: its own card (MountingSettings.tsx); the section's keys are the generic page's for the find box and the dirty mark
+  { id: 'mounting', route: '/settings/pricing/mounting', label: 'Mounting and wind', lead: "The fastener and the feet, and the uplift check's wind figures the signing engineer types with their sources; the app ships none.", owner: true, sections: ['mounting'] },
   { id: 'account', route: '/settings/account', label: 'Your account', lead: 'Your password, two-step verification, security keys and devices.' },
   { id: 'people', route: '/settings/people', label: 'People', lead: 'Who can sign in to the back office.', owner: true },
   { id: 'data', route: '/settings/data', label: 'Weather and data', lead: 'The weather dataset every calculation runs on.' },

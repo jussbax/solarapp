@@ -2208,3 +2208,47 @@ assumptions print as assumptions); the DU's fault level from the service block t
   does not hold is a blank line with its reason. The schedule's four "to be completed" placeholders for derating,
   conduit fill, the EGC and the GEC now point to the sheet; the cover's note 6 likewise; the last sheet keeps a
   "Design analysis: rows not checked" entry naming the figures to type and drops it when every row is checked.
+## The mounting detail and the uplift check
+
+Round 13, item 3 (`docs/audits/round-13/engineer-brief.md`, section 3; what was built and every departure in
+`docs/audits/round-13/mounting.md`): the mounting detail sheet of the plan set, the roof construction it reads and the
+NSCP 2015 uplift check behind the BOM's L-foot count.
+
+- The app ships no wind-code figure and no fastener figure: no zone, no basic wind speed, no exposure constant, no
+  directionality factor, no pressure coefficient, no pull-out figure. The signing engineer types the basic wind speed by
+  province (Settings › Mounting and wind, a table of every province of the town list from `core/wind_zones.json`, which
+  ships with every figure blank and NSCP 2015 Figure 207A.5-1A named as the source), the exposure constants alpha and zg
+  per category, Kd, and per project (Roof faces › Wind for the uplift check) the zone and speed when they differ from
+  the province's row, the exposure category, Kzt and the GCp per roof zone; the office types the screw's allowable
+  withdrawal from the maker's sheet (in Settings, or per roof on the roof construction) and the rail maker's maximum
+  foot span. Each figure is stored with its source line and printed beside it. Until typed, the check reads "not
+  checked" naming what is missing, the sheet prints the chain with a blank line and the reason at every stopped step,
+  and the BOM keeps the rule's L-feet with a note. The only defaults are labelled assumptions: exposure B when blank (a
+  town site), Kzt 1.0 (no hill or ridge), two screws per L-foot (the set's screw, pad and bolt), the rails at the
+  quarter points, the worst typed zone's GCp for every panel, the BOQ rule's spacing as the span cap until the maker's
+  maximum is typed, a missing panel weight or rail weight left out of the dead load (the conservative side); a pass
+  reached on one prints "PASS (on assumptions)".
+- The chain (`pricing/uplift.py`, pricing.choices.uplift) follows the brief's: Kz = 2.01 × (max(h, 4.6 m) / zg)^(2/alpha),
+  qh = 0.613 Kz Kzt Kd V², p_up = qh |GCp| (the array above the roof surface: no internal pressure on it), 0.6D + 0.6W,
+  each rail line carrying half the panel's dimension across the rails, the feet on purlins at a multiple of the purlin
+  spacing at or under the span cap, a screw's share against the typed withdrawal, and s_allow giving the closest
+  spacing that holds. The verdict is on the design the BOM carries: PASS when a foot spacing on the purlins holds, the
+  L-foot count then following the feet per rail line (closer feet when the maker's maximum span does not hold, as the
+  brief's 0.5 kN case closes to every purlin); FAIL when even a foot on every purlin does not hold (`uplift_fail`, hard,
+  printed in red on the sheet, never blocking: the fix is more screws per foot or a stronger fastener, the engineer's;
+  the BOM keeps the rule's count); NOT CHECKED otherwise (`uplift_not_checked`, ordinary). A roof condition other than
+  sound raises `roof_condition` (hard, not blocking); a tile roof, a concrete deck or "other" raises
+  `roof_type_out_of_scope` (ordinary) and the chain is not run for it. Each face is evaluated on its own construction
+  (a blank field reading the project's default) for the rows it holds; the website estimate never reaches the check.
+- The sheet (`reports/plans_mounting.py`, one hook in `plans_pdf.py` after the array layouts): Detail A, rib-type metal
+  sheet on steel C-purlins, and Detail B, corrugated sheet on purlins, both at 1:5 as sections along the rail at an L-foot
+  with the purlin under the foot shown cut and hatched, the screw through the crest with its EPDM washer and the sealant
+  bead, the rail on the foot's leg with its bolt, the mid and end clamps on the panel frames, the bonding lug and its
+  conductor, callouts numbered to the BOM roles and the typed purlin and sheet, the foot spacing S from the check and the
+  clearance C as a blank line (the L-foot height is not on the item); a plan key of a 2 × 3 patch with the rail lines,
+  the purlin lines dashed, the feet at the check's spacing, the splices and the clamps; the chain per face as a table
+  with every figure beside its source or assumption, the verdict, the L-feet on the BOM against the rule's, and the
+  assumptions. The drawings carry typical proportions; the roof's own sizes are the typed figures in the callouts and
+  the sheet says so. The tile detail prints as a line that waits on the owner's word on the bracket and the screw; a
+  roof type out of scope prints "not drawn". The last sheet lists the uplift inputs still blank, the tile detail and
+  any out-of-scope face, and drops them when none applies.

@@ -402,7 +402,13 @@ After the first update, in the browser:
   where to pay, the callback promise); they print on every document and on
   the website. Under Settings › Company › Signing engineer, the PEE's PRC
   validity, PTR, TIN, address and firm print in the title block of every
-  sheet of the plans; a blank field prints as a blank line.
+  sheet of the plans; a blank field prints as a blank line. Under Settings ›
+  Mounting and wind the office types the screw's allowable withdrawal and the
+  rail maker's maximum foot span, and the signing engineer the wind factors
+  and the basic wind speed by province, each with its source: the plans'
+  mounting detail sheet reads "not checked" until they are typed (the app
+  ships no wind-code or fastener figure), and the GCp per roof zone is typed
+  per project under Roof faces › Wind for the uplift check.
 - Sign in with the `.env` username and password: that creates the owner's
   account, and an authenticator set up the old way (the `twofactor.json`
   file) and any security keys already registered carry over to it. From

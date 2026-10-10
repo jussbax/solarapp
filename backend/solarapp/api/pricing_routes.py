@@ -19,6 +19,7 @@ from ..pricing.config import PricingConfig, settings_version
 from ..pricing.datasheets import add_item_from_spec, apply_held_spec, datasheet_page, import_datasheets, link_spec, note_overrides, withdraw_held_spec
 from ..pricing.importer import read_workbook
 from ..pricing.store import SEED_PATH, catalog_status, load_config, persist_import, save_config
+from ..pricing.uplift import wind_zone_file
 from ..schemas import DatasheetLink, MaterialItemIn, MaterialItemPatch
 
 MAX_UPLOAD, MAX_UNZIPPED = 10 * 1024 * 1024, 200 * 1024 * 1024
@@ -47,6 +48,13 @@ def put_config(cfg: PricingConfig, session: Session = Depends(get_session)) -> P
     if before != after:  # every priced project now carries the old version and is flagged; quoted jobs re-price only on confirmation
         log.info("pricing settings changed version %s -> %s", before, after)
     return cfg
+
+
+@router.get("/wind-zones")
+def wind_zones() -> dict:
+    """Round 13, item 3: the shipped wind-zone file (every province of the town list, every figure blank, NSCP 2015
+    Figure 207A.5-1A named as the source) that Settings > Mounting and wind lists; the typed rows live in the pricing config."""
+    return wind_zone_file()
 
 
 @router.post("/config/reset", response_model=PricingConfig, dependencies=[Depends(require_owner)])
