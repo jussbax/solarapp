@@ -85,8 +85,10 @@ def test_the_report_counts_and_the_three_tiers(seeded):
         # one item for three sheet rows (6.7): three specs-only rows naming OP-INV-001
         for r in (4, 5, 6):
             assert inv[("Sheet3", r)].matched_code is None and "one item (OP-INV-001) stands for 3 sheet rows" in inv[("Sheet3", r)].match_note
-        # the orphan rows are not stored at all; the held rows are
+        # the orphan rows are not stored at all; the held rows are; two models that normalise alike (1.2 kW and 12 kW) stay two rows
         assert ("Sheet2", 33) not in inv and inv[("Sheet2", 5)].held and inv[("Sheet2", 5)].matched_code == "IAN-INV-001"
+        assert inv[("Sheet4", 4)].model == "BCT-FXC-1.2KW" and inv[("Sheet4", 9)].model == "BCT-FXC-12KW" and inv[("Sheet4", 4)].model_norm == inv[("Sheet4", 9)].model_norm
+        assert len([r for r in s.exec(select(DatasheetSpec)).all()]) == 189 - 7
 
 
 def test_the_figures_on_the_items_and_the_precedence(seeded):

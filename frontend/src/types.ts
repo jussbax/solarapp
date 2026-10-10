@@ -405,6 +405,9 @@ export interface PricingStatus {
   imported_from: string | null
   imported_at: string | null
   seed_available: boolean
+  /** Round 12: the datasheet workbooks last imported (file names) and when. */
+  datasheets_imported_from?: string | null
+  datasheets_imported_at?: string | null
 }
 
 export interface ImportReport {
@@ -412,6 +415,64 @@ export interface ImportReport {
   updated: number
   suppliers: number
   warnings: string[]
+}
+
+/** Round 12: one row of the maker's datasheet workbooks as the importer stored it (GET /api/pricing/datasheets). */
+export interface DatasheetRow {
+  id: number
+  category: string
+  brand: string
+  brand_in_model: string
+  model: string
+  fields: Record<string, string | number | boolean | null>
+  held_fields: Record<string, string | number | boolean | null>
+  notices: string[]
+  source_file: string
+  source_sheet: string
+  source_row: number
+  imported_at: string | null
+  last_seen_at: string | null
+  matched_code: string | null
+  match_tier: string
+  match_note: string
+  overridden_fields: string[]
+  held: boolean
+}
+export type FieldSource = 'datasheet' | 'typed' | 'remarks'
+/** Per equipment item: where each electrical figure came from, and the datasheet row behind it when there is one. */
+export interface DatasheetItemInfo {
+  code: string
+  name: string
+  category: string
+  provenance: Record<string, FieldSource>
+  source: FieldSource | 'none'
+  datasheet: {
+    id: number
+    file: string
+    date: string | null
+    sheet: string
+    row: number
+    tier: string
+    fields: Record<string, string | number | boolean | null>
+    held_fields: Record<string, string | number | boolean | null>
+    held: boolean
+    overridden: string[]
+    notices: string[]
+  } | null
+}
+export interface DatasheetPage {
+  rows: DatasheetRow[]
+  items: Record<string, DatasheetItemInfo>
+}
+/** The datasheet importer's report: one line per sheet row and the summary counts. */
+export interface DatasheetReport {
+  lines: string[]
+  counts: Record<string, number>
+  changed_codes: string[]
+  projects_using_changed: number[]
+  summary: string
+  dry_run: boolean
+  files: string[]
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -74,7 +74,8 @@ def catalog_status(session: Session) -> dict:
     n = len(session.exec(select(MaterialItem.code)).all())
     cfg = load_config(session)
     return {"item_count": n, "supplier_count": len(session.exec(select(MaterialSupplier.name)).all()),
-            "imported_from": cfg.imported_from, "imported_at": cfg.imported_at, "seed_available": SEED_PATH.exists()}
+            "imported_from": cfg.imported_from, "imported_at": cfg.imported_at, "seed_available": SEED_PATH.exists(),
+            "datasheets_imported_from": cfg.datasheets_imported_from, "datasheets_imported_at": cfg.datasheets_imported_at}
 
 
 def persist_import(session: Session, result: ImportResult, replace_config: bool = True) -> dict:

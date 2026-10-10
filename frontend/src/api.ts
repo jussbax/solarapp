@@ -1,5 +1,5 @@
 import type {
-  ApplianceCategory, AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, CatalogItem, DataStatus, ImportReport, Lead, MaterialItem,
+  ApplianceCategory, AppSettings, AssessmentDoc, AssessmentOut, AssessmentSummary, CatalogItem, DatasheetPage, DatasheetReport, DataStatus, ImportReport, Lead, MaterialItem,
   MaterialSupplier, PricingConfig, PricingStatus,
 } from './types'
 
@@ -242,6 +242,17 @@ export const api = {
     return (await res.json()) as ImportReport
   },
   importSeed: (keepConfig: boolean) => request<ImportReport>(`/api/pricing/import-seed?keep_config=${keepConfig}`, { method: 'POST' }),
+  // round 12: the maker's datasheet workbooks; the specs rows and where each item's electrical figure came from
+  datasheets: (category?: string) => request<DatasheetPage>(`/api/pricing/datasheets${category ? `?category=${encodeURIComponent(category)}` : ''}`),
+  importDatasheet: async (file: File, applyHeld: boolean, dryRun = false) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await safeFetch(`/api/pricing/datasheets?apply_held=${applyHeld}&dry_run=${dryRun}`, { method: 'POST', body: fd, credentials: 'same-origin' })
+    if (!res.ok) throw new ApiError(res.status, describeDetail(await detailOf(res), res.status))
+    return (await res.json()) as DatasheetReport
+  },
+  linkDatasheet: (id: number, code: string) => request<{ code: string; changes: string[]; notes: string[] }>(`/api/pricing/datasheets/${id}/link`, { method: 'POST', body: JSON.stringify({ code }) }),
+  addDatasheetItem: (id: number, code: string) => request<MaterialItem>(`/api/pricing/datasheets/${id}/add-item`, { method: 'POST', body: JSON.stringify({ code }) }),
   // website bookings are the CRM's data (the inbox, statuses, notes and funnel live behind /api/leads for it);
   // the engineering app only lists them and starts a project from one
   bookings: () => request<Lead[]>('/api/leads/open'),

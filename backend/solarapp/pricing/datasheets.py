@@ -959,8 +959,10 @@ def _items_as_catalog(session: Session) -> dict[str, Item]:
     return out
 
 
-def _spec_key(category: str, model_norm: str, brand: str) -> tuple[str, str, str]:
-    return category, model_norm, norm(brand)
+def _spec_key(category: str, model_norm: str, brand: str, model: str) -> tuple[str, str, str, str]:
+    """The upsert key: the brief's (category, normalised model, brand) plus the model as typed, because the
+    normalisation drops the dot and "BCT-FXC-1.2KW" and "BCT-FXC-12KW" are two units, not one row."""
+    return category, model_norm, norm(brand), _collapse(model)
 
 
 def _spec_row_from_sheet(row: SheetRow) -> SheetRow:
@@ -989,7 +991,7 @@ def import_datasheets(session: Session, paths: list[str | Path], source_names: O
     report = DatasheetReport(dry_run=dry_run, files=[Path(p).name for p in paths])
     items = _items_as_catalog(session)
     rows_by_item = {r.code: r for r in session.exec(select(MaterialItem)).all()}
-    existing = {_spec_key(s.category, s.model_norm, s.brand): s for s in session.exec(select(DatasheetSpec)).all()}
+    existing = {_spec_key(s.category, s.model_norm, s.brand, s.model): s for s in session.exec(select(DatasheetSpec)).all()}
     taken = {s.matched_code: f"{s.source_file}:{s.source_sheet}:{s.source_row}" for s in existing.values() if s.matched_code}
     now = utcnow()
     brands: set[str] = set()
@@ -1000,11 +1002,11 @@ def import_datasheets(session: Session, paths: list[str | Path], source_names: O
         for r in rows:
             brands.add(r.brand)
         sha = file_sha256(p)
-        seen: set[tuple[str, str, str]] = set()
+        seen: set[tuple[str, str, str, str]] = set()
         for r in rows:
             r.raw["_sha256"] = sha
             if not r.skipped:
-                seen.add(_spec_key(r.category, r.model_norm, r.brand))
+                seen.add(_spec_key(r.category, r.model_norm, r.brand, r.model))
         # a row of this file's earlier import that the file no longer carries keeps its specs row, with a notice
         for key, s in existing.items():
             if s.source_file == name and key not in seen:
@@ -1019,7 +1021,7 @@ def import_datasheets(session: Session, paths: list[str | Path], source_names: O
         if r.skipped:
             report.lines.append(ReportLine("skipped", r.where, r.category, r.brand, r.model, note=r.skipped))
             continue
-        key = _spec_key(r.category, r.model_norm, r.brand)
+        key = _spec_key(r.category, r.model_norm, r.brand, r.model)
         s = existing.get(key)
         if s is None:
             s = DatasheetSpec(category=r.category, brand=r.brand, model=r.model, model_norm=r.model_norm, imported_at=now)

@@ -1909,3 +1909,86 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   live in `site/static/brands/` as PNGs trimmed to one height (120 px, shown at 44 px on a desktop and 34 on a phone)
   on white tiles under "Brands we install" on the home page, in colour, with the maker's name as the alt text. The
   placeholder block is gone. No line says which brand goes where: the proposal names the parts.
+
+## The datasheets in the app
+
+Round 12, 10 October 2026: the engineer's brief (`docs/audits/round-12/engineer-brief.md`) read against the owner's
+three datasheet workbooks (panels, inverters, batteries), steps 1 to 4 of its order of work built; step 5 waits on the
+owner's answers to its section 6 (`docs/audits/round-12/implementation.md` has what was built and what is left).
+
+- What was imported. `python -m solarapp.pricing.datasheets <files…> [--dry-run] [--report out.csv] [--apply-held]`
+  (also the owner-only upload on the Materials page) reads each sheet's kind from its header words, never the file
+  name; every row becomes a row of `datasheet_specs` (one per sheet row, never deleted; a re-run upserts by category,
+  model and brand, and the same file twice changes nothing) and finds its material item in three tiers: exact (the
+  model whole in the item's name or spec, the longer of two models an item names winning), contains (a one-word model
+  that begins an item token; a multi-word text inside the normalised name and spec), base (the item's own model token
+  as a prefix of the sheet's). The brand breaks ties; the category must agree. On the owner's files: 210 rows, 113
+  matched, 90 specs-only, 7 skipped (the Solis orphan rows with no model), 6 held. Eleven fields were added to the
+  items for it (the panel's maximum system voltage; the inverter's type, phase, battery-port class, charge voltage
+  and current, per-input MPPT currents, battery inputs; the battery's nominal voltage, capacity and recommended
+  discharge current), and `continuous_a` now means the battery's maximum continuous discharge current, the BMS limit.
+- The precedence: the owner's edit on the Materials page > the datasheet > the materials workbook's electrical
+  column > the remark inference. The datasheet is the maker's figure typed once per model; the workbook column is a
+  transcription; the remark is prose read by regex and already disagrees with the sheet where both exist (the
+  eco-hybrid's remark says 135 A, its sheet row 139 A). A field the owner types over joins the row's
+  `overridden_fields` and is left alone on the next run; typing the sheet's own figure back lifts it. The grid flag is
+  filled only when the item's is unknown; a disagreement is reported and the item stands (the eco-hybrid stays
+  grid-interactive on the owner's word with the maker although its sheet types it off-grid). The rating fills only
+  when blank; a difference is said and the item's stands (it is the price base). Because a materials re-import writes
+  the remark inference back over every electrical field, the datasheet figures are re-applied at the end of every
+  materials import, and the matcher runs again over the rows without an item so a renamed item is picked up; an
+  existing match is never moved. Nothing on a sheet is corrected: an irregular cell is parsed by the brief's rule
+  (the lower of two system voltages, the lower of a narrow charge-voltage range and the upper of a wide one, the
+  per-input figure of "80A + 80A", an asterisk kept as a flag, a kW figure in an amps column left blank) and the row
+  carries a notice the Materials page shows.
+- Held. The Solis grid-tie 1P rows carry battery figures a grid-tie unit cannot have (brief 6.4); a battery maximum
+  above 1 C would lift a hard block if it were a peak figure (6.8; the Felicity 100 Ah base row's 150 A against the
+  item's 100 A). Both stay on the specs row and go on the item only with `--apply-held`, on the owner's word.
+- The checks, in the brief's order, each falling back to the rule that stood when a figure is absent and saying so:
+  the battery circuit runs on the larger of the inverter's discharge and charge currents (the eco-hybrid 139 A, its
+  breaker minimum 173.75 A, the same 250 A breaker and 70 mm² pair; the kW fallback over the battery's own nominal
+  voltage); the recommended discharge rate is a soft check beside the hard BMS one; the inverter's charge current
+  against what the bank accepts says what to set (135 A against 60 A: set 60 A, three units for the full rate); the
+  voltage match holds the documents when the pack's class is not the port's (a 24 V pack on a 48 V port, an LV pack
+  on an HV port) and says to lower the charge voltage when it is above the pack's ceiling; V × Ah against the kWh
+  rating warns above 2 %. The strings are counted from Voc at the cold design temperature against the lower of the
+  inverter's maximum PV voltage and the panel's system voltage (IEC 60891's linear term as IEC 62548 applies it;
+  verify the editions; the irradiance term dropped, an assumption), the owner's `max_panels_per_string` becoming the
+  cap; a strings override that forces more holds the documents; the hot Vmp against the MPPT window's low end is a
+  yield warning. The string current is Imp, the string voltage per_string × Vmp, the PV conductor's ampacity and the
+  DC breaker 1.25 × 1.25 × Isc (the PEC PV article's circuit current and the continuous factor; verify the clause; the
+  1.56 is their product, never a setting), the DC breaker by rating when the role item is too small; the strings go
+  on the MPPT inputs by their current ratings, largest first, the extra strings doubling up on the largest.
+- The assumptions, all in Pricing settings › String design and each saying so in its help and in the warning a job
+  carries: the design cold temperature 14 °C (the PVGIS typical-year minima of the Laguna and Batangas cells floored,
+  less a 5 °C margin; the PAGASA record low of the nearest station replaces it when in hand), the design hot cell
+  temperature 70 °C, the default temperature coefficients −0.30 (Voc), −0.35 (Pmax, used for Vmp) and +0.05 %/°C
+  (Isc, information only). Per project the engine takes the lower of the cold setting and the project cell's
+  typical-year minimum less the margin, and the higher of the hot setting and the cell's maximum plus the module's
+  rise at 1 kW/m² (measured on the roof when plausible, else the Faiman model at the year's mean wind); the project
+  may type its own two figures. No sheet carries a temperature coefficient, a maximum PV voltage or an MPPT window,
+  so the string check runs on no residential job until the owner adds the columns (6.5, 6.6); every job says the
+  strings follow the fixed rule until then.
+- The outputs. The plan set's cover prints each model's datasheet figures with the file and date they came from or a
+  blank line; the schedule prints the string current and voltage from the datasheet with the temperatures and the
+  coefficients (and "default, an assumption" where one is), the two Isc lines, a string table (per string its count,
+  Voc at T_cold, Vmp at T_hot, the limit, the margin, the input it sits on and its current), the DC breaker's rating
+  check, the battery circuit on the larger of the two figures with the charge setting and the voltage match; its two
+  columns are balanced by measured height and take a second sheet only when they cannot fit one; the string-table
+  entry leaves the last sheet when the figures are on file; the sheet says "string design on datasheet figures from
+  {file}, {date}". The Materials page shows where each electrical figure came from (datasheet, typed, remarks, none),
+  the datasheet's figure beside a field the owner typed over with "reset to datasheet", the held rows, the datasheet
+  rows without a priced item (with "Link to item…" and "Add as item": an inactive item at list price 0, never priced
+  at zero) and the items without a datasheet. The website estimate is untouched: the same generator and the same
+  catalogue; its rounded price with the seed alone is pinned (₱314,000 on the sample request) and the test states
+  the figure with the datasheets loaded (₱287,000: the battery choice moves to the unit whose sheet figure covers the
+  eco-hybrid's 139 A).
+- What waits on the owner (section 6 of the brief): the six panel rows whose brand column and model text disagree
+  (matched on the maker in the text, both stored); the cells marked Verify or with an asterisk; the kW figures in the
+  Felicity 3P rows' charge-current column; the Solis grid-tie rows' battery figures; the missing temperature
+  coefficients, maximum PV voltages and MPPT windows (the importer's alias table already reads the columns the owner
+  may add); the three One Solar charge-controller items that stand for nine sheet rows; the cells that do not add up
+  (the Blue Carbon 25.6 V pack with a 60 V ceiling, the recommended currents above the maximum, the Felicity 1.5 C
+  base row, the HV-typed 51.2 V row, the 102.4 V pack with a 230 V ceiling); and the two decisions the type column
+  raises (the One Solar wall-type units now in the off-grid pool; whether a pure grid-tie unit may serve a
+  net-metering job without a battery).
