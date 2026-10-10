@@ -63,6 +63,18 @@ export interface EstimateRequest {
   pattern: Pattern
 }
 
+export interface TypicalHour {
+  hour: number
+  load_kw: number
+  production_kw: number
+  direct_kw: number
+  charge_kw: number
+  discharge_kw: number
+  soc_kwh: number
+  export_kw: number
+  import_kw: number
+}
+
 export interface Variant {
   goal: Goal
   goal_label: string
@@ -83,6 +95,7 @@ export interface Variant {
     annual_unserved_kwh: number
     annual_consumption_kwh: number
     production_vs_use_pct: number
+    typical_day: TypicalHour[]   // 24 rows, hour 0-23, averaged over the twelve months' typical days (kW at the meter; soc in kWh)
   }
   price: { total: number; materials: number; labor: number; equipment: number; tax: number; price_per_wp: number; battery_part: number }
   economics: {

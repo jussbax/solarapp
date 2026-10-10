@@ -127,6 +127,23 @@ def battery_part_for(priced: dict, vat: float) -> float:
     return sum(float(i["amount"]) for i in items) * (1 + vat)
 
 
+def _typical_day(profiles: dict) -> list[dict]:
+    """One day, hour by hour, averaged over the twelve months' typical days: what the panels make, what the house
+    uses, what goes straight to the house, into and out of the battery, to the grid and from it (kW at the meter),
+    and the battery's state (kWh). The website's result animates it; the figures are the sizing's own."""
+    keys = (("load", "load_kw"), ("production", "production_kw"), ("direct", "direct_kw"), ("charge", "charge_kw"),
+            ("discharge", "discharge_kw"), ("soc", "soc_kwh"), ("export", "export_kw"), ("imported", "import_kw"))
+    months = [m for m in profiles.values() if all(k in m for k, _ in keys)]
+    out = []
+    for h in range(24):
+        row: dict = {"hour": h}
+        for src, name in keys:
+            vals = [float(m[src][h]) for m in months] if months else [0.0]
+            row[name] = round(sum(vals) / len(vals), 3)
+        out.append(row)
+    return out
+
+
 def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, lat: float, lon: float, pvgis: PvgisDataset, ctx: PricingContext) -> dict:
     """Size, price and value one system kind. Returns the customer-facing block for that kind."""
     cfg, catalog = ctx.config, ctx.catalog
@@ -145,6 +162,7 @@ def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, l
         inverter=InverterRules(), offgrid=OffGridRules(),
     )
     panels = int(s["panels"])
+    typical_day = _typical_day(s.get("profiles") or {})
     if panels <= 0:
         raise ValueError("That's too little usage for a solar system to pay off. Check the kWh on your bill.")
     dim = float(panel.panel_length_m or 2.278)
@@ -189,6 +207,7 @@ def _estimate_once(goal: str, pattern: str, monthly_kwh: float, tariff: float, l
             "annual_export_kwh": float(s["annual_export_kwh"]), "annual_import_kwh": float(s["annual_import_kwh"]),
             "annual_unserved_kwh": float(s["annual_unserved_kwh"]), "annual_consumption_kwh": float(s["annual_consumption_kwh"]),
             "production_vs_use_pct": 100.0 * float(s["annual_production_kwh"]) / max(float(s["annual_consumption_kwh"]), 1.0),
+            "typical_day": typical_day,
         },
         "price": {"total": rounded, "materials": sections.get("materials", 0.0), "labor": sections.get("labor", 0.0),
                   "equipment": sections.get("equipment", 0.0), "tax": sections.get("tax", 0.0), "price_per_wp": rounded / (float(s["kwp"]) * 1000.0),
@@ -219,7 +238,7 @@ def quick_estimate(req: QuickRequest, pvgis: PvgisDataset, ctx: PricingContext) 
         except (ValueError, LookupError):
             alternative = None
     if main["system"]["roof_limited"]:
-        warnings.append(f"Your house needs more than {q.max_panels} panels; we capped the estimate there, and on the roof visit we see how many your roof really takes.")
+        warnings.append(f"Your house needs more than {q.max_panels} panels; we capped the estimate there, and on the on-site assessment we see how many your roof really takes.")
     if not where["in_area"]:
         warnings.append("This location is off the map of the Philippines, where we install. Check the pin, or pick your town instead.")
     facing = "south" if q.azimuth_deg == 180 else f"{q.azimuth_deg:g}°"

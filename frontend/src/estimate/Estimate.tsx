@@ -315,7 +315,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
       <section className="pld-card">
         <h1 className="pld-h1">What would your bill be with solar?</h1>
         <p className="pld-lead">
-          Four questions, about a minute: your bill before and after, the price, and how many panels it takes. The only call you get is the free roof visit you book, and that one makes the figure exact.
+          Four questions, about a minute: your bill before and after, the price, and how many panels it takes. The only call you get is the free on-site assessment you book, and that one makes the figure exact.
         </p>
         {(status === 'down' || (status && !status.enabled)) && <div className="pld-note pld-warn">{downNote}</div>}
 
@@ -496,7 +496,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
           )}
 
           <div className="pld-book" id="pld-book" ref={bookRef}>
-            <h3 className="pld-h3">{leadSent ? `Your roof visit is booked, ${firstName(lead.name)}.` : 'Want the exact figure? We come and measure. The visit is free.'}</h3>
+            <h3 className="pld-h3">{leadSent ? `Your on-site assessment is booked, ${firstName(lead.name)}.` : 'Want the exact figure? We come and measure. The visit is free.'}</h3>
             {leadSent ? (
               <div className="pld-thanks">
                 <p>
@@ -553,7 +553,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                 </label>
                 {leadError && <div className="pld-note pld-bad">{leadError}</div>}
                 <button type="button" className="pld-btn pld-primary pld-wide" onClick={sendLead} disabled={!lead.name.trim() || !lead.contact.trim() || leadBusy}>
-                  {leadBusy ? 'Sending…' : 'Book my free roof visit'}
+                  {leadBusy ? 'Sending…' : 'Book my free on-site assessment'}
                 </button>
                 {(!lead.name.trim() || !lead.contact.trim()) && <div className="pld-hint pld-center">Your name and a number or Messenger name are enough.</div>}
                 <div className="pld-privacy">{profile?.privacy_note || 'We use your name and number only to arrange your visit and send your estimate. We never pass them on.'}</div>
@@ -600,7 +600,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
                 <li key={i}>{a}</li>
               ))}
             </ul>
-            <p className="pld-hint">This is an estimate from your answers, not a quotation. On the free roof visit we measure your roof and the sun on it, then give you an exact proposal.</p>
+            <p className="pld-hint">This is an estimate from your answers, not a quotation. On the free on-site assessment we measure your roof and the sun on it, then give you an exact proposal.</p>
           </details>
         </section>
       )}
@@ -612,7 +612,7 @@ export default function Estimate({ apiBase = '', embedded = false }: { apiBase?:
             <div className="pld-sticky-price">{php0(shown.price.total)}</div>
           </div>
           <a className="pld-btn pld-primary" href="#pld-book" onClick={(ev) => { ev.preventDefault(); document.getElementById('pld-book')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}>
-            Book my free roof visit
+            Book my free on-site assessment
           </a>
         </div>
       )}
