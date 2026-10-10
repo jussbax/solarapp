@@ -1653,9 +1653,10 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   itself").
 - The owner's answers of 10 October, and what the pages do with them: the switch-over is "just milliseconds,
   seamlessly instant" as far as the owner knows, so the pages keep "by itself" until the inverter's datasheet
-  gives the figure; after switch-on "Kevin answers during office hours; on Messenger we reply within the hour at
-  reasonable times" is a new profile field (`after_sales`, Settings › Website, the owner's sentence as the
-  default) printed on About and as a home-page question; for typhoons there is no rating on file, and the
+  gives the figure; after switch-on there is a new profile field (`after_sales`, Settings › Website) printed on About and as a
+  home-page question; the owner first gave a schedule ("Kevin answers during office hours; on Messenger we reply
+  within the hour at reasonable times") and then asked for it as after-sales support instead, so the default reads
+  "After switch-on you are not on your own: call or message us and we answer as soon as humanly possible."; for typhoons there is no rating on file, and the
   installations "have withstood heavy wind loads", so the question answers with the fixing and the fact that
   the oldest installation, from 2023, has stood through every typhoon season since; the panel performance
   warranty is "standard 25 years" (the profile default is now 25; verify on the panel datasheet, and a

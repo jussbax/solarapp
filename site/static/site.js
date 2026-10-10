@@ -53,7 +53,10 @@
     }
     // every warranty claim on the site stays hidden until the owner fills the years under Settings
     document.querySelectorAll('[data-warranty-wrap]').forEach(function (el) {
-      el.classList.toggle('is-empty', !(warranty && warranty.length));
+      var hidden = !(warranty && warranty.length);
+      // a tile that also names its own key (the panel performance years) stays hidden while that key is blank
+      if (el.hasAttribute('data-profile-hide-if-empty')) hidden = hidden || el.classList.contains('is-empty');
+      el.classList.toggle('is-empty', hidden);
     });
   }
 

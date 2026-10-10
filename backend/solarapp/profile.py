@@ -36,7 +36,8 @@ PROFILE_FIELDS: list[tuple[str, str, str]] = [
     ("payment_details", "Where to pay (bank or GCash details for the proposal)", ""),
     ("callback_promise", "After a booking, you will reach out", "within one working day"),
     # the owner (10 Oct 2026): "Kevin and available during office hours or if via messenger we reply within an hour on reasonable time"
-    ("after_sales", "After switch-on: who answers, and how fast (one sentence)", "After switch-on, Kevin answers during office hours; on Messenger we reply within the hour at reasonable times."),
+    # the owner (later the same day): say it as after-sales support, not a schedule
+    ("after_sales", "After-sales line (one sentence)", "After switch-on you are not on your own: call or message us and we answer as soon as humanly possible."),
     ("privacy_note", "Privacy line under the booking form", "We use your name and number only to arrange your visit and send your estimate. We keep them for up to 12 months unless you become a customer, and we never sell them or share them beyond the services that process them for us. Message us to see or delete your details."),
 ]
 PROFILE_KEYS = [k for k, _, _ in PROFILE_FIELDS]
