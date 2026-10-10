@@ -2083,3 +2083,61 @@ loads and the mounting detail are built (`docs/audits/round-13/step1.md` has wha
 - Not in step 1, by the brief's order: the 120 % busbar rule and the `poi_busbar` warning (item 1, with the
   single-line diagram that prints it), the derating engine and its settings (item 2), the wind fields and settings
   (item 3), the vicinity map and the drawn outlines (item 4).
+
+## The single-line diagram
+
+Round 13, item 1 (`docs/audits/round-13/engineer-brief.md`, section 1; what was built and every departure in
+`docs/audits/round-13/sld-and-loads.md`): one sheet after the array layouts, its own module (`reports/plans_sld.py`)
+called from the plan set through one hook that returns the sheet's name and its flowables.
+
+- One horizontal bus from the array to the meter, drawn with ReportLab primitives in the set's frame at the brief's
+  line weights, every device carrying the balloon of its circuit row (C1 to C7, drawn only where the circuit applies):
+  the strings (one chain per distinct length, the rest "alike, one drawn") with the panel count and the datasheet's
+  Voc, Voc at T_cold, Vmp, Isc and Imp; the home-run pair with its gauge and run, the connector pairs, the array
+  bonding dashed; the DC box with a 2P breaker per string, an SPD per MPPT input in use, the fan to the inputs by the
+  BOQ's round-robin ("combiner" and the fuse note when strings join, a spare input marked); the inverter with its
+  ratings, inputs, grid flag, certificate and battery port; the battery bank below it with its breaker and lug pairs;
+  the inverter-output breaker, the transfer switch (or "built in"), the AC SPD on the board, the existing panelboard
+  (bus, backfeed breaker, main), the lockable AC disconnect, the point of interconnection, the kWh meter (two arrows
+  on net metering, one and "nothing exported" off grid), the service drop and the DU with its fault level; the grid
+  feed and the maintenance bypass on a line above the bus; the EGC bus, the electrode and the bonds below. A legend
+  names every symbol (IEC 60617-style simple shapes) and says to verify the set against the DU's sample; a placards
+  table fills the DU's labels from the figures with "verify the DU's wording" on each.
+- Nothing invented: a figure not on file prints as a blank line with its reason (not on the item, not surveyed, from
+  the DU), a role without an item says so, a string without the datasheets carries "(rule)", the DC-grounding line is a
+  labelled assumption, the title block reads "Not to scale". The point of interconnection sits on the panelboard's bus
+  bar for a load-side breaker (and when not chosen), at the service for a supply-side tap or the line side.
+- The 120 % rule (`pricing/service_checks.py`): for a load-side breaker with both ratings surveyed, the grid-side
+  breaker × units plus the main breaker at or below 1.2 × the busbar (NEC 705.12(B)(2)(3)(b); the PEC 2017 equivalent
+  printed with "verify"). The job pricing writes `choices.poi_busbar` with the whole inequality and raises
+  `poi_busbar` on a failure, hard and never blocking: the fix (a supply-side tap or a larger panel) is the PEE's call,
+  and the sheets print PASS or FAIL with the arithmetic, or the reason the rule is not checked. The sheets recompute
+  it from the service block when the stored results predate it, so the warning and the sheet always agree.
+- Tags inside symbols are 6 pt (below the brief's 7 pt floor) so they fit the symbol; "≤" is not used (no glyph in
+  Montserrat), the limit is printed as a line of its own. The last sheet lists the diagram only as the datasheet
+  figures still blank on it.
+
+## The schedule of loads in the permit's format
+
+Round 13, item 5 (brief section 5; `docs/audits/round-13/sld-and-loads.md`): its own sheet before the last one
+(`reports/plans_loads.py`, one hook like the diagram's), replacing the audit's table on the last sheet.
+
+- The format a sealed plan carries per panelboard, flagged to verify against the LGU's sample: the header line
+  (panelboard, voltage, phase and wires, main breaker AT / AF, bus, fed from) and the columns Circuit No. |
+  Description of load (count × type) | Load (W) | Load (VA) | Volts | Amperes | Wire (mm² THHN) | Conduit (mm) | OCPD
+  (AT/AF, poles) | Remarks. The existing circuits typed on the Site step print first and verbatim; the audit's
+  appliances follow under three headings, Lighting, Convenience outlets and Equipment, each with its power factor
+  labelled "assumption", every line W, VA = W / PF and A = VA / V with the circuit number, wire, conduit and OCPD as
+  blank lines (the engineer's, from the existing panelboard); subtotals, the connected existing load, the planned
+  loads apart and outside the total, the demand load blank (the PEC 2.20 factors are the engineer's) beside the
+  hourly profile's coincident peak as the audit's own figure, the main breaker's adequacy the engineer's. Under the
+  table the PV system as a source (the array, the inverter's current, the backfeed and output breakers, the wire,
+  the conduit item, the storage) and the point of interconnection (the choice in words, the main and busbar, the
+  120 % line, the meter, the DU and account). A footnote names what the engineer fills by hand.
+- `PricingConfig.loads`: the power factors by group (1.00, 1.00, 0.85, assumptions) and the audit categories tabled
+  as equipment, under Settings › Pricing › System design; outside the pricing fingerprint, since the sheet reads
+  them live and they move no price. The volts are the surveyed service voltage, else the wiring rules' 230 V
+  labelled an assumption; a missing power factor leaves VA and A blank.
+- The last sheet is "Not yet in this set" and lists the schedule only while the service entrance is blank; the
+  cover's general notes split six and two so the bottom block, one table that cannot split, stays on the cover with
+  the longer sheet index (about 20 mm of slack for the sheets still to come).
