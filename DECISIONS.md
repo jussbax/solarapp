@@ -1558,13 +1558,21 @@ handed to the PEE for signing." Then: "The plans should be in A3 not A4."
   (`docs/audits/round-5/marketing.md`) found the first captions claimed a fixing method and a fourth face the frames
   did not show, and a lead ("measured on the roof first … after switch-on") no one had confirmed for those jobs;
   all three were reworded to what is certain.
-- Which frames are published: 25 (hero and share image), 27 (card), 36 re-cropped to lose the yard and most of the
-  neighbour's house (card), 35 (card), 37 (About). Never: 29–32 (installation-day clutter, a sign, four people at
-  the gate) and 33–34 (the neighbour's house and washing fill the top third, the cable runs large). The share image
-  is cropped so the customer's aircon unit and its brand are out of the frame; every page shares the home roof
-  until a page has a photo of its own (`<!-- og_image -->`).
+- Which frames are published, after the engineer's review (`docs/audits/round-5/engineering.md`): 25 (hero and
+  share image, cropped so the customer's aircon unit and its brand are out of the frame), 27 (card) and the clean
+  small roof of the three-roof property cut from 37 (card). Withheld until the owner answers: 36 and 33–34 (the
+  hip roof's DC runs lie loose on the sheet in every frame, gear still on the lower roof: a job before its cable
+  work, and no crop removes the runs) and 35 with 37 as a whole (the palms shade part of the main array and the
+  main house's eave throws a band across the whole annex row: the frame invites "why under a tree, why under the
+  eave?"). Never: 29–32 (installation-day clutter, a legible sign, four people at the gate without consent).
+  Counts by the engineer, from the frame lines (the half-cut split is not a panel edge): A 8, B 16 on three faces
+  (6, 6 + 2, 2; the fourth face empty), C 37 (18 + 9 + 10). Every page shares the home roof until a page has a
+  photo of its own (`<!-- og_image -->`).
 - No "Our work" page until there are six or more sites each with a town, a size, a month and the customer's yes.
 - Open with the owner: per site the town, the kWp, battery or net metering, the month, whether the test-panel
   visit was done and the customer's go-ahead; who flew the drone; site A's orange cable and how the rails are
-  fixed; whether site B's surface-laid cables are the final state (and an "after" frame); the hour site C was
-  photographed and how the design handled the palms.
+  fixed; whether site B's cables were tied under the panels and run in conduit after the photo (an "after" frame
+  at mid-day would make it the best site on the page); the hour site C was photographed, how the design handled
+  the palms and the annex row under the eave. The engineer's list of the photos to take on the next job (fixings,
+  clamps, under-array cabling, the roof exit, the combiner, the inverter wall, grounding, the two-way meter, the
+  signage, a mid-day drone pass after clean-up) is in the report.
