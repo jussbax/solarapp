@@ -10,6 +10,7 @@ from .boq import NO_ITEM_PREFIX, BoqRequest, RoofRow, generate_boq
 from .catalog import Catalog, Item
 from .config import PricingConfig
 from .engine import BomLine, JobInputs, landed_cost, price_job
+from .service_checks import poi_busbar_check
 
 
 @dataclass
@@ -148,6 +149,10 @@ def price_assessment(doc: AssessmentDoc, results: dict, ctx: PricingContext) -> 
     )
     boq = generate_boq(req, catalog, cfg_job)
     warnings += boq.warnings
+    # round 13 (brief 1.3): the 120 % busbar rule at the point of interconnection, from the survey record against the
+    # grid-side breaker the BOQ sized; a failure is a hard warning that prints on the plans, never a block
+    boq.choices["poi_busbar"], poi_warnings = poi_busbar_check(doc.service, boq.choices)
+    warnings += poi_warnings
     generated = [{"code": l.code, "qty": l.qty, "role": l.role, "note": l.note} for l in boq.lines]
     lines, edit_warnings = apply_edits(boq.lines, doc, catalog)
     warnings += edit_warnings

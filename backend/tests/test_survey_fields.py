@@ -111,9 +111,10 @@ def test_a_face_offset_is_a_pair_of_metres(client):
     assert client.post("/api/assessments", json=doc).status_code == 201
 
 
-def test_the_plan_set_and_the_quick_estimate_are_unchanged_by_the_fields(client):
-    """Nothing on a sheet reads the fields yet (step 1): the surveyed record builds the same five sheets as the plain one;
-    the website estimate's document carries the blank defaults and no new code path reads them."""
+def test_the_plan_set_reads_the_service_block_and_the_quick_estimate_is_unchanged_by_the_fields(client):
+    """The surveyed record builds the set with the single-line diagram reading the service block (round 13, item 1: the DU
+    and the 120 % rule print; test_plans_sld.py has the figures); the website estimate's document carries the blank
+    defaults and no new code path reads them."""
     import shutil
     import subprocess
 
@@ -126,5 +127,5 @@ def test_the_plan_set_and_the_quick_estimate_are_unchanged_by_the_fields(client)
     if shutil.which("pdftotext"):
         text = subprocess.run(["pdftotext", "-layout", "-", "-"], input=r.content, capture_output=True, check=True).stdout.decode()
         pages = [p for p in text.split("\f") if p.strip()]
-        assert len(pages) == 5 and "FLECO" not in text and "busbar" not in text.lower()
+        assert len(pages) == 6 and "FLECO: fault level at the service" in text and "120 %: 40 A + 100 A = 140 A" in text
     assert AssessmentDoc().service == ServiceEntrance() and AssessmentDoc().site == SitePlan()

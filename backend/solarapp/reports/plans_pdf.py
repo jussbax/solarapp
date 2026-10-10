@@ -395,6 +395,9 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     two_col = TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                           ("RIGHTPADDING", (0, 0), (0, -1), 6 * mm), ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)])
 
+    # the styles the sheet modules of round 13 draw with (one hook each: a function returning the sheet's name and flowables)
+    styles = {"h1": h1, "h2": h2, "body": body, "small": small, "cell": cell, "cellb": cellb, "grid": grid, "kv_style": kv_style, "two_col": two_col}
+
     def P(t: str, st=cell) -> Paragraph:
         return Paragraph(t, st)
 
@@ -638,9 +641,13 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
             l, r, _ = _balance(part)
             sched_pages.append((l, r))
 
+    # the single-line diagram (round 13, item 1): its own module, one sheet after the array layouts
+    from .plans_sld import sld_sheet
+    sld_name, sld_flows = sld_sheet(doc, results, items, cfg, styles)
+
     # ---------------- sheet 1: cover and general notes
     sched_names = ["Equipment and circuit schedule"] + (["Equipment and circuit schedule (continued)"] if len(sched_pages) > 1 else [])
-    sheet_names = ["Cover and general notes"] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels] + sched_names + ["Not yet in this set; schedule of loads"]
+    sheet_names = ["Cover and general notes"] + [f"Array layout: {g.get('name') or 'Roof'}" for g in faces_with_panels] + [sld_name] + sched_names + ["Not yet in this set; schedule of loads"]
     story: list = [SheetMarker(sheet_names[0])]
     story.append(Paragraph(f"PV system plans: {escape(doc.customer_name or BLANK)}", h1))
     story.append(Paragraph(f"{escape(doc.address or BLANK)} · pin {doc.lat:.5f}, {doc.lon:.5f} · {escape(KIND_LABEL.get(kind, 'solar PV system'))}", body))
@@ -808,6 +815,10 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
                                  ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
         story.append(row)
 
+    # ---------------- the single-line diagram (not to scale: the marker carries no scale)
+    story.append(PageBreak())
+    story.append(SheetMarker(sld_name))
+    story += sld_flows
 
     # ---------------- equipment and circuit schedule
     for n_sched, (left_sched, right_sched) in enumerate(sched_pages):
@@ -835,10 +846,10 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
         ("the panel's " + ", ".join(panel_lbl[k] for k in panel_missing) if panel_missing else "the panel's data is on file")
         + "; " + ("the inverter's " + ", ".join(inv_lbl[k] for k in inv_missing) if inv_missing else "the inverter's data is on file")
     )
-    missing = [
-        ("Single-line diagram", (f"Waits on the figures still blank on the Materials page: {datasheet_state}. " if panel_missing or inv_missing else "Not drawn yet; the figures it needs are on file. ")
-                                + "The circuit schedule sheet already carries every breaker, conductor and disconnect the diagram will show."),
-    ]
+    missing = []
+    if panel_missing or inv_missing:
+        # the diagram is in the set (round 13); what the owner has not supplied prints blank on it, and this entry says which figures
+        missing.append(("Single-line diagram (figures blank)", f"Blank on sheet {sheet_names.index(sld_name) + 1} where the Materials page is blank: {datasheet_state}."))
     if not sdn.get("available"):
         missing.append(("String table (Voc at the coldest cell, Vmp at the hottest, Isc per MPPT, the margins against the inverter's window)", f"The same datasheets: {datasheet_state}. "
                         "The string count and the panels per string are on the layout sheets by the current rule."))
