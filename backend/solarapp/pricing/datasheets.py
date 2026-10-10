@@ -11,7 +11,8 @@ import, because the workbook import writes the remark inference back over the it
 
 Nothing on a sheet is corrected. An irregular cell is parsed by the rule of section 1.5, the row carries a notice, and
 where the brief says so the figure is held back (section 6: the Solis grid-tie rows' battery figures, a battery
-maximum above 1 C) until the owner answers; `--apply-held` applies them.
+maximum above 1 C) until the owner answers; `--apply-held` applies them all, the Materials page applies them per row,
+and the owner's word is kept on the row (held_applied_at) through every later run.
 """
 from __future__ import annotations
 
@@ -29,8 +30,8 @@ from typing import Any, Iterable, Optional
 import openpyxl
 from sqlmodel import Session, select
 
-from ..models import Assessment, DatasheetSpec, MaterialItem, utcnow
-from .catalog import ELECTRICAL_FIELDS, ELECTRICAL_TEXT_FIELDS, Item
+from ..models import Assessment, DatasheetSpec, MaterialItem, MaterialSupplier, utcnow
+from .catalog import ELECTRICAL_FIELDS, ELECTRICAL_TEXT_FIELDS, Item, certifications_in_remarks, electrical_from_remarks, infer_grid_interactive
 from .importer import ELECTRICAL_HEADERS, _norm_header
 
 KIND_LABEL = {"Solar Panel": "panels", "Inverter": "inverters", "All-in-one System": "inverters", "Battery": "batteries"}
@@ -834,6 +835,8 @@ def apply_spec(item: MaterialItem, spec: DatasheetSpec, apply_held: bool = False
     changes: list[str] = []
     notes: list[str] = []
     figures = dict(spec.fields)
+    # the held figures go on once the owner has said so (held_applied_at, kept on the row through every later run) or on --apply-held
+    apply_held = apply_held or bool(spec.held_applied_at)
     if apply_held:
         figures.update(spec.held_fields or {})
     overridden = set(spec.overridden_fields or [])
@@ -851,8 +854,13 @@ def apply_spec(item: MaterialItem, spec: DatasheetSpec, apply_held: bool = False
     grid = figures.pop("grid_interactive", None)
     if grid is not None:
         if item.grid_interactive is None:
-            item.grid_interactive = bool(grid)
-            changes.append(f"grid_interactive - -> {_fmt(bool(grid))}")
+            # the owner's remark that says to check the certification keeps the flag unknown on purpose (catalog.infer_grid_interactive):
+            # the sheet's "Hybrid" is one word about a family, the remark is the owner's note about this unit (review finding 1)
+            if re.search(r"check[^.]*certif", item.remarks or "", re.I):
+                notes.append("grid flag left unknown: the item's remark says to check the certification")
+            else:
+                item.grid_interactive = bool(grid)
+                changes.append(f"grid_interactive - -> {_fmt(bool(grid))}")
         elif item.grid_interactive != bool(grid):
             notes.append(f"grid_interactive kept (item {_fmt(item.grid_interactive)}, sheet {spec.fields.get('inverter_type', '?').replace('_', '-')})")
     for fld, new in figures.items():
@@ -1027,11 +1035,15 @@ def import_datasheets(session: Session, paths: list[str | Path], source_names: O
             s = DatasheetSpec(category=r.category, brand=r.brand, model=r.model, model_norm=r.model_norm, imported_at=now)
             existing[key] = s
         if s.matched_code and s.matched_code not in rows_by_item:
+            taken.pop(s.matched_code, None)
             s.matched_code, s.match_tier, s.match_note = None, "", f"its item is no longer in the materials list; matched again on {now.date().isoformat()}"
-            taken = {c: w for c, w in taken.items() if c != s.matched_code}
         s.brand_in_model, s.model = r.brand_in_model, r.model
         s.fields, s.held_fields, s.raw, s.notices = r.fields, r.held_fields, r.raw, list(r.notices)
         s.source_file, s.source_sheet, s.source_row, s.file_sha256, s.last_seen_at, s.held = r.source_file, r.source_sheet, r.source_row, r.raw["_sha256"], now, r.held
+        if apply_held and r.held_fields and not s.held_applied_at:
+            s.held_applied_at = now          # the owner's word, kept on the row through every later run (review finding 2)
+        if not r.held_fields:
+            s.held_applied_at = None
         r.matched_code, r.match_tier, r.match_note = s.matched_code, s.match_tier, s.match_note if s.matched_code else ""
         specs.append((r, s))
     match_rows([r for r, _ in specs], items, taken)
@@ -1048,7 +1060,10 @@ def import_datasheets(session: Session, paths: list[str | Path], source_names: O
             for n in notes:
                 if n not in s.notices:
                     s.notices = list(s.notices) + [n]
-            line.status, line.code, line.changes, line.notices = ("held" if s.held and not apply_held else "matched"), s.matched_code, changes, list(s.notices)
+            applied = bool(s.held_applied_at)
+            line.status, line.code, line.changes, line.notices = ("held" if s.held and not applied else "matched"), s.matched_code, changes, list(s.notices)
+            if s.held and applied:
+                line.tier = f"{s.match_tier}; held figures applied on {s.held_applied_at.date().isoformat()}"
             if changes:
                 changed.add(s.matched_code)
                 session.add(item)
@@ -1131,6 +1146,55 @@ def link_spec(session: Session, spec_id: int, code: str) -> dict:
     return {"code": code, "changes": changes, "notes": notes}
 
 
+def apply_held_spec(session: Session, spec_id: int) -> dict:
+    """The owner confirms one held row (review finding 5: the answers to 6.4 and 6.8 differ): held_applied_at is set and
+    kept on the row through every later run, and the figures go on the item at once."""
+    spec = session.get(DatasheetSpec, spec_id)
+    if spec is None:
+        raise LookupError("No such datasheet row.")
+    if not spec.held_fields:
+        raise ValueError("This row holds no figure back.")
+    spec.held_applied_at = utcnow()
+    changes: list[str] = []
+    if spec.matched_code:
+        item = session.get(MaterialItem, spec.matched_code)
+        if item is not None:
+            changes, notes = apply_spec(item, spec)
+            for n in notes:
+                if n not in spec.notices:
+                    spec.notices = list(spec.notices) + [n]
+            session.add(item)
+    session.add(spec)
+    session.commit()
+    return {"code": spec.matched_code, "changes": changes, "held_applied_at": spec.held_applied_at.isoformat()}
+
+
+def withdraw_held_spec(session: Session, spec_id: int) -> dict:
+    """The owner takes the confirmation back: the row is held again and each held figure still on the item goes back
+    to what the item carried without it (the workbook remark's figure, else blank)."""
+    spec = session.get(DatasheetSpec, spec_id)
+    if spec is None:
+        raise LookupError("No such datasheet row.")
+    spec.held_applied_at = None
+    changes: list[str] = []
+    if spec.matched_code:
+        item = session.get(MaterialItem, spec.matched_code)
+        if item is not None:
+            inferred = electrical_from_remarks(item.category, item.name, item.spec, item.remarks)
+            for fld, v in (spec.held_fields or {}).items():
+                if fld not in ELECTRICAL_FIELDS or not _same(getattr(item, fld, None), v):
+                    continue
+                new = inferred.get(fld, "" if fld in ELECTRICAL_TEXT_FIELDS else None)
+                setattr(item, fld, new)
+                changes.append(f"{fld} {_fmt(v)} -> {_fmt(new)}")
+            if changes:
+                item.updated_at = utcnow()
+                session.add(item)
+    session.add(spec)
+    session.commit()
+    return {"code": spec.matched_code, "changes": changes}
+
+
 def add_item_from_spec(session: Session, spec_id: int, code: str, supplier: str = "") -> MaterialItem:
     """"Add as item" (2.3): a material item with the owner's code, the datasheet figures, list price 0 and inactive,
     so the BOQ never prices it at zero; the owner types the price and activates it."""
@@ -1140,7 +1204,11 @@ def add_item_from_spec(session: Session, spec_id: int, code: str, supplier: str 
     if session.get(MaterialItem, code) is not None:
         raise ValueError("An item with this code exists already")
     name = spec.model if spec.category != "Solar Panel" else f"{spec.model}"
-    item = MaterialItem(code=code, category=spec.category, supplier=supplier or spec.brand, name=name, spec=f"{spec.brand}; datasheet row {spec.source_sheet} row {spec.source_row}",
+    if not supplier:
+        # the maker is the supplier only when a supplier of that name is on the SUPPLIERS sheet (a dealer sells most makers); else blank for the owner
+        known = {str(x).lower(): str(x) for x in session.exec(select(MaterialSupplier.name)).all()}
+        supplier = known.get(spec.brand.strip().lower(), "")
+    item = MaterialItem(code=code, category=spec.category, supplier=supplier, name=name, spec=f"{spec.brand}; datasheet row {spec.source_sheet} row {spec.source_row}",
                         list_price=0.0, active=False, weight_source="manual")
     session.add(item)
     spec.matched_code, spec.match_tier, spec.match_note = code, "manual", "added as an item from the datasheet row"
@@ -1155,8 +1223,6 @@ def datasheet_page(session: Session, category: Optional[str] = None) -> dict:
     """What the Materials page shows (2.5): every specs row (the ones without an item are "datasheet only"), and per
     equipment item the source of each electrical figure: datasheet, typed (the owner's override), remarks (the
     workbook's remark inference) or none."""
-    from .catalog import electrical_from_remarks
-
     specs = session.exec(select(DatasheetSpec).order_by(DatasheetSpec.category, DatasheetSpec.source_file, DatasheetSpec.source_sheet, DatasheetSpec.source_row)).all()
     if category:
         specs = [s for s in specs if s.category == category]
@@ -1168,12 +1234,19 @@ def datasheet_page(session: Session, category: Optional[str] = None) -> dict:
             continue
         s = by_code.get(it.code)
         inferred = electrical_from_remarks(it.category, it.name, it.spec, it.remarks)
+        if it.category == "Inverter":
+            # the flag and the certificate are read from the item's name and remark at import, like the remark figures
+            inferred["grid_interactive"] = infer_grid_interactive(it.name, it.remarks)
+            inferred["certifications"] = certifications_in_remarks(it.remarks)
         prov: dict[str, str] = {}
+        sheet = {} if s is None else dict(s.fields)
+        if s is not None and s.held_applied_at:
+            sheet.update(s.held_fields or {})     # a held figure the owner applied reads "datasheet" too
         for fld in ELECTRICAL_FIELDS:
             v = getattr(it, fld, None)
             if v in (None, ""):
                 continue
-            if s is not None and fld in s.fields and fld not in (s.overridden_fields or []) and _same(s.fields[fld], v):
+            if fld in sheet and fld not in ((s.overridden_fields or []) if s else []) and _same(sheet[fld], v):
                 prov[fld] = "datasheet"
             elif fld in inferred and _same(inferred[fld], v):
                 prov[fld] = "remarks"
@@ -1183,13 +1256,15 @@ def datasheet_page(session: Session, category: Optional[str] = None) -> dict:
             "code": it.code, "name": it.name, "category": it.category, "provenance": prov,
             "source": "datasheet" if "datasheet" in prov.values() else "typed" if "typed" in prov.values() else "remarks" if "remarks" in prov.values() else "none",
             "datasheet": None if s is None else {"id": s.id, "file": s.source_file, "date": s.imported_at.isoformat() if s.imported_at else None, "sheet": s.source_sheet, "row": s.source_row,
-                                                 "tier": s.match_tier, "fields": s.fields, "held_fields": s.held_fields, "held": s.held, "overridden": s.overridden_fields, "notices": s.notices},
+                                                 "tier": s.match_tier, "fields": s.fields, "held_fields": s.held_fields, "held": s.held, "overridden": s.overridden_fields, "notices": s.notices,
+                                                 "held_applied_at": s.held_applied_at.isoformat() if s.held_applied_at else None},
         }
     return {
         "rows": [{"id": s.id, "category": s.category, "brand": s.brand, "brand_in_model": s.brand_in_model, "model": s.model, "fields": s.fields, "held_fields": s.held_fields,
                   "notices": s.notices, "source_file": s.source_file, "source_sheet": s.source_sheet, "source_row": s.source_row,
                   "imported_at": s.imported_at.isoformat() if s.imported_at else None, "last_seen_at": s.last_seen_at.isoformat() if s.last_seen_at else None,
-                  "matched_code": s.matched_code, "match_tier": s.match_tier, "match_note": s.match_note, "overridden_fields": s.overridden_fields, "held": s.held} for s in specs],
+                  "matched_code": s.matched_code, "match_tier": s.match_tier, "match_note": s.match_note, "overridden_fields": s.overridden_fields, "held": s.held,
+                  "held_applied_at": s.held_applied_at.isoformat() if s.held_applied_at else None} for s in specs],
         "items": items,
     }
 

@@ -437,6 +437,8 @@ export interface DatasheetRow {
   match_note: string
   overridden_fields: string[]
   held: boolean
+  /** When the owner said to apply the held figures; kept through every later run. */
+  held_applied_at: string | null
 }
 export type FieldSource = 'datasheet' | 'typed' | 'remarks'
 /** Per equipment item: where each electrical figure came from, and the datasheet row behind it when there is one. */
@@ -456,6 +458,7 @@ export interface DatasheetItemInfo {
     fields: Record<string, string | number | boolean | null>
     held_fields: Record<string, string | number | boolean | null>
     held: boolean
+    held_applied_at: string | null
     overridden: string[]
     notices: string[]
   } | null

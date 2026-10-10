@@ -16,7 +16,7 @@ from ..auth import require_owner, require_user
 from ..db import get_session
 from ..models import MaterialItem, MaterialSupplier, utcnow
 from ..pricing.config import PricingConfig, settings_version
-from ..pricing.datasheets import add_item_from_spec, datasheet_page, import_datasheets, link_spec, note_overrides
+from ..pricing.datasheets import add_item_from_spec, apply_held_spec, datasheet_page, import_datasheets, link_spec, note_overrides, withdraw_held_spec
 from ..pricing.importer import read_workbook
 from ..pricing.store import SEED_PATH, catalog_status, load_config, persist_import, save_config
 from ..schemas import DatasheetLink, MaterialItemIn, MaterialItemPatch
@@ -231,6 +231,26 @@ def datasheet_link(spec_id: int, body: DatasheetLink, session: Session = Depends
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/datasheets/{spec_id}/apply-held", dependencies=[Depends(require_owner)])
+def datasheet_apply_held(spec_id: int, session: Session = Depends(get_session)) -> dict:
+    """The owner confirms one held row (the answers to the brief's 6.4 and 6.8 differ): the held figures go on and stay on."""
+    try:
+        return apply_held_spec(session, spec_id)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/datasheets/{spec_id}/withdraw-held", dependencies=[Depends(require_owner)])
+def datasheet_withdraw_held(spec_id: int, session: Session = Depends(get_session)) -> dict:
+    """The owner takes the confirmation back: the row is held again and the item returns to its remark's figure."""
+    try:
+        return withdraw_held_spec(session, spec_id)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/datasheets/{spec_id}/add-item", response_model=MaterialItem, status_code=201, dependencies=[Depends(require_owner)])

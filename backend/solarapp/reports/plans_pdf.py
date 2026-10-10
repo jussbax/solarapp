@@ -788,8 +788,8 @@ def build_plans_pdf(doc: AssessmentDoc, results: dict, company: dict, items: Opt
     story.append(PageBreak())
     story.append(SheetMarker("Not yet in this set; schedule of loads"))
     story.append(Paragraph("Not yet in this set, and why", h1))
-    panel_lbl = {"voc_v": "Voc", "vmp_v": "Vmp", "isc_a": "Isc", "imp_a": "Imp", "temp_coeff_voc_pct": "the temperature coefficient of Voc", "max_system_voltage_v": "the maximum system voltage"}
-    inv_lbl = {"max_pv_voltage_v": "the maximum PV voltage", "mppt_min_v": "the MPPT window (low)", "mppt_max_v": "the MPPT window (high)", "mppt_count": "the MPPT count", "mppt_max_a": "the current per MPPT"}
+    panel_lbl = {"voc_v": "Voc", "vmp_v": "Vmp", "isc_a": "Isc", "imp_a": "Imp", "temp_coeff_voc_pct": "temperature coefficient of Voc", "max_system_voltage_v": "maximum system voltage"}
+    inv_lbl = {"max_pv_voltage_v": "maximum PV voltage", "mppt_min_v": "MPPT window (low)", "mppt_max_v": "MPPT window (high)", "mppt_count": "MPPT count", "mppt_max_a": "current per MPPT"}
     panel_missing = [k for k in panel_lbl if panel_item.get(k) in (None, "")]
     inv_missing = [k for k in inv_lbl if inv_item.get(k) in (None, "")]
     datasheet_state = (

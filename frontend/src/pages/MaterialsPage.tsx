@@ -31,7 +31,7 @@ const TYPE_LABEL: Record<string, string> = { grid_tie: 'grid-tie', hybrid: 'hybr
 const SOURCE_TITLE: Record<string, string> = {
   datasheet: "From the maker's datasheet workbook",
   typed: 'Typed on this page (over the datasheet where there is one)',
-  remarks: "Read from the materials workbook's remark at import; verify against the datasheet",
+  remarks: "Read from the item's name and the materials workbook's remark at import; verify against the datasheet",
   none: 'No electrical figures on file',
 }
 const fmtVal = (v: unknown) => (v == null || v === '' ? '-' : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v))
@@ -62,7 +62,7 @@ function ElectricalFields({ it, set, info }: { it: ItemDraft; set: (p: Partial<I
   const below = (key: keyof ItemDraft): React.ReactNode => {
     if (!ds) return undefined
     const held = ds.held_fields?.[key as string]
-    if (held != null) return <>held: {fmtVal(held)} (not applied)</>
+    if (held != null && !ds.held_applied_at) return <>held: {fmtVal(held)} (not applied)</>
     const v = ds.fields?.[key as string]
     if (v === undefined) return undefined
     const cur = it[key]
@@ -198,7 +198,11 @@ function electricalSummary(it: MaterialItem, info?: DatasheetItemInfo | null): R
   ) : null
   const held = ds?.held ? (
     <div className="muted" style={{ fontSize: 11 }}>
-      {it.category === 'Battery' ? 'held: maximum above 1 C not applied (6.8)' : 'held: grid-tie unit, battery figures not applied (6.4)'}
+      {ds.held_applied_at
+        ? `held figures applied on ${fmtDate(ds.held_applied_at)} on the owner's word`
+        : it.category === 'Battery'
+          ? 'held: maximum above 1 C not applied (6.8)'
+          : 'held: grid-tie unit, battery figures not applied (6.4)'}
     </div>
   ) : null
   const over = ds && ds.overridden.length > 0 ? <div className="muted" style={{ fontSize: 11 }}>typed over the datasheet: {ds.overridden.join(', ')}</div> : null
@@ -272,11 +276,26 @@ function rowFigures(r: DatasheetRow): string {
 }
 
 /** Per category (brief 2.5): the datasheet rows without a priced item, with "Link to item…" and "Add as item", and the items without a datasheet. */
-function DatasheetBlocks({ ds, category, owner, onChanged }: { ds: DatasheetPage; category: string; owner: boolean; onChanged: (msg: string) => void }) {
+function DatasheetBlocks({ ds, category, owner, suppliers, onChanged }: { ds: DatasheetPage; category: string; owner: boolean; suppliers: MaterialSupplier[]; onChanged: (msg: string) => void }) {
   const [link, setLink] = useState<Record<number, string>>({})
   const [codes, setCodes] = useState<Record<number, string>>({})
+  const [sups, setSups] = useState<Record<number, string>>({})
   const [error, setError] = useState<string | null>(null)
   const cats = EQUIPMENT.filter((c) => !category || c === category)
+  const heldAction = async (r: DatasheetRow) => {
+    setError(null)
+    try {
+      if (r.held_applied_at) {
+        const x = await api.withdrawHeld(r.id)
+        onChanged(`Held figures withdrawn on ${r.model}${x.changes.length ? `: ${x.changes.join(', ')}` : ''}.`)
+      } else {
+        const x = await api.applyHeld(r.id)
+        onChanged(`Held figures applied on ${r.model}${x.changes.length ? `: ${x.changes.join(', ')}` : ' (no priced item yet; they go on once it is linked)'}.`)
+      }
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
   const doLink = async (id: number) => {
     const code = link[id]
     if (!code) return
@@ -293,8 +312,8 @@ function DatasheetBlocks({ ds, category, owner, onChanged }: { ds: DatasheetPage
     if (!code) return
     setError(null)
     try {
-      const it = await api.addDatasheetItem(id, code)
-      onChanged(`Added ${it.code} (inactive, list price 0): type the price and activate it.`)
+      const it = await api.addDatasheetItem(id, code, sups[id] || '')
+      onChanged(`Added ${it.code} (inactive, list price 0${it.supplier ? '' : ', no supplier yet'}): type the price${it.supplier ? '' : ' and the supplier'} and activate it.`)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -304,11 +323,64 @@ function DatasheetBlocks({ ds, category, owner, onChanged }: { ds: DatasheetPage
       {error && <div className="banner bad">{error}</div>}
       {cats.map((cat) => {
         const orphan = ds.rows.filter((r) => r.category === cat && !r.matched_code)
+        const heldRows = ds.rows.filter((r) => r.category === cat && r.held)
         const items = Object.values(ds.items).filter((i) => i.category === cat)
         const without = items.filter((i) => !i.datasheet)
-        if (!orphan.length && !without.length) return null
+        if (!orphan.length && !without.length && !heldRows.length) return null
         return (
           <div key={cat} data-testid={`datasheet-blocks-${cat}`}>
+            {heldRows.length > 0 && (
+              <details className="more" data-testid="held-rows">
+                <summary>
+                  {cat}: held rows ({heldRows.length})
+                </summary>
+                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  Figures the brief holds back until you answer: the Solis grid-tie units' battery figures (6.4) and a battery maximum above 1 C (6.8). Apply a row on
+                  your word; the figures then stay on the item through every later import.
+                </div>
+                <div className="table-wrap" style={{ marginTop: 6 }}>
+                  <table className="materials">
+                    <thead>
+                      <tr>
+                        <th>Model</th>
+                        <th>Item</th>
+                        <th>Held figures</th>
+                        <th>State</th>
+                        {owner && <th></th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {heldRows.map((r) => (
+                        <tr key={r.id}>
+                          <td data-label="Model" className="cell-main">
+                            {r.brand} {r.model}
+                            <div className="muted" style={{ fontSize: 11 }}>
+                              {r.source_file}, {r.source_sheet} row {r.source_row}
+                            </div>
+                          </td>
+                          <td data-label="Item">{r.matched_code ?? <span className="muted">no priced item</span>}</td>
+                          <td data-label="Held figures" className="muted" style={{ fontSize: 12 }}>
+                            {Object.entries(r.held_fields)
+                              .map(([k, v]) => `${k} ${fmtVal(v)}`)
+                              .join(' · ')}
+                          </td>
+                          <td data-label="State">
+                            {r.held_applied_at ? <span className="badge good">applied {fmtDate(r.held_applied_at)}</span> : <span className="badge neutral">held</span>}
+                          </td>
+                          {owner && (
+                            <td className="cell-actions" style={{ whiteSpace: 'nowrap' }}>
+                              <button type="button" className="small" onClick={() => heldAction(r)}>
+                                {r.held_applied_at ? 'Withdraw' : 'Apply held figures'}
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            )}
             {orphan.length > 0 && (
               <details className="more" data-testid="datasheet-only">
                 <summary>
@@ -372,6 +444,14 @@ function DatasheetBlocks({ ds, category, owner, onChanged }: { ds: DatasheetPage
                               </div>
                               <div className="row" style={{ gap: 4, alignItems: 'center', marginTop: 4 }}>
                                 <input aria-label={`Code for ${r.model}`} placeholder="New code" value={codes[r.id] ?? ''} onChange={(e) => setCodes({ ...codes, [r.id]: e.target.value })} style={{ width: 120 }} />
+                                <select aria-label={`Supplier for ${r.model}`} value={sups[r.id] ?? ''} onChange={(e) => setSups({ ...sups, [r.id]: e.target.value })} style={{ maxWidth: 150 }}>
+                                  <option value="">Supplier…</option>
+                                  {suppliers.map((sp) => (
+                                    <option key={sp.name} value={sp.name}>
+                                      {sp.name}
+                                    </option>
+                                  ))}
+                                </select>
                                 <button type="button" className="small" disabled={!(codes[r.id] || '').trim()} onClick={() => doAdd(r.id)}>
                                   Add as item
                                 </button>
@@ -803,6 +883,7 @@ export default function MaterialsPage({ user }: { user: Me }) {
               ds={ds}
               category={category}
               owner={owner}
+              suppliers={suppliers}
               onChanged={(m) => {
                 setMsg(m)
                 refreshMeta()

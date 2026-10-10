@@ -14,7 +14,7 @@ from solarapp.data_download.cli import write_synthetic
 from solarapp.main import create_app
 from solarapp.models import DatasheetSpec, MaterialItem
 from solarapp.pricing.catalog import Item
-from solarapp.pricing.datasheets import add_item_from_spec, import_datasheets, link_spec, match_rows, note_overrides, read_datasheet_workbook, reapply_datasheets
+from solarapp.pricing.datasheets import add_item_from_spec, apply_held_spec, import_datasheets, link_spec, match_rows, note_overrides, read_datasheet_workbook, reapply_datasheets, withdraw_held_spec
 from solarapp.pricing.importer import read_workbook
 from solarapp.pricing.store import import_workbook, load_catalog, load_config
 
@@ -98,6 +98,10 @@ def test_the_figures_on_the_items_and_the_precedence(seeded):
         # the eco-hybrid: the sheet's 139 A over the remark's 135, the new fields filled, the owner's grid flag kept with the conflict reported
         assert eco.battery_max_a == 139 and eco.charge_a_max == 135 and eco.charge_v_max == 58.4 and eco.inverter_type == "off_grid" and eco.phase == 1 and eco.battery_class == "LV"
         assert eco.grid_interactive is True
+        # the sheet's "Hybrid 1P" fills the flag only when the item's is unknown and its remark does not say to check the certification
+        # (review finding 1): FS-INV-002's remark does, so it stays unknown and is offered last on a net-metering job; IAN-INV-022 takes the yes
+        assert s.get(MaterialItem, "FS-INV-002").grid_interactive is None and s.get(MaterialItem, "IAN-INV-022").grid_interactive is True
+        assert any("grid flag left unknown: the item's remark says to check the certification" in n for n in next(l for l in report.lines if l.code == "FS-INV-002").notices)
         line = next(l for l in report.lines if l.code == "FS-INV-008")
         assert line.status == "matched" and line.tier == "exact" and "battery_max_a 135 -> 139" in line.changes and "charge_v_max - -> 58.4" in line.changes
         assert any("grid_interactive kept (item yes, sheet off-grid)" in n for n in line.notices)
@@ -190,6 +194,28 @@ def test_a_blank_rating_is_filled_and_the_held_figures_apply_only_on_the_owners_
         solis = s.get(MaterialItem, "IAN-INV-001")
         assert solis.battery_max_a == 135 and solis.charge_a_max == 135 and solis.charge_v_max == 60 and solis.battery_class == ""   # the class is not on the row (1.2)
         assert s.get(MaterialItem, "FS-BAT-001").continuous_a == 150
+        # the owner's word is kept on the row (review finding 2): a materials re-import, a plain re-run and the page all keep the 150 A
+        spec = s.exec(select(DatasheetSpec).where(DatasheetSpec.matched_code == "FS-BAT-001")).one()
+        assert spec.held and spec.held_applied_at is not None
+        import_workbook(s, WB, replace_config=False)
+        assert s.get(MaterialItem, "FS-BAT-001").continuous_a == 150 and s.get(MaterialItem, "IAN-INV-001").battery_max_a == 135
+        again = import_datasheets(s, FILES)
+        line = next(l for l in again.lines if l.code == "FS-BAT-001")
+        assert line.status == "matched" and "held figures applied on" in line.tier and again.counts["held"] == 0
+        assert s.get(MaterialItem, "FS-BAT-001").continuous_a == 150
+        # withdrawn: the row is held again and the item goes back to the remark's 100 A
+        r = withdraw_held_spec(s, spec.id)
+        assert r["changes"] == ["continuous_a 150 -> 100"] and s.get(MaterialItem, "FS-BAT-001").continuous_a == 100
+        assert s.get(DatasheetSpec, spec.id).held_applied_at is None
+        assert next(l for l in import_datasheets(s, FILES).lines if l.code == "FS-BAT-001").status == "held"
+        # the per-row apply (the answers to 6.4 and 6.8 differ): one Solis row on the owner's word, the others as they were
+        solis_spec = s.exec(select(DatasheetSpec).where(DatasheetSpec.matched_code == "IAN-INV-002")).one()
+        withdraw_held_spec(s, solis_spec.id)
+        assert s.get(MaterialItem, "IAN-INV-002").battery_max_a is None
+        r = apply_held_spec(s, solis_spec.id)
+        assert "battery_max_a - -> 208" in r["changes"] and s.get(MaterialItem, "IAN-INV-002").battery_max_a == 208
+        import_workbook(s, WB, replace_config=False)
+        assert s.get(MaterialItem, "IAN-INV-002").battery_max_a == 208
 
 
 def test_the_dry_run_writes_the_report_and_nothing_else(tmp_path):
@@ -230,6 +256,10 @@ def test_manual_link_add_item_and_the_rematch_after_a_rename(tmp_path):
         inv = _by_file(s, "ALL_INVERTER")
         item = add_item_from_spec(s, inv[("Sheet5", 13)].id, "FS-INV-101")
         assert item.code == "FS-INV-101" and item.active is False and item.list_price == 0 and item.rating == 6 and item.battery_max_a == 130 and item.inverter_type == "hybrid"
+        assert item.supplier == ""     # "FELICITY" is a maker, not a row of the SUPPLIERS sheet: blank for the owner (review finding 11)
+        bc = add_item_from_spec(s, inv[("Sheet4", 9)].id, "BC-INV-101")
+        assert bc.supplier == "Blue Carbon"    # the maker is also a supplier of that name
+        assert add_item_from_spec(s, inv[("Sheet5", 14)].id, "FS-INV-103", supplier="One Point").supplier == "One Point"
         assert s.get(DatasheetSpec, inv[("Sheet5", 13)].id).matched_code == "FS-INV-101"
         with pytest.raises(ValueError):
             add_item_from_spec(s, inv[("Sheet5", 14)].id, "FS-INV-101")
@@ -308,9 +338,23 @@ def test_the_routes_upload_list_link_and_note_overrides(client):
     assert r.status_code == 200 and r.json()["code"] == "BC-INV-005"
     assert client.post(f"/api/pricing/datasheets/{row['id']}/link", json={"code": "NOPE-000"}).status_code == 404
     row2 = next(r for r in rows if r["model"] == "IVGM6KLP1G1")
-    r = client.post(f"/api/pricing/datasheets/{row2['id']}/add-item", json={"code": "FS-INV-102"})
-    assert r.status_code == 201 and r.json()["active"] is False and r.json()["list_price"] == 0 and r.json()["rating"] == 6
+    r = client.post(f"/api/pricing/datasheets/{row2['id']}/add-item", json={"code": "FS-INV-102", "supplier": "Felicity Solar"})
+    assert r.status_code == 201 and r.json()["active"] is False and r.json()["list_price"] == 0 and r.json()["rating"] == 6 and r.json()["supplier"] == "Felicity Solar"
     assert client.post(f"/api/pricing/datasheets/{row2['id']}/add-item", json={"code": "FS-INV-102"}).status_code == 409
+    # the per-row apply and withdraw through the routes, with the state on the page (finding 5)
+    held = next(r for r in rows if r["matched_code"] == "IAN-INV-003")
+    assert held["held"] and held["held_applied_at"] is None
+    r = client.post(f"/api/pricing/datasheets/{held['id']}/apply-held")
+    assert r.status_code == 200 and "battery_max_a - -> 190" in r.json()["changes"] and client.get("/api/pricing/items/IAN-INV-003").json()["battery_max_a"] == 190
+    page = client.get("/api/pricing/datasheets", params={"category": "Inverter"}).json()
+    assert page["items"]["IAN-INV-003"]["datasheet"]["held_applied_at"] and next(x for x in page["rows"] if x["id"] == held["id"])["held_applied_at"]
+    assert page["items"]["IAN-INV-003"]["provenance"]["battery_max_a"] == "datasheet"
+    assert client.post(f"/api/pricing/datasheets/{held['id']}/withdraw-held").status_code == 200 and client.get("/api/pricing/items/IAN-INV-003").json()["battery_max_a"] is None
+    assert client.post(f"/api/pricing/datasheets/{row2['id']}/apply-held").status_code == 409   # nothing held on that row
+    # the grid flag inferred from the name reads "remarks", not "typed"; the type words are enumerations on the API (findings 9, 10)
+    assert page["items"]["FS-INV-008"]["provenance"]["grid_interactive"] == "remarks"
+    assert client.put("/api/pricing/items/FS-INV-008", json={"inverter_type": "other"}).status_code == 422
+    assert client.put("/api/pricing/items/FS-INV-008", json={"battery_class": "MV"}).status_code == 422
     # not a workbook, and an engineer cannot import
     r = client.post("/api/pricing/datasheets", files={"file": ("x.xlsx", b"not a zip", "application/octet-stream")})
     assert r.status_code == 422

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from solarapp.pricing.boq import BoqRequest, generate_boq, rows_for
+from solarapp.pricing.boq import BoqRequest, battery_class_mismatch, generate_boq, rows_for, select_battery
 from solarapp.pricing.catalog import Item
 from solarapp.pricing.config import PricingConfig
 from solarapp.pricing.datasheets import import_datasheets
@@ -161,3 +161,47 @@ def test_without_the_figures_the_sample_jobs_do_not_move(catalogs):
     codes = {w["code"] for w in res.warnings}
     assert "string_rule_fallback" in codes and not codes & {"string_voltage_cold", "battery_voltage_class", "battery_charge_current", "battery_ah_kwh", "mppt_current", "dc_breaker_rating"}
     assert res.choices["battery_voltage_match"]["class_ok"] is None and "battery_charge" not in res.choices
+
+
+def test_the_automatic_battery_choice_ranks_the_recommended_rate_before_cost(catalogs):
+    """The owner's call on the review's finding 3: a pack that delivers the current at its recommended rate ranks above
+    one whose recommended figure is unknown, and that above one that passes only on its maximum; the maximum alone never
+    promotes a pack. The sample job's battery therefore moves to FS-BAT-003 with the datasheets, not to the JK pack."""
+    seed, cat, cfg = catalogs
+    eco = cat.get("FS-INV-008")
+    opts = select_battery(11.7, cat, cfg, 139.0, eco)
+    first = opts[0][0]
+    assert first.code == "FS-BAT-003" and first.discharge_a_recommended == 150          # passes both
+    codes = [i.code for i, n, c in opts]
+    assert codes.index("FS-BAT-006") < codes.index("OP-BAT-007")                         # unknown recommended rate before a failed one, though dearer
+    assert codes.index("FS-BAT-003") < codes.index("FS-BAT-006")
+    res = generate_boq(BoqRequest("BC-PNL-004", 8, rows_for(8, 4, 1.134), inverter_kw=6, battery_kwh=11.7), cat, cfg)
+    assert res.choices["battery_code"] == "FS-BAT-003" and res.choices["battery_units"] == 1
+    assert next(o for o in res.choices["battery_options"] if o["code"] == "FS-BAT-003")["recommended_ok"] is True
+    assert not {w["code"] for w in res.warnings} & {"battery_discharge_recommended", "battery_current"}
+    # with the seed alone nothing moves: no pack carries a recommended figure, cost decides as before
+    old = generate_boq(BoqRequest("BC-PNL-004", 8, rows_for(8, 4, 1.134), inverter_kw=6, battery_kwh=11.7), seed, cfg)
+    assert old.choices["battery_code"] == "FS-BAT-006"
+    assert [i.code for i, n, c in select_battery(11.7, seed, cfg, 135.0, seed.get("FS-INV-008"))][0] == "FS-BAT-006"
+
+
+def test_a_pack_of_another_class_than_the_port_is_never_offered(catalogs):
+    """Review finding 4: the automatic choice skips a pack whose class is known and differs from the inverter's port's;
+    a per-job pick keeps the hard warning."""
+    seed, cat, cfg = catalogs
+    eco, hv = cat.get("FS-INV-008"), cat.get("OP-INV-023")
+    assert not battery_class_mismatch(cat.get("FS-BAT-002"), eco) and battery_class_mismatch(cat.get("FS-BAT-002"), hv)
+    assert battery_class_mismatch(cat.get("OP-BAT-012"), eco) and battery_class_mismatch(cat.get("BC-BAT-001"), eco)   # an HV pack, a 24 V pack
+    assert not battery_class_mismatch(cat.get("IAN-BAT-004"), eco) and not battery_class_mismatch(seed.get("FS-BAT-002"), seed.get("FS-INV-008"))   # unknown: not judged
+    on_hv = [i for i, n, c in select_battery(40, cat, cfg, 80.0, hv)]
+    assert on_hv and all(not battery_class_mismatch(i, hv) for i in on_hv) and "OP-BAT-012" in [i.code for i in on_hv] and "FS-BAT-002" not in [i.code for i in on_hv]
+    on_lv = [i.code for i, n, c in select_battery(40, cat, cfg, 139.0, eco)]
+    assert "OP-BAT-012" not in on_lv and "OP-BAT-009" not in on_lv
+    # a unit above the largest standard AC breaker size, picked per job: the hard warning, never a crash (review finding 6)
+    res = generate_boq(BoqRequest("BC-PNL-001", 6, rows_for(6, 6, 1.134), inverter_kw=6, battery_kwh=10, inverter_code="OP-INV-023", kind="off_grid"), cat, cfg)
+    assert any(w["code"] == "ac_circuit" and w["blocks_documents"] for w in res.warnings)
+    assert "above the largest standard size" in _line(res, "thhn").note and "above the largest standard size" in _line(res, "ac_breaker").note
+    # two inputs typed on an item with no discharge figure: the verify without a figure (finding 7)
+    bare = dataclasses.replace(eco, battery_inputs=2, battery_max_a=None, charge_a_max=None)
+    w = next(x for x in battery_soft_checks(cat.get("FS-BAT-002"), 1, bare, 1, 100.0) if x["code"] == "battery_inputs_verify")
+    assert w["message"].endswith("has two battery inputs on the datasheet; the second circuit is not priced; verify.")

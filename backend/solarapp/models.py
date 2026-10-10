@@ -199,7 +199,8 @@ class DatasheetSpec(SQLModel, table=True):
     match_tier: str = ""                              # exact, contains, base, manual; blank = no item
     match_note: str = ""
     overridden_fields: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))   # typed over on the Materials page; left alone on a re-run
-    held: bool = False                                # battery figures on a grid-tie unit (brief 1.5, 6.4)
+    held: bool = False                                # battery figures on a grid-tie unit (brief 1.5, 6.4), or a battery maximum above 1 C (6.8)
+    held_applied_at: Optional[datetime] = None        # when the owner said to apply the held figures; kept through every later run (review finding 2)
 
 
 class User(SQLModel, table=True):

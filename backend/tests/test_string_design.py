@@ -26,7 +26,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures" / "datasheets"
 FILES = [FIXTURES / f"ALL_{n}_DATA_SHEET.xlsx" for n in ("SOLAR_PANEL", "INVERTER", "BATTERY")]
 # the quick estimate's rounded price (₱1,000) on the sample request: with the seed alone, and with the three datasheets applied (brief 4.5)
 QUICK_PRICE_SEED = 314000
-QUICK_PRICE_WITH_DATASHEETS = 287000
+QUICK_PRICE_WITH_DATASHEETS = 326000
 
 
 def _line(res, role):
@@ -228,8 +228,8 @@ def test_parallel_strings_per_mppt(catalogs):
 
 def test_the_quick_estimate_price_with_and_without_the_datasheets(catalogs, tmp_path):
     """The website estimate is untouched (brief 4.5): the same BOQ with the same catalogue. Its rounded price with the
-    seed alone is pinned; with the fixture loaded the test states the figure it becomes (the battery choice moves to a
-    unit whose sheet figure covers the eco-hybrid's 139 A)."""
+    seed alone is pinned; with the fixture loaded the test states the figure it becomes (the battery choice moves to the
+    15 kWh unit whose recommended rate covers the eco-hybrid's 139 A, the review's ranking)."""
     from solarapp.core.dataset import PvgisDataset
     from solarapp.core.quick import quick_estimate
     from solarapp.data_download.cli import write_synthetic

@@ -252,7 +252,10 @@ export const api = {
     return (await res.json()) as DatasheetReport
   },
   linkDatasheet: (id: number, code: string) => request<{ code: string; changes: string[]; notes: string[] }>(`/api/pricing/datasheets/${id}/link`, { method: 'POST', body: JSON.stringify({ code }) }),
-  addDatasheetItem: (id: number, code: string) => request<MaterialItem>(`/api/pricing/datasheets/${id}/add-item`, { method: 'POST', body: JSON.stringify({ code }) }),
+  addDatasheetItem: (id: number, code: string, supplier = '') => request<MaterialItem>(`/api/pricing/datasheets/${id}/add-item`, { method: 'POST', body: JSON.stringify({ code, supplier }) }),
+  /** The owner confirms one held row (the brief's 6.4 and 6.8 have different answers), or takes it back. */
+  applyHeld: (id: number) => request<{ code: string | null; changes: string[]; held_applied_at: string }>(`/api/pricing/datasheets/${id}/apply-held`, { method: 'POST' }),
+  withdrawHeld: (id: number) => request<{ code: string | null; changes: string[] }>(`/api/pricing/datasheets/${id}/withdraw-held`, { method: 'POST' }),
   // website bookings are the CRM's data (the inbox, statuses, notes and funnel live behind /api/leads for it);
   // the engineering app only lists them and starts a project from one
   bookings: () => request<Lead[]>('/api/leads/open'),

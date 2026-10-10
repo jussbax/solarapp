@@ -434,6 +434,11 @@ class SettingsIn(BaseModel):
     company_contact: Optional[str] = None
 
 
+# round 12 (the review's finding 9): the datasheet's type words are enumerations on the API, as the page's selects are
+InverterType = Literal["", "grid_tie", "hybrid", "off_grid", "charge_controller", "ess_set"]
+BatteryClass = Literal["", "LV", "HV", "none"]
+
+
 class MaterialItemIn(BaseModel):
     code: str = Field(min_length=3, max_length=40)
     category: str
@@ -474,9 +479,9 @@ class MaterialItemIn(BaseModel):
     temp_coeff_isc_pct: Optional[float] = None
     # round 12: the datasheet fields (brief, section 1); every one optional
     max_system_voltage_v: Optional[float] = Field(default=None, gt=0)
-    inverter_type: str = ""
+    inverter_type: InverterType = ""
     phase: Optional[int] = Field(default=None, ge=1, le=3)
-    battery_class: str = ""
+    battery_class: BatteryClass = ""
     charge_v_max: Optional[float] = Field(default=None, gt=0)
     charge_a_max: Optional[float] = Field(default=None, gt=0)
     mppt_currents_a: str = ""
@@ -523,9 +528,9 @@ class MaterialItemPatch(BaseModel):
     temp_coeff_voc_pct: Optional[float] = None
     temp_coeff_isc_pct: Optional[float] = None
     max_system_voltage_v: Optional[float] = Field(default=None, gt=0)
-    inverter_type: Optional[str] = None
+    inverter_type: Optional[InverterType] = None
     phase: Optional[int] = Field(default=None, ge=1, le=3)
-    battery_class: Optional[str] = None
+    battery_class: Optional[BatteryClass] = None
     charge_v_max: Optional[float] = Field(default=None, gt=0)
     charge_a_max: Optional[float] = Field(default=None, gt=0)
     mppt_currents_a: Optional[str] = None

@@ -83,8 +83,9 @@ def battery_soft_checks(battery: Item, units: int, inverter: Optional[Item], inv
             + (f"within the BMS maximum ({units * cont:g} A) but " if cont is not None else "")
             + "above the recommended rate; the battery runs warm at full power. Verify the warranty condition with the maker.")})
     if inverter is not None and (inverter.battery_inputs or 1) >= 2:
+        each = f" ({float(inverter.battery_max_a):g} A each)" if inverter.battery_max_a else ""   # the page lets the owner set two inputs with no figure
         warnings.append({"code": "battery_inputs_verify", "message": (
-            f"{_label(inverter)} has two battery inputs on the datasheet ({inverter.battery_max_a:g} A each); the second circuit is not priced; verify.")})
+            f"{_label(inverter)} has two battery inputs on the datasheet{each}; the second circuit is not priced; verify.")})
     charge = charge_check(inverter, battery, units)
     if charge and charge.get("ok") is False:
         warnings.append({"code": "battery_charge_current", "message": (

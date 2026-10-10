@@ -78,7 +78,9 @@ def test_the_plans_print_the_string_table_and_the_datasheet_figures(client):
     assert "Rev. 0" in cover
     # the last sheet: the string table entry is gone, the single-line diagram names only what is still missing
     assert "Not yet in this set, and why" in last and "String table (Voc at the coldest cell" not in last
-    assert "Single-line diagram" in last and "the MPPT window" in flat(last) and "temperature coefficient of Voc" in flat(last)
+    # pdftotext breaks the cell at "temperature / coefficient", so the phrases are the ones that sit on one line
+    assert "Single-line diagram" in last and "the panel's temperature" in flat(last) and "coefficient of Voc; the inverter's MPPT window (low), MPPT window (high)" in flat(last)
+    assert "panel's the" not in flat(last) and "inverter's the" not in flat(last)   # the wording slip of the review's finding 8
     assert "Schedule of loads: the energy audit's figures" in last
     # a figure the app does not hold is a blank line, never a guess: the series fuse rating is not on file
     assert "series fuse rating" in flat(schedule) and BLANK in schedule
